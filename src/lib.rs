@@ -8,7 +8,8 @@ extern crate tokio_core;
 
 use failure::Error;
 
-use std::io::{self, Write};
+use std::io::{Write};
+use std::fs::File;
 use futures::{Future, Stream};
 use hyper::Client;
 use tokio_core::reactor::Core;
@@ -22,10 +23,9 @@ fn example() -> Result<(), Error> {
     let work = client.get(uri).and_then(|res| {
         println!("Response: {}", res.status());
 
-        res.body().for_each(|chunk| {
-            io::stdout()
-                .write_all(&chunk)
-                .map_err(From::from)
+        let mut tfile = File::create("./test.out").unwrap();
+        res.body().for_each( move |chunk| {
+            tfile.write_all(&chunk).map_err(From::from)
         })
     });
 
