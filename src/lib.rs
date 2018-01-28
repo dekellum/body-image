@@ -1,18 +1,18 @@
 #![allow(dead_code)]
 
 extern crate failure; // #[macro_use]
-
 extern crate futures;
 extern crate hyper;
 extern crate tokio_core;
+extern crate tempfile;
 
 use failure::Error;
 
 use std::io::{Write};
-use std::fs::File;
 use futures::{Future, Stream};
 use hyper::Client;
 use tokio_core::reactor::Core;
+use tempfile::tempfile;
 
 fn example() -> Result<(), Error> {
     let mut core = Core::new()?;
@@ -23,7 +23,7 @@ fn example() -> Result<(), Error> {
     let work = client.get(uri).and_then(|res| {
         println!("Response: {}", res.status());
 
-        let mut tfile = File::create("./test.out").unwrap();
+        let mut tfile = tempfile().unwrap();
         res.body().for_each( move |chunk| {
             tfile.write_all(&chunk).map_err(From::from)
         })
