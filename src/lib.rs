@@ -8,9 +8,11 @@ extern crate tempfile;
 
 use failure::Error;
 
-use std::io::{Write};
+use std::io::Write;
 use futures::{Future, Stream};
+use futures::future::err as f_err;
 use hyper::Client;
+use hyper::client::FutureResponse;
 use tokio_core::reactor::Core;
 use tempfile::tempfile;
 
@@ -20,13 +22,25 @@ fn example() -> Result<(), Error> {
 
     // hyper::uri::Uri, via std String parse and FromStr
     let uri = "http://gravitext.com".parse()?;
-    let work = client.get(uri).and_then(|res| {
-        println!("Response: {}", res.status());
 
-        let mut tfile = tempfile().unwrap();
-        res.body().for_each( move |chunk| {
-            tfile.write_all(&chunk).map_err(From::from)
-        })
+    let fr: FutureResponse = client.get(uri); // FutureResponse
+    let work = fr.and_then(|res| {
+        // FnOnce(Response) -> IntoFuture<Error=hyper::Error>
+        println!("Response: {}", res.status());
+        println!("Headers:\n{}", res.headers());
+        let f: Box<Future<Item=(), Error=hyper::Error> + Send> =
+            match tempfile() {
+                Ok(mut tfile) => {
+                    Box::new(res.body().for_each( move |chunk| {
+                        println!("chunk!");
+                        tfile.write_all(&chunk).map_err(From::from)
+                    }))
+                }
+                Err(e) => {
+                    Box::new(f_err::<(),_>(hyper::Error::Io(e)))
+                }
+            };
+        f
     });
 
     core.run(work)?;
@@ -42,7 +56,7 @@ mod tests {
     fn text_example() {
         match example() {
             Ok(_) => println!("ok"),
-            Err(e) => println!("{:?}", e)
+            Err(e) => panic!("Error from work: {:?}", e)
         }
     }
 }
