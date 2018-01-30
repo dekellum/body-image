@@ -3,8 +3,8 @@
 extern crate failure; // #[macro_use]
 extern crate futures;
 extern crate hyper;
-extern crate tokio_core;
 extern crate tempfile;
+extern crate tokio_core;
 
 use failure::Error;
 
@@ -20,7 +20,7 @@ struct BarcWriter {}
 
 impl BarcWriter {
     fn resp_future(&mut self, res: Response)
-                   -> Box<Future<Item=(), Error=hyper::Error> + Send>
+        -> Box<Future<Item=(), Error=hyper::Error> + Send>
     {
         println!("Response: {}", res.status());
         println!("Headers:\n{}", res.headers());
