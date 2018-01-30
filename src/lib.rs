@@ -10,7 +10,7 @@ use failure::Error;
 
 use std::io::{Error as IoError, ErrorKind, Write};
 use futures::{Future, Stream};
-use futures::future::err as f_err;
+use futures::future::err as futerr;
 use hyper::Client;
 use hyper::client::{FutureResponse, Response};
 use tokio_core::reactor::Core;
@@ -38,7 +38,7 @@ fn resp_future(res: Response)
                 }
             }))
         }
-        Err(e) => Box::new(f_err::<(), _>(e.into()))
+        Err(e) => Box::new(futerr::<(), _>(e.into()))
     }
 }
 
