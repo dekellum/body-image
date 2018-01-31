@@ -4,6 +4,9 @@ extern crate hyper;
 extern crate tempfile;
 extern crate tokio_core;
 
+// FIXME: Use atleast while prototyping. Might eventually switch to an
+// error enum to get clear seperation between hyper::Error and
+// application errors.
 use failure::Error as FlError;
 
 use std::io::Write;
@@ -14,6 +17,7 @@ use hyper::client::{FutureResponse, Response};
 use tokio_core::reactor::Core;
 use tempfile::tempfile;
 
+// FIXME: Alt. names: Hyperbowl or hyperbole
 pub struct BarcWriter {}
 
 impl BarcWriter {
@@ -54,7 +58,7 @@ impl BarcWriter {
 
         let work = fr.
             map_err(FlError::from).
-            // FnOnce(Response) -> IntoFuture<Error=FlError>
+            // -----(FnOnce(Response) -> IntoFuture<Error=FlError>)
             and_then(|res| self.resp_future(res));
 
         let len = core.run(work)?;
