@@ -21,6 +21,10 @@ use tempfile::tempfile;
 pub struct BarcWriter {}
 
 impl BarcWriter {
+    pub fn new() -> Result<BarcWriter, FlError> {
+        Ok(BarcWriter {})
+    }
+
     fn resp_future(&mut self, res: Response)
         -> Box<Future<Item=usize, Error=FlError> + Send>
     {
@@ -47,7 +51,7 @@ impl BarcWriter {
         }
     }
 
-    pub fn example(&mut self) -> Result<usize, FlError> {
+    pub fn get(&mut self) -> Result<usize, FlError> {
         let mut core = Core::new()?;
         let client = Client::new(&core.handle());
 
@@ -71,10 +75,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn text_example() {
-        let mut bw = BarcWriter {};
+    fn test_get() {
+        let mut bw = BarcWriter::new().unwrap();
 
-        match bw.example() {
+        match bw.get() {
             Ok(len) => println!("Read: {} byte body", len),
             Err(e) => panic!("Error from work: {:?}", e)
         }
