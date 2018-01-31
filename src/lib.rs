@@ -20,31 +20,32 @@ struct BarcWriter {}
 
 impl BarcWriter {
     fn resp_future(&mut self, res: Response)
-        -> Box<Future<Item=(), Error=FlError> + Send>
+        -> Box<Future<Item=usize, Error=FlError> + Send>
     {
         println!("Response: {}", res.status());
         println!("Headers:\n{}", res.headers());
 
         match tempfile() {
             Ok(mut tfile) => {
-                let mut length_read: usize = 0;
                 let s = res.body().map_err(FlError::from).
-                    for_each(move |chunk| {
-                        length_read += chunk.len();
-                        if length_read > 50_000 {
-                            bail!("Response stream too long: {}+", length_read);
+                    fold(0, move |len_read, chunk| {
+                        let new_len = len_read + chunk.len();
+                        if new_len > 50_000 {
+                            bail!("Response stream too long: {}+", new_len);
                         } else {
-                            println!("chunk ({})", length_read);
-                            tfile.write_all(&chunk).map_err(FlError::from)
+                            println!("to read chunk ({})", chunk.len());
+                            tfile.write_all(&chunk).
+                                map_err(FlError::from).
+                                and(Ok(new_len))
                         }
                     });
                 Box::new(s)
             }
-            Err(e) => Box::new(futerr::<(), _>(e.into()))
+            Err(e) => Box::new(futerr(e.into()))
         }
     }
 
-    fn example(&mut self) -> Result<(), FlError> {
+    fn example(&mut self) -> Result<usize, FlError> {
         let mut core = Core::new()?;
         let client = Client::new(&core.handle());
 
@@ -56,9 +57,7 @@ impl BarcWriter {
         // FnOnce(Response) -> IntoFuture<Error=hyper::Error>
         let work = fr.map_err(FlError::from).and_then(|res| self.resp_future(res));
 
-        core.run(work)?;
-
-        Ok(())
+        Ok(core.run(work)?)
     }
 }
 
@@ -71,7 +70,7 @@ mod tests {
         let mut bw = BarcWriter {};
 
         match bw.example() {
-            Ok(_) => println!("ok"),
+            Ok(len) => println!("Read: {} byte body", len),
             Err(e) => panic!("Error from work: {:?}", e)
         }
     }
