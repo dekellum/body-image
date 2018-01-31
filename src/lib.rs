@@ -14,11 +14,14 @@ use futures::{Future, Stream};
 use futures::future::err as futerr;
 use hyper::Client;
 use hyper::client::{FutureResponse, Response};
+use hyper::header::ContentLength;
 use tokio_core::reactor::Core;
 use tempfile::tempfile;
 
 // FIXME: Alt. names: Hyperbowl or hyperbole
 pub struct BarcWriter {}
+
+static MAX_BODY_LENGTH: usize = 50_000;
 
 impl BarcWriter {
     pub fn new() -> Result<BarcWriter, FlError> {
@@ -31,12 +34,20 @@ impl BarcWriter {
         println!("Response: {}", res.status());
         println!("Headers:\n{}", res.headers());
 
+        if let Some(v) = res.headers().get::<ContentLength>() {
+            if v.0 > (MAX_BODY_LENGTH as u64) {
+                return Box::new(futerr(
+                    format_err!("Reponse Content-Length too long: {}", v)
+                ));
+            }
+        }
+
         match tempfile() {
             Ok(mut tfile) => {
                 let s = res.body().map_err(FlError::from).
                     fold(0, move |len_read, chunk| {
                         let new_len = len_read + chunk.len();
-                        if new_len > 50_000 {
+                        if new_len > MAX_BODY_LENGTH {
                             bail!("Response stream too long: {}+", new_len);
                         } else {
                             println!("to read chunk ({})", chunk.len());
