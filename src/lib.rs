@@ -21,7 +21,7 @@ use tempfile::tempfile;
 // FIXME: Alt. names: Hyperbowl or hyperbole
 pub struct BarcWriter {}
 
-static MAX_BODY_LENGTH: usize = 50_000;
+static MAX_BODY_LENGTH: u64 = 50_000;
 
 impl BarcWriter {
     pub fn new() -> Result<BarcWriter, FlError> {
@@ -29,7 +29,7 @@ impl BarcWriter {
     }
 
     fn resp_future(&mut self, res: Response)
-        -> Box<Future<Item=usize, Error=FlError> + Send>
+        -> Box<Future<Item=u64, Error=FlError> + Send>
     {
         println!("Response: {}", res.status());
         println!("Headers:\n{}", res.headers());
@@ -37,7 +37,7 @@ impl BarcWriter {
         if let Some(v) = res.headers().get::<ContentLength>() {
             if v.0 > (MAX_BODY_LENGTH as u64) {
                 return Box::new(futerr(
-                    format_err!("Reponse Content-Length too long: {}", v)
+                    format_err!("Response Content-Length too long: {}", v)
                 ));
             }
         }
@@ -45,12 +45,13 @@ impl BarcWriter {
         match tempfile() {
             Ok(mut tfile) => {
                 let s = res.body().map_err(FlError::from).
-                    fold(0, move |len_read, chunk| {
-                        let new_len = len_read + chunk.len();
+                    fold(0u64, move |len_read, chunk| {
+                        let chunk_len = chunk.len() as u64;
+                        let new_len = len_read + chunk_len;
                         if new_len > MAX_BODY_LENGTH {
                             bail!("Response stream too long: {}+", new_len);
                         } else {
-                            println!("to read chunk ({})", chunk.len());
+                            println!("to read chunk ({})", chunk_len);
                             tfile.write_all(&chunk).
                                 map_err(FlError::from).
                                 and(Ok(new_len))
@@ -62,7 +63,7 @@ impl BarcWriter {
         }
     }
 
-    pub fn get(&mut self) -> Result<usize, FlError> {
+    pub fn get(&mut self) -> Result<u64, FlError> {
         let mut core = Core::new()?;
         let client = Client::new(&core.handle());
 
