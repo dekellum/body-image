@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[macro_use] extern crate failure;
 extern crate futures;
 extern crate hyper;
@@ -16,7 +14,7 @@ use hyper::client::{FutureResponse, Response};
 use tokio_core::reactor::Core;
 use tempfile::tempfile;
 
-struct BarcWriter {}
+pub struct BarcWriter {}
 
 impl BarcWriter {
     fn resp_future(&mut self, res: Response)
@@ -45,19 +43,22 @@ impl BarcWriter {
         }
     }
 
-    fn example(&mut self) -> Result<usize, FlError> {
+    pub fn example(&mut self) -> Result<usize, FlError> {
         let mut core = Core::new()?;
         let client = Client::new(&core.handle());
 
         // hyper::uri::Uri, via std String parse and FromStr
         let uri = "http://gravitext.com".parse()?;
 
-        let fr: FutureResponse = client.get(uri); // FutureResponse
+        let fr: FutureResponse = client.get(uri);
 
-        // FnOnce(Response) -> IntoFuture<Error=hyper::Error>
-        let work = fr.map_err(FlError::from).and_then(|res| self.resp_future(res));
+        let work = fr.
+            map_err(FlError::from).
+            // FnOnce(Response) -> IntoFuture<Error=FlError>
+            and_then(|res| self.resp_future(res));
 
-        Ok(core.run(work)?)
+        let len = core.run(work)?;
+        Ok(len)
     }
 }
 
