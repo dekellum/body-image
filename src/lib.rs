@@ -29,6 +29,15 @@ impl BarcWriter {
         Ok(BarcWriter {})
     }
 
+    fn check_length( v: &http::header::HeaderValue ) -> Result<u64, FlError> {
+        let v = v.to_str()?;
+        let l: u64 = v.parse()?;
+        if l > MAX_BODY_LENGTH {
+            bail!( "Response Content-Length too long: {}", l);
+        }
+        Ok(l)
+    }
+
     fn resp_future(&mut self, res: http::Response<hyper::Body>)
         -> Box<Future<Item=u64, Error=FlError> + Send>
     {
@@ -38,12 +47,11 @@ impl BarcWriter {
         println!("Headers:\n{:?}", parts.headers);
 
         if let Some(v) = parts.headers.get(http::header::CONTENT_LENGTH) {
-            let l: u64 = v.to_str().unwrap().parse().unwrap(); //FIXME
-            if l > (MAX_BODY_LENGTH as u64) {
-                return Box::new(futerr(
-                    format_err!("Response Content-Length too long: {}", l)
-                ));
+            if let Err(e) = BarcWriter::check_length(v) {
+                return Box::new(futerr(e));
             }
+            // FIXME: Keep length for immediate decision to buffer to
+            // disk.
         }
 
         match tempfile() {
