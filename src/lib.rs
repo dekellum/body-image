@@ -1,5 +1,6 @@
 #[macro_use] extern crate failure;
 extern crate futures;
+extern crate http;
 extern crate hyper;
 extern crate tempfile;
 extern crate tokio_core;
@@ -12,9 +13,9 @@ use failure::Error as FlError;
 use std::io::Write;
 use futures::{Future, Stream};
 use futures::future::err as futerr;
+use http::Request;
 use hyper::Client;
-use hyper::client::{FutureResponse, Response};
-use hyper::header::ContentLength;
+use hyper::client::compat::CompatFutureResponse;
 use tokio_core::reactor::Core;
 use tempfile::tempfile;
 
@@ -28,23 +29,26 @@ impl BarcWriter {
         Ok(BarcWriter {})
     }
 
-    fn resp_future(&mut self, res: Response)
+    fn resp_future(&mut self, res: http::Response<hyper::Body>)
         -> Box<Future<Item=u64, Error=FlError> + Send>
     {
-        println!("Response: {}", res.status());
-        println!("Headers:\n{}", res.headers());
+        let (parts, body) = res.into_parts();
 
-        if let Some(v) = res.headers().get::<ContentLength>() {
-            if v.0 > (MAX_BODY_LENGTH as u64) {
+        println!("Response: {}", parts.status);
+        println!("Headers:\n{:?}", parts.headers);
+
+        if let Some(v) = parts.headers.get(http::header::CONTENT_LENGTH) {
+            let l: u64 = v.to_str().unwrap().parse().unwrap(); //FIXME
+            if l > (MAX_BODY_LENGTH as u64) {
                 return Box::new(futerr(
-                    format_err!("Response Content-Length too long: {}", v)
+                    format_err!("Response Content-Length too long: {}", l)
                 ));
             }
         }
 
         match tempfile() {
             Ok(mut tfile) => {
-                let s = res.body().map_err(FlError::from).
+                let s = body.map_err(FlError::from).
                     fold(0u64, move |len_read, chunk| {
                         let chunk_len = chunk.len() as u64;
                         let new_len = len_read + chunk_len;
@@ -67,14 +71,18 @@ impl BarcWriter {
         let mut core = Core::new()?;
         let client = Client::new(&core.handle());
 
-        // hyper::uri::Uri, via std String parse and FromStr
-        let uri = "http://gravitext.com".parse()?;
+        let uri = "http://gravitext.com";
 
-        let fr: FutureResponse = client.get(uri);
+        let req = Request::builder().
+            method(http::Method::GET).
+            uri(uri).
+            body(hyper::Body::empty())?;
+
+        let fr: CompatFutureResponse = client.request_compat(req);
 
         let work = fr.
             map_err(FlError::from).
-            // -----(FnOnce(Response) -> IntoFuture<Error=FlError>)
+            // -----(FnOnce(http::Response) -> IntoFuture<Error=FlError>)
             and_then(|res| self.resp_future(res));
 
         let len = core.run(work)?;
