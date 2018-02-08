@@ -37,11 +37,11 @@ impl BarcWriter {
         Ok(BarcWriter {})
     }
 
-    fn check_length( v: &http::header::HeaderValue ) -> Result<u64, FlError> {
+    fn check_length(v: &http::header::HeaderValue) -> Result<u64, FlError> {
         let v = v.to_str()?;
         let l: u64 = v.parse()?;
         if l > MAX_BODY_LENGTH {
-            bail!( "Response Content-Length too long: {}", l);
+            bail!("Response Content-Length too long: {}", l);
         }
         Ok(l)
     }
