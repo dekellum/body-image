@@ -24,6 +24,14 @@ pub struct BarcWriter {}
 
 static MAX_BODY_LENGTH: u64 = 50_000;
 
+// The Response with various aspects of the Request prepended.
+struct ResponseComposite {
+    method:   http::Method,
+    uri:      http::Uri,
+    req_headers: http::HeaderMap,
+    response: http::Response<hyper::Body>,
+}
+
 impl BarcWriter {
     pub fn new() -> Result<BarcWriter, FlError> {
         Ok(BarcWriter {})
@@ -38,20 +46,24 @@ impl BarcWriter {
         Ok(l)
     }
 
-    fn resp_future(&mut self, res: http::Response<hyper::Body>)
+    fn resp_future(&mut self, rc: ResponseComposite)
         -> Box<Future<Item=u64, Error=FlError> + Send>
     {
-        let (parts, body) = res.into_parts();
 
-        println!("Response: {}", parts.status);
-        println!("Headers:\n{:?}", parts.headers);
+        println!("meta: method: {}", rc.method);
+        println!("meta: url: {}", rc.uri);
+        println!("Request Headers:\n{:?}", rc.req_headers );
 
-        if let Some(v) = parts.headers.get(http::header::CONTENT_LENGTH) {
+        let (resp_parts, body) = rc.response.into_parts();
+
+        println!("Response Status: {}", resp_parts.status);
+        println!("Response Headers:\n{:?}", resp_parts.headers);
+
+        if let Some(v) = resp_parts.headers.get(http::header::CONTENT_LENGTH) {
             if let Err(e) = BarcWriter::check_length(v) {
                 return Box::new(futerr(e));
             }
-            // FIXME: Keep length for immediate decision to buffer to
-            // disk.
+            // FIXME: Keep length for immediate decision to buffer to disk.
         }
 
         match tempfile() {
@@ -86,9 +98,15 @@ impl BarcWriter {
             uri(uri).
             body(hyper::Body::empty())?;
 
+        let method = req.method().clone();
+        let uri = req.uri().clone();
+        let req_headers = req.headers().clone();
+
         let fr: CompatFutureResponse = client.request_compat(req);
 
         let work = fr.
+            map(|response| {
+                ResponseComposite { method, uri, req_headers, response } }).
             map_err(FlError::from).
             // -----(FnOnce(http::Response) -> IntoFuture<Error=FlError>)
             and_then(|res| self.resp_future(res));
