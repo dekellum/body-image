@@ -53,9 +53,9 @@ impl BarcWriter {
             size += out.write(key.as_ref())?;
             size += out.write(b": ")?;
             size += out.write(value.as_bytes())?;
-            size += out.write(b"\n")?;
+            size += out.write(b"\r\n")?;
         }
-        size += out.write(b"\n")?;
+        size += out.write(b"\r\n")?;
         Ok(size)
     }
 
