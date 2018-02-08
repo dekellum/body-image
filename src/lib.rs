@@ -10,7 +10,7 @@ extern crate tokio_core;
 // application errors.
 use failure::Error as FlError;
 
-use std::io::Write;
+use std::io::{stdout, Write};
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use http::Request;
@@ -46,18 +46,37 @@ impl BarcWriter {
         Ok(l)
     }
 
+    fn write_headers(headers: &http::HeaderMap) -> Result<usize, FlError> {
+        let mut out = stdout();
+        let mut size = 0;
+        for (key, value) in headers.iter() {
+            size += out.write(key.as_ref())?;
+            size += out.write(b": ")?;
+            size += out.write(value.as_bytes())?;
+            size += out.write(b"\n")?;
+        }
+        size += out.write(b"\n")?;
+        Ok(size)
+    }
+
     fn resp_future(&mut self, rc: ResponseComposite)
         -> Box<Future<Item=u64, Error=FlError> + Send>
     {
 
         println!("meta: method: {}", rc.method);
         println!("meta: url: {}", rc.uri);
-        println!("Request Headers:\n{:?}", rc.req_headers );
+        println!("Request Headers:");
+        if let Err(e) = BarcWriter::write_headers(&rc.req_headers) {
+            return Box::new(futerr(e));
+        }
 
         let (resp_parts, body) = rc.response.into_parts();
 
         println!("Response Status: {}", resp_parts.status);
-        println!("Response Headers:\n{:?}", resp_parts.headers);
+        println!("Response Headers:");
+        if let Err(e) = BarcWriter::write_headers(&resp_parts.headers) {
+            return Box::new(futerr(e));
+        }
 
         if let Some(v) = resp_parts.headers.get(http::header::CONTENT_LENGTH) {
             if let Err(e) = BarcWriter::check_length(v) {
