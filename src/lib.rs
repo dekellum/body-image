@@ -35,7 +35,8 @@ enum BodyForm {
 
 impl BodyForm {
     pub fn with_ram(size_estimate: u64) -> BodyForm {
-        BodyForm::Ram(Vec::with_capacity((size_estimate / 6_000) as usize))
+        // Estimate chunks needed based on a 8 KiB chunk size
+        BodyForm::Ram(Vec::with_capacity((size_estimate / 0x2000 + 1) as usize))
     }
 
     pub fn with_fs() -> Result<BodyForm, FlError> {
