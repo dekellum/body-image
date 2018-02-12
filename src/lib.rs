@@ -14,6 +14,7 @@ use std::io::{stdout, Seek, SeekFrom, Write};
 use std::fs::File;
 use futures::{Future, Stream};
 use futures::future::err as futerr;
+use futures::future::result as futres;
 use http::Request;
 use hyper::{Chunk, Client};
 use hyper::client::compat::CompatFutureResponse;
@@ -76,6 +77,14 @@ impl BodyForm {
             panic!("Invalid state BodyForm(::Fs)::write_back");
         }
     }
+
+    /// Prepare for consumption
+    pub fn prepare(&mut self) -> Result<(), FlError> {
+        if let BodyForm::Fs(ref mut f) = *self {
+            f.seek(SeekFrom::Start(0))?;
+        }
+        Ok(())
+    }
 }
 
 struct ResponseInput {
@@ -95,6 +104,14 @@ struct ResponseOutput {
     res_headers:  http::HeaderMap,
     body:         BodyForm,
     body_len:     u64,
+}
+
+impl ResponseOutput {
+    /// Prepare for consumption
+    pub fn prepare(mut self) -> Result<Self, FlError> {
+        self.body.prepare()?;
+        Ok(self)
+    }
 }
 
 impl BarcWriter {
@@ -210,7 +227,8 @@ impl BarcWriter {
             })
             .map_err(FlError::from)
             // -----(FnOnce(http::Response) -> IntoFuture<Error=FlError>)
-            .and_then(|res| self.resp_future(res));
+            .and_then(|res| self.resp_future(res))
+            .and_then(|ro| futres(ro.prepare()));
 
         let ro = core.run(work)?;
 
@@ -222,10 +240,6 @@ impl BarcWriter {
         println!("Response Status: {}", ro.status);
         println!("Response Headers:");
         Self::write_headers(&ro.res_headers)?;
-
-        if let BodyForm::Fs(mut f) = ro.body {
-            f.seek(SeekFrom::Start(0))?;
-        }
 
         Ok(ro.body_len)
     }
