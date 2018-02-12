@@ -8,6 +8,6 @@ failure    = ">=0.1.0, <2"
 futures    = ">=0.1.18, <2"
 http       = ">=0.1.4,  <2"
 hyper      = { version = ">=0.11.15, <2", features = ["compat"] }
-# hyper-tls
+hyper-tls  = ">=0.1.2, <2"
 tempfile   = ">=2.2.0, <3"
 tokio-core = ">=0.1.12, <2"

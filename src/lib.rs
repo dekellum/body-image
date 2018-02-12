@@ -2,6 +2,7 @@
 extern crate futures;
 extern crate http;
 extern crate hyper;
+extern crate hyper_tls;
 extern crate tempfile;
 extern crate tokio_core;
 
@@ -208,7 +209,10 @@ impl HyperBowl {
 
     pub fn get(&mut self) -> Result<u64, FlError> {
         let mut core = Core::new()?;
-        let client = Client::new(&core.handle());
+        let client = Client::configure()
+            .connector(hyper_tls::HttpsConnector::new(4, &core.handle())?)
+            // FIXME: threads ------------------------^
+            .build(&core.handle());
 
         let uri = "http://gravitext.com";
 
