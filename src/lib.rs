@@ -21,9 +21,7 @@ use hyper::client::compat::CompatFutureResponse;
 use tokio_core::reactor::Core;
 use tempfile::tempfile;
 
-// FIXME: Alt. names: Hyperbowl or hyperbole
-pub struct BarcWriter {}
-
+// FIXME: Just some (low) testing thresholds for now
 static MAX_BODY_RAM: u64 =  5_000;
 static MAX_BODY_LEN: u64 = 50_000;
 
@@ -116,9 +114,13 @@ impl ResponseOutput {
     }
 }
 
-impl BarcWriter {
-    pub fn new() -> Result<BarcWriter, FlError> {
-        Ok(BarcWriter {})
+/// Asynchronous recorder of HTTP request and response details, with
+/// adaptive handling of bodies based on size.
+pub struct HyperBowl {}
+
+impl HyperBowl {
+    pub fn new() -> Result<HyperBowl, FlError> {
+        Ok(HyperBowl {})
     }
 
     fn check_length(v: &http::header::HeaderValue, max: u64)
@@ -254,7 +256,7 @@ mod tests {
 
     #[test]
     fn test_get() {
-        let mut bw = BarcWriter::new().unwrap();
+        let mut bw = HyperBowl::new().unwrap();
 
         match bw.get() {
             Ok(len) => println!("Read: {} byte body", len),
