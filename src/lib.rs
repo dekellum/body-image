@@ -10,11 +10,12 @@ extern crate tokio_core;
 // application errors.
 use failure::Error as FlError;
 
-use std::io::{stdout, Write};
+use std::io::{stdout, Seek, SeekFrom, Write};
+use std::fs::File;
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use http::Request;
-use hyper::Client;
+use hyper::{Chunk, Client};
 use hyper::client::compat::CompatFutureResponse;
 use tokio_core::reactor::Core;
 use tempfile::tempfile;
@@ -22,14 +23,78 @@ use tempfile::tempfile;
 // FIXME: Alt. names: Hyperbowl or hyperbole
 pub struct BarcWriter {}
 
-static MAX_BODY_LENGTH: u64 = 50_000;
+static MAX_BODY_RAM: u64 =  5_000;
+static MAX_BODY_LEN: u64 = 50_000;
 
-// The Response with various aspects of the Request prepended.
-struct ResponseComposite {
-    method:   http::Method,
-    uri:      http::Uri,
-    req_headers: http::HeaderMap,
-    response: http::Response<hyper::Body>,
+// FIXME: alt naming BodyImage?
+enum BodyForm {
+    Ram(Vec<Chunk>),
+    Fs(File)
+}
+
+impl BodyForm {
+    pub fn with_ram(size_estimate: u64) -> BodyForm {
+        BodyForm::Ram(Vec::with_capacity((size_estimate / 6_000) as usize))
+    }
+
+    pub fn with_fs() -> Result<BodyForm, FlError> {
+        let f = tempfile()?;
+        Ok(BodyForm::Fs(f))
+    }
+
+    /// Save chunk based on variant
+    pub fn save(&mut self, chunk: Chunk) -> Result<(), FlError> {
+        match *self {
+            BodyForm::Ram(ref mut v) => {
+                v.push(chunk);
+                Ok(())
+            }
+            BodyForm::Fs(ref mut f) => {
+                f.write_all(&chunk)
+            }
+        }.map_err(FlError::from)
+    }
+
+    /// Return true if self variant is Ram
+    pub fn is_ram(&self) -> bool {
+        match *self {
+            BodyForm::Ram(_) => true,
+            _ => false
+        }
+    }
+
+    /// Consumes self variant BodyForm::Ram, returning a BodyForm::Fs
+    /// with all chunks written. Panics if self is not Ram.
+    pub fn write_back(self) -> Result<BodyForm, FlError> {
+        if let BodyForm::Ram(v) = self {
+            let mut f = tempfile()?;
+            for c in v {
+                f.write_all(&c)?;
+            }
+            Ok(BodyForm::Fs(f))
+        } else {
+            panic!( "Invalid state BodyForm(::Fs)::write_back" );
+        }
+    }
+}
+
+struct ResponseInput {
+    method:       http::Method,
+    uri:          http::Uri,
+    req_headers:  http::HeaderMap,
+    max_body_len: u64,
+    max_body_ram: u64,
+    response:     http::Response<hyper::Body>,
+}
+
+struct ResponseOutput {
+    method:       http::Method,
+    uri:          http::Uri,
+    req_headers:  http::HeaderMap,
+    status:       http::status::StatusCode,
+    res_headers:  http::HeaderMap,
+    body:         BodyForm,
+    body_len:     u64,
 }
 
 impl BarcWriter {
@@ -37,10 +102,10 @@ impl BarcWriter {
         Ok(BarcWriter {})
     }
 
-    fn check_length(v: &http::header::HeaderValue) -> Result<u64, FlError> {
+    fn check_length(v: &http::header::HeaderValue, max: u64) -> Result<u64, FlError> {
         let v = v.to_str()?;
         let l: u64 = v.parse()?;
-        if l > MAX_BODY_LENGTH {
+        if l > max {
             bail!("Response Content-Length too long: {}", l);
         }
         Ok(l)
@@ -59,51 +124,63 @@ impl BarcWriter {
         Ok(size)
     }
 
-    fn resp_future(&mut self, rc: ResponseComposite)
-        -> Box<Future<Item=u64, Error=FlError> + Send>
+    fn resp_future(&mut self, rc: ResponseInput)
+        -> Box<Future<Item=ResponseOutput, Error=FlError> + Send>
     {
-
-        println!("meta: method: {}", rc.method);
-        println!("meta: url: {}", rc.uri);
-        println!("Request Headers:");
-        if let Err(e) = BarcWriter::write_headers(&rc.req_headers) {
-            return Box::new(futerr(e));
-        }
-
         let (resp_parts, body) = rc.response.into_parts();
 
-        println!("Response Status: {}", resp_parts.status);
-        println!("Response Headers:");
-        if let Err(e) = BarcWriter::write_headers(&resp_parts.headers) {
-            return Box::new(futerr(e));
-        }
+        // Avoid borrow of rc in the following clojures
+        let max_body_ram = rc.max_body_ram;
+        let max_body_len = rc.max_body_len;
 
-        if let Some(v) = resp_parts.headers.get(http::header::CONTENT_LENGTH) {
-            if let Err(e) = BarcWriter::check_length(v) {
-                return Box::new(futerr(e));
+        // Result<BodyForm> based on CONTENT_LENGTH header.
+        let bf = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
+            Some(v) => {
+                Self::check_length(v, max_body_len).and_then(|cl| {
+                    if cl > max_body_ram {
+                        BodyForm::with_fs()
+                    } else {
+                        Ok(BodyForm::with_ram(cl))
+                    }
+                })
             }
-            // FIXME: Keep length for immediate decision to buffer to disk.
-        }
+            None => Ok(BodyForm::with_ram(max_body_ram))
+        };
 
-        match tempfile() {
-            Ok(mut tfile) => {
-                let s = body.map_err(FlError::from).
-                    fold(0u64, move |len_read, chunk| {
-                        let chunk_len = chunk.len() as u64;
-                        let new_len = len_read + chunk_len;
-                        if new_len > MAX_BODY_LENGTH {
-                            bail!("Response stream too long: {}+", new_len);
-                        } else {
-                            println!("to read chunk ({})", chunk_len);
-                            tfile.write_all(&chunk).
-                                map_err(FlError::from).
-                                and(Ok(new_len))
-                        }
-                    });
-                Box::new(s)
-            }
-            Err(e) => Box::new(futerr(e.into()))
-        }
+        // Unwrap BodyForm, projecting error to Future
+        let bf = match bf {
+            Ok(b) => b,
+            Err(e) => { return Box::new(futerr(e)); }
+        };
+
+        let ro = ResponseOutput {
+            method: rc.method,
+            uri: rc.uri,
+            req_headers: rc.req_headers,
+            status: resp_parts.status,
+            res_headers: resp_parts.headers,
+            body: bf,
+            body_len: 0u64,
+        };
+
+        let s = body
+            .map_err(FlError::from)
+            .fold(ro, move |mut ro, chunk| {
+                let chunk_len = chunk.len() as u64;
+                ro.body_len += chunk_len;
+                if ro.body_len > max_body_len {
+                    bail!("Response stream too long: {}+", ro.body_len);
+                } else {
+                    if ro.body.is_ram() && ro.body_len > max_body_ram {
+                        ro.body = ro.body.write_back()?;
+                    }
+                    println!("to save chunk ({})", chunk_len);
+                    ro.body
+                        .save(chunk)
+                        .and(Ok(ro))
+                }
+            });
+        Box::new(s)
     }
 
     pub fn get(&mut self) -> Result<u64, FlError> {
@@ -122,16 +199,35 @@ impl BarcWriter {
         let req_headers = req.headers().clone();
 
         let fr: CompatFutureResponse = client.request_compat(req);
+        let max_body_len = MAX_BODY_LEN;
+        let max_body_ram = MAX_BODY_RAM;
 
         let work = fr.
             map(|response| {
-                ResponseComposite { method, uri, req_headers, response } }).
+                ResponseInput { method, uri, req_headers,
+                                max_body_len, max_body_ram,
+                                response }
+            }).
             map_err(FlError::from).
             // -----(FnOnce(http::Response) -> IntoFuture<Error=FlError>)
             and_then(|res| self.resp_future(res));
 
-        let len = core.run(work)?;
-        Ok(len)
+        let ro = core.run(work)?;
+
+        println!("meta: method: {}", ro.method);
+        println!("meta: url: {}", ro.uri);
+        println!("Request Headers:");
+        Self::write_headers(&ro.req_headers)?;
+
+        println!("Response Status: {}", ro.status);
+        println!("Response Headers:");
+        Self::write_headers(&ro.res_headers)?;
+
+        if let BodyForm::Fs(mut f) = ro.body {
+            f.seek(SeekFrom::Start(0))?;
+        }
+
+        Ok(ro.body_len)
     }
 }
 
