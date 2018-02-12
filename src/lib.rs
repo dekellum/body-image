@@ -29,7 +29,7 @@ static MAX_BODY_LEN: u64 = 50_000;
 // FIXME: alt naming BodyImage?
 enum BodyForm {
     Ram(Vec<Chunk>),
-    Fs(File)
+    Fs(File),
 }
 
 impl BodyForm {
@@ -73,7 +73,7 @@ impl BodyForm {
             }
             Ok(BodyForm::Fs(f))
         } else {
-            panic!( "Invalid state BodyForm(::Fs)::write_back" );
+            panic!("Invalid state BodyForm(::Fs)::write_back");
         }
     }
 }
@@ -102,7 +102,9 @@ impl BarcWriter {
         Ok(BarcWriter {})
     }
 
-    fn check_length(v: &http::header::HeaderValue, max: u64) -> Result<u64, FlError> {
+    fn check_length(v: &http::header::HeaderValue, max: u64)
+        -> Result<u64, FlError>
+    {
         let v = v.to_str()?;
         let l: u64 = v.parse()?;
         if l > max {
@@ -135,15 +137,13 @@ impl BarcWriter {
 
         // Result<BodyForm> based on CONTENT_LENGTH header.
         let bf = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
-            Some(v) => {
-                Self::check_length(v, max_body_len).and_then(|cl| {
-                    if cl > max_body_ram {
-                        BodyForm::with_fs()
-                    } else {
-                        Ok(BodyForm::with_ram(cl))
-                    }
-                })
-            }
+            Some(v) => Self::check_length(v, max_body_len).and_then(|cl| {
+                if cl > max_body_ram {
+                    BodyForm::with_fs()
+                } else {
+                    Ok(BodyForm::with_ram(cl))
+                }
+            }),
             None => Ok(BodyForm::with_ram(max_body_ram))
         };
 
@@ -189,10 +189,10 @@ impl BarcWriter {
 
         let uri = "http://gravitext.com";
 
-        let req = Request::builder().
-            method(http::Method::GET).
-            uri(uri).
-            body(hyper::Body::empty())?;
+        let req = Request::builder()
+            .method(http::Method::GET)
+            .uri(uri)
+            .body(hyper::Body::empty())?;
 
         let method = req.method().clone();
         let uri = req.uri().clone();
@@ -202,15 +202,15 @@ impl BarcWriter {
         let max_body_len = MAX_BODY_LEN;
         let max_body_ram = MAX_BODY_RAM;
 
-        let work = fr.
-            map(|response| {
+        let work = fr
+            .map(|response| {
                 ResponseInput { method, uri, req_headers,
                                 max_body_len, max_body_ram,
                                 response }
-            }).
-            map_err(FlError::from).
+            })
+            .map_err(FlError::from)
             // -----(FnOnce(http::Response) -> IntoFuture<Error=FlError>)
-            and_then(|res| self.resp_future(res));
+            .and_then(|res| self.resp_future(res));
 
         let ro = core.run(work)?;
 
