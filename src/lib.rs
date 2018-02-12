@@ -25,31 +25,32 @@ use tempfile::tempfile;
 static MAX_BODY_RAM: u64 =  5_000;
 static MAX_BODY_LEN: u64 = 50_000;
 
-// FIXME: alt naming BodyImage?
-enum BodyForm {
+/// Represents a resolved HTTP body payload via RAM or file-system
+/// buffering strategies
+enum BodyImage {
     Ram(Vec<Chunk>),
     Fs(File),
 }
 
-impl BodyForm {
-    pub fn with_ram(size_estimate: u64) -> BodyForm {
-        // Estimate chunks needed based on a 8 KiB chunk size
-        BodyForm::Ram(Vec::with_capacity((size_estimate / 0x2000 + 1) as usize))
+impl BodyImage {
+    pub fn with_ram(size_estimate: u64) -> BodyImage {
+        // Estimate chunks needed based on a plausible 8 KiB chunk size
+        BodyImage::Ram(Vec::with_capacity((size_estimate / 0x2000 + 1) as usize))
     }
 
-    pub fn with_fs() -> Result<BodyForm, FlError> {
+    pub fn with_fs() -> Result<BodyImage, FlError> {
         let f = tempfile()?;
-        Ok(BodyForm::Fs(f))
+        Ok(BodyImage::Fs(f))
     }
 
     /// Save chunk based on variant
     pub fn save(&mut self, chunk: Chunk) -> Result<(), FlError> {
         match *self {
-            BodyForm::Ram(ref mut v) => {
+            BodyImage::Ram(ref mut v) => {
                 v.push(chunk);
                 Ok(())
             }
-            BodyForm::Fs(ref mut f) => {
+            BodyImage::Fs(ref mut f) => {
                 f.write_all(&chunk)
             }
         }.map_err(FlError::from)
@@ -58,28 +59,28 @@ impl BodyForm {
     /// Return true if self variant is Ram
     pub fn is_ram(&self) -> bool {
         match *self {
-            BodyForm::Ram(_) => true,
+            BodyImage::Ram(_) => true,
             _ => false
         }
     }
 
-    /// Consumes self variant BodyForm::Ram, returning a BodyForm::Fs
+    /// Consumes self variant BodyImage::Ram, returning a BodyImage::Fs
     /// with all chunks written. Panics if self is not Ram.
-    pub fn write_back(self) -> Result<BodyForm, FlError> {
-        if let BodyForm::Ram(v) = self {
+    pub fn write_back(self) -> Result<BodyImage, FlError> {
+        if let BodyImage::Ram(v) = self {
             let mut f = tempfile()?;
             for c in v {
                 f.write_all(&c)?;
             }
-            Ok(BodyForm::Fs(f))
+            Ok(BodyImage::Fs(f))
         } else {
-            panic!("Invalid state BodyForm(::Fs)::write_back");
+            panic!("Invalid state BodyImage(::Fs)::write_back");
         }
     }
 
     /// Prepare for consumption
     pub fn prepare(&mut self) -> Result<(), FlError> {
-        if let BodyForm::Fs(ref mut f) = *self {
+        if let BodyImage::Fs(ref mut f) = *self {
             f.seek(SeekFrom::Start(0))?;
         }
         Ok(())
@@ -102,7 +103,7 @@ struct ResponseOutput {
     version:      http::version::Version,
     status:       http::status::StatusCode,
     res_headers:  http::HeaderMap,
-    body:         BodyForm,
+    body:         BodyImage,
     body_len:     u64,
 }
 
@@ -156,19 +157,19 @@ impl HyperBowl {
         let max_body_ram = rc.max_body_ram;
         let max_body_len = rc.max_body_len;
 
-        // Result<BodyForm> based on CONTENT_LENGTH header.
+        // Result<BodyImage> based on CONTENT_LENGTH header.
         let bf = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
             Some(v) => Self::check_length(v, max_body_len).and_then(|cl| {
                 if cl > max_body_ram {
-                    BodyForm::with_fs()
+                    BodyImage::with_fs()
                 } else {
-                    Ok(BodyForm::with_ram(cl))
+                    Ok(BodyImage::with_ram(cl))
                 }
             }),
-            None => Ok(BodyForm::with_ram(max_body_ram))
+            None => Ok(BodyImage::with_ram(max_body_ram))
         };
 
-        // Unwrap BodyForm, returning any error as Future
+        // Unwrap BodyImage, returning any error as Future
         let bf = match bf {
             Ok(b) => b,
             Err(e) => { return Box::new(futerr(e)); }
