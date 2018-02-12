@@ -100,6 +100,7 @@ struct ResponseOutput {
     method:       http::Method,
     uri:          http::Uri,
     req_headers:  http::HeaderMap,
+    version:      http::version::Version,
     status:       http::status::StatusCode,
     res_headers:  http::HeaderMap,
     body:         BodyForm,
@@ -148,7 +149,7 @@ impl BarcWriter {
     {
         let (resp_parts, body) = rc.response.into_parts();
 
-        // Avoid borrow of rc in the following clojures
+        // Avoid borrow of rc in below closures
         let max_body_ram = rc.max_body_ram;
         let max_body_len = rc.max_body_len;
 
@@ -164,7 +165,7 @@ impl BarcWriter {
             None => Ok(BodyForm::with_ram(max_body_ram))
         };
 
-        // Unwrap BodyForm, projecting error to Future
+        // Unwrap BodyForm, returning any error as Future
         let bf = match bf {
             Ok(b) => b,
             Err(e) => { return Box::new(futerr(e)); }
@@ -174,6 +175,7 @@ impl BarcWriter {
             method: rc.method,
             uri: rc.uri,
             req_headers: rc.req_headers,
+            version: resp_parts.version,
             status: resp_parts.status,
             res_headers: resp_parts.headers,
             body: bf,
@@ -214,10 +216,10 @@ impl BarcWriter {
         let method = req.method().clone();
         let uri = req.uri().clone();
         let req_headers = req.headers().clone();
-
-        let fr: CompatFutureResponse = client.request_compat(req);
         let max_body_len = MAX_BODY_LEN;
         let max_body_ram = MAX_BODY_RAM;
+
+        let fr: CompatFutureResponse = client.request_compat(req);
 
         let work = fr
             .map(|response| {
@@ -226,8 +228,7 @@ impl BarcWriter {
                                 response }
             })
             .map_err(FlError::from)
-            // -----(FnOnce(http::Response) -> IntoFuture<Error=FlError>)
-            .and_then(|res| self.resp_future(res))
+            .and_then(|ri| self.resp_future(ri))
             .and_then(|ro| futres(ro.prepare()));
 
         let ro = core.run(work)?;
@@ -237,6 +238,7 @@ impl BarcWriter {
         println!("Request Headers:");
         Self::write_headers(&ro.req_headers)?;
 
+        println!("Response Version: {:?}", ro.version);
         println!("Response Status: {}", ro.status);
         println!("Response Headers:");
         Self::write_headers(&ro.res_headers)?;
