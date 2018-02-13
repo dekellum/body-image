@@ -307,12 +307,7 @@ mod tests {
         let dl = bw.fetch(req).unwrap();
         println!("Response {:#?}", dl);
 
-        let bd = &dl.body;
-        match bd {
-            &BodyImage::Ram(_) => {},
-            _ => panic!("Unexpected BodyForm {:?}", bd)
-        }
-
+        assert!(dl.body.is_ram());
         assert_eq!(dl.body_len, 8462);
     }
 
@@ -324,13 +319,9 @@ mod tests {
         let dl = bw.fetch(req).unwrap();
         println!("Response {:#?}", dl);
 
-        let bd = &dl.body;
-        match bd {
-            &BodyImage::Ram(_) => {},
-            _ => panic!("Unexpected BodyForm {:?}", bd)
-        }
-
         assert_eq!(dl.status.as_u16(), 404);
+
+        assert!(dl.body.is_ram());
         assert!(dl.body_len > 0);
         assert!(dl.body_len < 1000);
     }
@@ -345,10 +336,7 @@ mod tests {
         let dl = bw.fetch(req).unwrap();
         println!("Response {:#?}", dl);
 
-        let bd = &dl.body;
-        match bd {
-            &BodyImage::Fs(_) => {},
-            _ => panic!("Unexpected BodyForm {:?}", bd)
-        }
+        assert!(dl.body_len > 100_000 );
+        assert!(!dl.body.is_ram());
     }
 }
