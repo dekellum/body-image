@@ -6,21 +6,21 @@ extern crate hyper_tls;
 extern crate tempfile;
 extern crate tokio_core;
 
-// FIXME: Use atleast while prototyping. Might eventually switch to an
-// error enum to get clear separation between hyper::Error and
-// application errors.
+// FIXME: Use atleast while prototyping. Might switch to an error enum
+// to get clear separation between hyper::Error and application
+// errors.
 use failure::Error as FlError;
 
-use std::io::{stdout, Seek, SeekFrom, Write};
 use std::fmt;
 use std::fs::File;
+use std::io::{stdout, Seek, SeekFrom, Write};
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
 use hyper::{Chunk, Client};
 use hyper::client::compat::CompatFutureResponse;
-use tokio_core::reactor::Core;
 use tempfile::tempfile;
+use tokio_core::reactor::Core;
 
 type HyRequest = http::Request<hyper::Body>;
 
@@ -69,8 +69,9 @@ impl BodyImage {
         }
     }
 
-    /// Consumes self variant BodyImage::Ram, returning a BodyImage::Fs
-    /// with all chunks written. Panics if self is not Ram.
+    /// Consumes self variant BodyImage::Ram, returning a
+    /// BodyImage::Fs with all chunks written.
+    /// Panics if self is not Ram.
     pub fn write_back(self) -> Result<BodyImage, FlError> {
         if let BodyImage::Ram(v) = self {
             let mut f = tempfile()?;
@@ -85,6 +86,8 @@ impl BodyImage {
 
     /// Prepare for consumption
     pub fn prepare(&mut self) -> Result<(), FlError> {
+        // FIXME: Should keep this as state, and for example,
+        // error in save once transitioned.
         if let BodyImage::Fs(ref mut f) = *self {
             f.seek(SeekFrom::Start(0))?;
         }
@@ -155,6 +158,43 @@ impl HyperBowl {
         })
     }
 
+    pub fn fetch(&self, req: HyRequest) -> Result<Dialog, FlError> {
+        // FIXME: State of the Core (v Reactor), incl. construction,
+        // use from multiple threads is under flux:
+        // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
+        //
+        // But hyper, as of 0.11.18 still depends on tokio-core, io,
+        // service:
+        // https://crates.io/crates/hyper
+        let mut core = Core::new()?;
+        let client = Client::configure()
+            .connector(hyper_tls::HttpsConnector::new(4, &core.handle())?)
+            // FIXME: threads ------------------------^
+            .build(&core.handle());
+
+        // FIXME: What about Timeouts? Appears to also be under flux:
+        // https://github.com/hyperium/hyper/issues/1234
+        // https://hyper.rs/guides/client/timeout/
+
+        let method = req.method().clone();
+        let uri = req.uri().clone();
+        let req_headers = req.headers().clone();
+
+        let fr: CompatFutureResponse = client.request_compat(req);
+
+        let work = fr
+            .map(|response| {
+                Prolog { method, uri, req_headers, response }
+            })
+            .map_err(FlError::from)
+            .and_then(|prolog| self.resp_future(prolog))
+            .and_then(|dialog| futres(dialog.prepare()));
+
+        // Run until completion
+        core.run(work)
+            .map_err(FlError::from)
+    }
+
     fn check_length(v: &http::header::HeaderValue, max: u64)
         -> Result<u64, FlError>
     {
@@ -179,10 +219,10 @@ impl HyperBowl {
         Ok(size)
     }
 
-    fn resp_future(&self, pl: Prolog)
+    fn resp_future(&self, prolog: Prolog)
         -> Box<Future<Item=Dialog, Error=FlError> + Send>
     {
-        let (resp_parts, body) = pl.response.into_parts();
+        let (resp_parts, body) = prolog.response.into_parts();
 
         // Avoid borrowing self in below closures
         let max_body_ram = self.max_body_ram;
@@ -206,10 +246,10 @@ impl HyperBowl {
             Err(e) => { return Box::new(futerr(e)); }
         };
 
-        let dl = Dialog {
-            method:      pl.method,
-            uri:         pl.uri,
-            req_headers: pl.req_headers,
+        let dialog = Dialog {
+            method:      prolog.method,
+            uri:         prolog.uri,
+            req_headers: prolog.req_headers,
             version:     resp_parts.version,
             status:      resp_parts.status,
             res_headers: resp_parts.headers,
@@ -219,59 +259,22 @@ impl HyperBowl {
 
         let s = body
             .map_err(FlError::from)
-            .fold(dl, move |mut dl, chunk| {
+            .fold(dialog, move |mut dialog, chunk| {
                 let chunk_len = chunk.len() as u64;
-                dl.body_len += chunk_len;
-                if dl.body_len > max_body_len {
-                    bail!("Response stream too long: {}+", dl.body_len);
+                dialog.body_len += chunk_len;
+                if dialog.body_len > max_body_len {
+                    bail!("Response stream too long: {}+", dialog.body_len);
                 } else {
-                    if dl.body.is_ram() && dl.body_len > max_body_ram {
-                        dl.body = dl.body.write_back()?;
+                    if dialog.body.is_ram() && dialog.body_len > max_body_ram {
+                        dialog.body = dialog.body.write_back()?;
                     }
                     println!("to save chunk (len: {})", chunk_len);
-                    dl.body
+                    dialog.body
                         .save(chunk)
-                        .and(Ok(dl))
+                        .and(Ok(dialog))
                 }
             });
         Box::new(s)
-    }
-
-    pub fn fetch(&self, req: HyRequest) -> Result<Dialog, FlError> {
-        // FIXME: State of the Core (v Reactor), incl. construction,
-        // use from multiple threads is under flux:
-        // https://tokio.rs/blog/2018-02-tokio-reform -shipped/
-        //
-        // But hyper, as of 0.11.18 still depends on tokio-core, io,
-        // service:
-        // https://crates.io/crates/hyper
-        let mut core = Core::new()?;
-        let client = Client::configure()
-            .connector(hyper_tls::HttpsConnector::new(4, &core.handle())?)
-            // FIXME: threads ------------------------^
-            .build(&core.handle());
-
-        // FIXME: What about Timeouts? (Appears under flux)
-        // https://github.com/hyperium/hyper/issues/1234
-        // https://hyper.rs/guides/client/timeout/
-
-        let method = req.method().clone();
-        let uri = req.uri().clone();
-        let req_headers = req.headers().clone();
-
-        let fr: CompatFutureResponse = client.request_compat(req);
-
-        let work = fr
-            .map(|response| {
-                Prolog { method, uri, req_headers, response }
-            })
-            .map_err(FlError::from)
-            .and_then(|pl| self.resp_future(pl))
-            .and_then(|dl| futres(dl.prepare()));
-
-        // Run until completion
-        core.run(work)
-            .map_err(FlError::from)
     }
 }
 
