@@ -26,7 +26,7 @@ type HyRequest = http::Request<hyper::Body>;
 
 /// Represents a resolved HTTP body payload via RAM or file-system
 /// buffering strategies
-enum BodyImage {
+pub enum BodyImage {
     Ram(Vec<Chunk>),
     Fs(File),
 }
