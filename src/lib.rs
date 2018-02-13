@@ -17,11 +17,12 @@ use std::fs::File;
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
-use http::Request;
 use hyper::{Chunk, Client};
 use hyper::client::compat::CompatFutureResponse;
 use tokio_core::reactor::Core;
 use tempfile::tempfile;
+
+type HyRequest = http::Request<hyper::Body>;
 
 /// Represents a resolved HTTP body payload via RAM or file-system
 /// buffering strategies
@@ -230,8 +231,7 @@ impl HyperBowl {
         Box::new(s)
     }
 
-    pub fn fetch(&self, req: Request<hyper::Body>) -> Result<Dialog, FlError>
-    {
+    pub fn fetch(&self, req: HyRequest) -> Result<Dialog, FlError> {
         // FIXME: State of the Core (v Reactor), incl. construction,
         // use from multiple threads is under flux:
         // https://tokio.rs/blog/2018-02-tokio-reform -shipped/
@@ -273,9 +273,8 @@ impl HyperBowl {
 mod tests {
     use super::*;
 
-    fn create_request(uri: &str) -> Result<Request<hyper::Body>, FlError>
-    {
-        Request::builder()
+    fn create_request(uri: &str) -> Result<HyRequest, FlError> {
+        http::Request::builder()
             .method(http::Method::GET)
             .header(http::header::ACCEPT,
                     "text/html, application/xhtml+xml, application/xml; q=0.9, \
