@@ -23,8 +23,8 @@ use tokio_core::reactor::Core;
 use tempfile::tempfile;
 
 // FIXME: Just some (low) testing thresholds for now
-static MAX_BODY_RAM: u64 =  5_000;
-static MAX_BODY_LEN: u64 = 50_000;
+static MAX_BODY_RAM: u64 =    100_000;
+static MAX_BODY_LEN: u64 = 50_000_000;
 
 /// Represents a resolved HTTP body payload via RAM or file-system
 /// buffering strategies
