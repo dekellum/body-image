@@ -6,6 +6,8 @@ extern crate hyper_tls;
 extern crate tempfile;
 extern crate tokio_core;
 
+mod barc;
+
 // FIXME: Use atleast while prototyping. Might switch to an error enum
 // to get clear separation between hyper::Error and application
 // errors.
@@ -13,7 +15,7 @@ use failure::Error as FlError;
 
 use std::fmt;
 use std::fs::File;
-use std::io::{stdout, Seek, SeekFrom, Write};
+use std::io::{Seek, SeekFrom, Write};
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
@@ -204,19 +206,6 @@ impl HyperBowl {
             bail!("Response Content-Length too long: {}", l);
         }
         Ok(l)
-    }
-
-    fn write_headers(headers: &http::HeaderMap) -> Result<usize, FlError> {
-        let mut out = stdout();
-        let mut size = 0;
-        for (key, value) in headers.iter() {
-            size += out.write(key.as_ref())?;
-            size += out.write(b": ")?;
-            size += out.write(value.as_bytes())?;
-            size += out.write(b"\r\n")?;
-        }
-        size += out.write(b"\r\n")?;
-        Ok(size)
     }
 
     fn resp_future(&self, prolog: Prolog)
