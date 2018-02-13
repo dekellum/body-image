@@ -218,6 +218,12 @@ impl HyperBowl {
 
         let req = Request::builder()
             .method(http::Method::GET)
+            .header(http::header::ACCEPT,
+                    "text/html, application/xhtml+xml, application/xml; q=0.9, */*; q=0.8")
+            .header(http::header::ACCEPT_LANGUAGE, "en")
+            .header(http::header::ACCEPT_ENCODING, "gzip, deflate")
+            .header(http::header::USER_AGENT,
+                    "Mozilla/5.0 (compatible; Iudex 1.4.0; +http://gravitext.com/iudex)")
             .uri(uri)
             .body(hyper::Body::empty())?;
 
