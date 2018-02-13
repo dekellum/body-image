@@ -33,8 +33,14 @@ enum BodyImage {
 
 impl BodyImage {
     pub fn with_ram(size_estimate: u64) -> BodyImage {
-        // Estimate chunks needed based on a plausible 8 KiB chunk size
-        BodyImage::Ram(Vec::with_capacity((size_estimate / 0x2000 + 1) as usize))
+        if size_estimate == 0 {
+            BodyImage::Ram(Vec::with_capacity(0))
+        } else {
+            // Estimate capacity based on observed 8 KiB chunks
+            BodyImage::Ram(
+                Vec::with_capacity((size_estimate / 0x2000 + 1) as usize)
+            )
+        }
     }
 
     pub fn with_fs() -> Result<BodyImage, FlError> {
@@ -144,8 +150,8 @@ pub struct HyperBowl {
 impl HyperBowl {
     pub fn new() -> Result<HyperBowl, FlError> {
         Ok(HyperBowl {
-            max_body_ram:    102_400,
-            max_body_len: 50_000_000,
+            max_body_ram:        96 * 1024,
+            max_body_len: 48 * 1024 * 1024,
         })
     }
 
