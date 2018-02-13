@@ -7,11 +7,12 @@ extern crate tempfile;
 extern crate tokio_core;
 
 // FIXME: Use atleast while prototyping. Might eventually switch to an
-// error enum to get clear seperation between hyper::Error and
+// error enum to get clear separation between hyper::Error and
 // application errors.
 use failure::Error as FlError;
 
 use std::io::{stdout, Seek, SeekFrom, Write};
+use std::fmt;
 use std::fs::File;
 use futures::{Future, Stream};
 use futures::future::err as futerr;
@@ -21,10 +22,6 @@ use hyper::{Chunk, Client};
 use hyper::client::compat::CompatFutureResponse;
 use tokio_core::reactor::Core;
 use tempfile::tempfile;
-
-// FIXME: Just some (low) testing thresholds for now
-static MAX_BODY_RAM: u64 =    100_000;
-static MAX_BODY_LEN: u64 = 50_000_000;
 
 /// Represents a resolved HTTP body payload via RAM or file-system
 /// buffering strategies
@@ -88,16 +85,36 @@ impl BodyImage {
     }
 }
 
-struct ResponseInput {
+impl fmt::Debug for BodyImage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BodyImage::Ram(ref v) => {
+                // Avoids showing all chunks as u8 lists
+                f.debug_struct("Ram(Vec<Chunk>)")
+                    .field("capacity", &v.capacity())
+                    .field("len", &v.len())
+                    .finish()
+            }
+            BodyImage::Fs(ref file) => {
+                f.debug_tuple("Fs")
+                    .field(file)
+                    .finish()
+            }
+        }
+    }
+}
+
+/// Response wrapper, preserving various fields from the Request
+struct Prolog {
     method:       http::Method,
     uri:          http::Uri,
     req_headers:  http::HeaderMap,
-    max_body_len: u64,
-    max_body_ram: u64,
     response:     http::Response<hyper::Body>,
 }
 
-struct ResponseOutput {
+/// An HTTP request and response recording.
+#[derive(Debug)]
+pub struct Dialog {
     method:       http::Method,
     uri:          http::Uri,
     req_headers:  http::HeaderMap,
@@ -108,7 +125,7 @@ struct ResponseOutput {
     body_len:     u64,
 }
 
-impl ResponseOutput {
+impl Dialog {
     /// Prepare for consumption
     pub fn prepare(mut self) -> Result<Self, FlError> {
         self.body.prepare()?;
@@ -116,13 +133,19 @@ impl ResponseOutput {
     }
 }
 
-/// Asynchronous recorder of HTTP request and response details, with
-/// adaptive handling of bodies based on size.
-pub struct HyperBowl {}
+/// Asynchronous recorder of HTTP request and response details as a
+/// Dialog, with adaptive handling of bodies based on size.
+pub struct HyperBowl {
+    max_body_ram: u64,
+    max_body_len: u64,
+}
 
 impl HyperBowl {
     pub fn new() -> Result<HyperBowl, FlError> {
-        Ok(HyperBowl {})
+        Ok(HyperBowl {
+            max_body_ram:    102_400,
+            max_body_len: 50_000_000,
+        })
     }
 
     fn check_length(v: &http::header::HeaderValue, max: u64)
@@ -149,14 +172,14 @@ impl HyperBowl {
         Ok(size)
     }
 
-    fn resp_future(&mut self, rc: ResponseInput)
-        -> Box<Future<Item=ResponseOutput, Error=FlError> + Send>
+    fn resp_future(&self, pl: Prolog)
+        -> Box<Future<Item=Dialog, Error=FlError> + Send>
     {
-        let (resp_parts, body) = rc.response.into_parts();
+        let (resp_parts, body) = pl.response.into_parts();
 
-        // Avoid borrow of rc in below closures
-        let max_body_ram = rc.max_body_ram;
-        let max_body_len = rc.max_body_len;
+        // Avoid borrowing self in below closures
+        let max_body_ram = self.max_body_ram;
+        let max_body_len = self.max_body_len;
 
         // Result<BodyImage> based on CONTENT_LENGTH header.
         let bf = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
@@ -176,38 +199,39 @@ impl HyperBowl {
             Err(e) => { return Box::new(futerr(e)); }
         };
 
-        let ro = ResponseOutput {
-            method: rc.method,
-            uri: rc.uri,
-            req_headers: rc.req_headers,
-            version: resp_parts.version,
-            status: resp_parts.status,
+        let dl = Dialog {
+            method:      pl.method,
+            uri:         pl.uri,
+            req_headers: pl.req_headers,
+            version:     resp_parts.version,
+            status:      resp_parts.status,
             res_headers: resp_parts.headers,
-            body: bf,
-            body_len: 0u64,
+            body:        bf,
+            body_len:    0u64,
         };
 
         let s = body
             .map_err(FlError::from)
-            .fold(ro, move |mut ro, chunk| {
+            .fold(dl, move |mut dl, chunk| {
                 let chunk_len = chunk.len() as u64;
-                ro.body_len += chunk_len;
-                if ro.body_len > max_body_len {
-                    bail!("Response stream too long: {}+", ro.body_len);
+                dl.body_len += chunk_len;
+                if dl.body_len > max_body_len {
+                    bail!("Response stream too long: {}+", dl.body_len);
                 } else {
-                    if ro.body.is_ram() && ro.body_len > max_body_ram {
-                        ro.body = ro.body.write_back()?;
+                    if dl.body.is_ram() && dl.body_len > max_body_ram {
+                        dl.body = dl.body.write_back()?;
                     }
-                    println!("to save chunk ({})", chunk_len);
-                    ro.body
+                    println!("to save chunk (len: {})", chunk_len);
+                    dl.body
                         .save(chunk)
-                        .and(Ok(ro))
+                        .and(Ok(dl))
                 }
             });
         Box::new(s)
     }
 
-    pub fn get(&mut self) -> Result<u64, FlError> {
+    pub fn fetch(&self, req: Request<hyper::Body>) -> Result<Dialog, FlError>
+    {
         // FIXME: State of the Core (v Reactor), incl. construction,
         // use from multiple threads is under flux:
         // https://tokio.rs/blog/2018-02-tokio-reform -shipped/
@@ -221,22 +245,6 @@ impl HyperBowl {
             // FIXME: threads ------------------------^
             .build(&core.handle());
 
-        // FIXME: Externalize these and make get (or `fetch`) take a
-        // request?
-        let uri = "http://gravitext.com";
-        let req = Request::builder()
-            .method(http::Method::GET)
-            .header(http::header::ACCEPT,
-                    "text/html, application/xhtml+xml, application/xml; q=0.9, */*; q=0.8")
-            .header(http::header::ACCEPT_LANGUAGE, "en")
-            .header(http::header::ACCEPT_ENCODING, "gzip, deflate")
-            .header(http::header::USER_AGENT,
-                    "Mozilla/5.0 (compatible; Iudex 1.4.0; +http://gravitext.com/iudex)")
-            .uri(uri)
-            .body(hyper::Body::empty())?;
-
-        // "Connection: keep-alive" (header) is default for HTTP 1.1
-
         // FIXME: What about Timeouts? (Appears under flux)
         // https://github.com/hyperium/hyper/issues/1234
         // https://hyper.rs/guides/client/timeout/
@@ -244,35 +252,20 @@ impl HyperBowl {
         let method = req.method().clone();
         let uri = req.uri().clone();
         let req_headers = req.headers().clone();
-        let max_body_len = MAX_BODY_LEN;
-        let max_body_ram = MAX_BODY_RAM;
 
         let fr: CompatFutureResponse = client.request_compat(req);
 
         let work = fr
             .map(|response| {
-                ResponseInput { method, uri, req_headers,
-                                max_body_len, max_body_ram,
-                                response }
+                Prolog { method, uri, req_headers, response }
             })
             .map_err(FlError::from)
-            .and_then(|ri| self.resp_future(ri))
-            .and_then(|ro| futres(ro.prepare()));
+            .and_then(|pl| self.resp_future(pl))
+            .and_then(|dl| futres(dl.prepare()));
 
         // Run until completion
-        let ro = core.run(work)?;
-
-        println!("meta: method: {}", ro.method);
-        println!("meta: url: {}", ro.uri);
-        println!("Request Headers:");
-        Self::write_headers(&ro.req_headers)?;
-
-        println!("Response Version: {:?}", ro.version);
-        println!("Response Status: {}", ro.status);
-        println!("Response Headers:");
-        Self::write_headers(&ro.res_headers)?;
-
-        Ok(ro.body_len)
+        core.run(work)
+            .map_err(FlError::from)
     }
 }
 
@@ -280,13 +273,74 @@ impl HyperBowl {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_get() {
-        let mut bw = HyperBowl::new().unwrap();
+    fn create_request(uri: &str) -> Result<Request<hyper::Body>, FlError>
+    {
+        Request::builder()
+            .method(http::Method::GET)
+            .header(http::header::ACCEPT,
+                    "text/html, application/xhtml+xml, application/xml; q=0.9, \
+                     */*; q=0.8" )
+            .header(http::header::ACCEPT_LANGUAGE, "en")
+            .header(http::header::ACCEPT_ENCODING, "gzip, deflate")
+            .header(http::header::USER_AGENT,
+                    "Mozilla/5.0 \
+                     (compatible; Iudex 1.4.0; +http://gravitext.com/iudex)")
+            // "Connection: keep-alive" (header) is default for HTTP 1.1
+            .uri(uri)
+            .body(hyper::Body::empty())
+            .map_err(FlError::from)
+    }
 
-        match bw.get() {
-            Ok(len) => println!("Read: {} byte body", len),
-            Err(e) => panic!("Error from work: {:?}", e)
+    #[test]
+    fn test_small_http() {
+        let bw = HyperBowl::new().unwrap();
+        let req = create_request("http://gravitext.com").unwrap();
+
+        let dl = bw.fetch(req).unwrap();
+        println!("Response {:#?}", dl);
+
+        let bd = &dl.body;
+        match bd {
+            &BodyImage::Ram(_) => {},
+            _ => panic!("Unexpected BodyForm {:?}", bd)
+        }
+
+        assert_eq!(dl.body_len, 8462);
+    }
+
+    #[test]
+    fn test_not_found() {
+        let bw = HyperBowl::new().unwrap();
+        let req = create_request("http://gravitext.com/no/existe").unwrap();
+
+        let dl = bw.fetch(req).unwrap();
+        println!("Response {:#?}", dl);
+
+        let bd = &dl.body;
+        match bd {
+            &BodyImage::Ram(_) => {},
+            _ => panic!("Unexpected BodyForm {:?}", bd)
+        }
+
+        assert_eq!(dl.status.as_u16(), 404);
+        assert!(dl.body_len > 0);
+        assert!(dl.body_len < 1000);
+    }
+
+    #[test]
+    fn test_large_https() {
+        let bw = HyperBowl::new().unwrap();
+        let req = create_request(
+            "https://sqoop.com/blog/2016-03-28-search-in-metropolitan-areas"
+        ).unwrap();
+
+        let dl = bw.fetch(req).unwrap();
+        println!("Response {:#?}", dl);
+
+        let bd = &dl.body;
+        match bd {
+            &BodyImage::Fs(_) => {},
+            _ => panic!("Unexpected BodyForm {:?}", bd)
         }
     }
 }
