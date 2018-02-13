@@ -208,14 +208,22 @@ impl HyperBowl {
     }
 
     pub fn get(&mut self) -> Result<u64, FlError> {
+        // FIXME: State of the Core (v Reactor), incl. construction,
+        // use from multiple threads is under flux:
+        // https://tokio.rs/blog/2018-02-tokio-reform -shipped/
+        //
+        // But hyper, as of 0.11.18 still depends on tokio-core, io,
+        // service:
+        // https://crates.io/crates/hyper
         let mut core = Core::new()?;
         let client = Client::configure()
             .connector(hyper_tls::HttpsConnector::new(4, &core.handle())?)
             // FIXME: threads ------------------------^
             .build(&core.handle());
 
+        // FIXME: Externalize these and make get (or `fetch`) take a
+        // request?
         let uri = "http://gravitext.com";
-
         let req = Request::builder()
             .method(http::Method::GET)
             .header(http::header::ACCEPT,
@@ -226,6 +234,12 @@ impl HyperBowl {
                     "Mozilla/5.0 (compatible; Iudex 1.4.0; +http://gravitext.com/iudex)")
             .uri(uri)
             .body(hyper::Body::empty())?;
+
+        // "Connection: keep-alive" (header) is default for HTTP 1.1
+
+        // FIXME: What about Timeouts? (Appears under flux)
+        // https://github.com/hyperium/hyper/issues/1234
+        // https://hyper.rs/guides/client/timeout/
 
         let method = req.method().clone();
         let uri = req.uri().clone();
@@ -245,6 +259,7 @@ impl HyperBowl {
             .and_then(|ri| self.resp_future(ri))
             .and_then(|ro| futres(ro.prepare()));
 
+        // Run until completion
         let ro = core.run(work)?;
 
         println!("meta: method: {}", ro.method);
