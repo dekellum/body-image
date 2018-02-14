@@ -119,7 +119,7 @@ impl fmt::Debug for BodyImage {
 /// Response wrapper, preserving various fields from the Request
 struct Prolog {
     method:       http::Method,
-    uri:          http::Uri,
+    url:          http::Uri,
     req_headers:  http::HeaderMap,
     response:     http::Response<hyper::Body>,
 }
@@ -128,7 +128,7 @@ struct Prolog {
 #[derive(Debug)]
 pub struct Dialog {
     method:       http::Method,
-    uri:          http::Uri,
+    url:          http::Uri,
     req_headers:  http::HeaderMap,
     version:      http::version::Version,
     status:       http::status::StatusCode,
@@ -179,14 +179,14 @@ impl HyperBowl {
         // https://hyper.rs/guides/client/timeout/
 
         let method = req.method().clone();
-        let uri = req.uri().clone();
+        let url = req.uri().clone();
         let req_headers = req.headers().clone();
 
         let fr: CompatFutureResponse = client.request_compat(req);
 
         let work = fr
             .map(|response| {
-                Prolog { method, uri, req_headers, response }
+                Prolog { method, url, req_headers, response }
             })
             .map_err(FlError::from)
             .and_then(|prolog| self.resp_future(prolog))
@@ -237,7 +237,7 @@ impl HyperBowl {
 
         let dialog = Dialog {
             method:      prolog.method,
-            uri:         prolog.uri,
+            url:         prolog.url,
             req_headers: prolog.req_headers,
             version:     resp_parts.version,
             status:      resp_parts.status,
@@ -271,7 +271,7 @@ impl HyperBowl {
 mod tests {
     use super::*;
 
-    fn create_request(uri: &str) -> Result<HyRequest, FlError> {
+    fn create_request(url: &str) -> Result<HyRequest, FlError> {
         http::Request::builder()
             .method(http::Method::GET)
             .header(http::header::ACCEPT,
@@ -283,7 +283,7 @@ mod tests {
                     "Mozilla/5.0 \
                      (compatible; Iudex 1.4.0; +http://gravitext.com/iudex)")
             // "Connection: keep-alive" (header) is default for HTTP 1.1
-            .uri(uri)
+            .uri(url)
             .body(hyper::Body::empty())
             .map_err(FlError::from)
     }
