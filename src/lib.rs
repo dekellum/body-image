@@ -6,7 +6,7 @@ extern crate hyper_tls;
 extern crate tempfile;
 extern crate tokio_core;
 
-mod barc;
+pub mod barc;
 
 // FIXME: Use atleast while prototyping. Might switch to an error enum
 // to get clear separation between hyper::Error and application
@@ -24,7 +24,9 @@ use hyper::client::compat::CompatFutureResponse;
 use tempfile::tempfile;
 use tokio_core::reactor::Core;
 
-type HyRequest = http::Request<hyper::Body>;
+pub use hyper::Body as HyBody;
+
+pub type HyRequest = http::Request<HyBody>;
 
 /// Represents a resolved HTTP body payload via RAM or file-system
 /// buffering strategies
@@ -121,7 +123,7 @@ struct Prolog {
     method:       http::Method,
     url:          http::Uri,
     req_headers:  http::HeaderMap,
-    response:     http::Response<hyper::Body>,
+    response:     http::Response<HyBody>,
 }
 
 /// An HTTP request and response recording.
@@ -284,7 +286,7 @@ mod tests {
                      (compatible; Iudex 1.4.0; +http://gravitext.com/iudex)")
             // "Connection: keep-alive" (header) is default for HTTP 1.1
             .uri(url)
-            .body(hyper::Body::empty())
+            .body(HyBody::empty())
             .map_err(FlError::from)
     }
 
