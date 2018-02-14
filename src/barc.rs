@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 extern crate failure;
 extern crate http;
 
@@ -33,8 +31,7 @@ impl BarcFile {
     pub fn open<P>(path: P) -> Result<BarcFile, FlError>
         where P: AsRef<Path>
     {
-        let file =
-            OpenOptions::new()
+        let file = OpenOptions::new()
             .create(true)
             .read(true)
             .write(true)
@@ -103,7 +100,7 @@ fn derive_meta(dialog: &Dialog) -> Result<http::HeaderMap, FlError> {
 
     // FIXME: Rely on debug format of version for now. Should probably
     // replace this with match and custom representation.
-    let v = format!( "{:?}", dialog.version);
+    let v = format!("{:?}", dialog.version);
     hs.append("response-version", v.parse()?);
 
     hs.append("response-status",  dialog.status.to_string().parse()?);
@@ -114,6 +111,7 @@ fn write_record_place_holder(out: &mut Write) -> Result<(), FlError> {
     write_record_head(out, 0u64, 'R', 'U', 0u16, 0u16, 0u32, 0u16)
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
 fn write_record_head(
     out: &mut Write,
     len: u64,
@@ -157,13 +155,13 @@ fn write_body(out: &mut Write, body: &mut BodyImage)
 {
     let mut size: u64 = 0;
 
-    match body {
-        &mut BodyImage::Ram(ref v) => {
+    match *body {
+        BodyImage::Ram(ref v) => {
             for c in v {
-                size += write_all_len(out, &c)? as u64;
+                size += write_all_len(out, c)? as u64;
             }
         }
-        &mut BodyImage::Fs(ref mut f) => {
+        BodyImage::Fs(ref mut f) => {
             size += std::io::copy(f, out)?;
         }
     }
