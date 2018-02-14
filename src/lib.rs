@@ -15,7 +15,7 @@ use failure::Error as FlError;
 
 use std::fmt;
 use std::fs::File;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Cursor, empty, Read, Seek, SeekFrom, Write};
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
@@ -96,6 +96,22 @@ impl BodyImage {
             f.seek(SeekFrom::Start(0))?;
         }
         Ok(())
+    }
+
+    pub fn reader<'a>(&'a self) -> Result<Box<Read + 'a>, FlError> {
+        if let BodyImage::Ram(ref v) = *self {
+            if v.is_empty() {
+                Ok(Box::new(empty()))
+            } else {
+                let mut cur: Box<Read> = Box::new(Cursor::new(&v[0]));
+                for c in v[1..].iter() {
+                    cur = Box::new(cur.chain(Cursor::new(c)));
+                }
+                Ok(cur)
+            }
+        } else {
+            panic!("Invalid state BodyImage(::Fs)::reader");
+        }
     }
 }
 
