@@ -15,7 +15,8 @@ use failure::Error as FlError;
 
 use std::fmt;
 use std::fs::File;
-use std::io::{Cursor, empty, Read, Seek, SeekFrom, Write};
+use std::io;
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
@@ -98,20 +99,51 @@ impl BodyImage {
         Ok(())
     }
 
-    pub fn reader<'a>(&'a self) -> Result<Box<Read + 'a>, FlError> {
+    pub fn reader(&self) -> ChunksReader {
         if let BodyImage::Ram(ref v) = *self {
-            if v.is_empty() {
-                Ok(Box::new(empty()))
-            } else {
-                let mut cur: Box<Read> = Box::new(Cursor::new(&v[0]));
-                for c in v[1..].iter() {
-                    cur = Box::new(cur.chain(Cursor::new(c)));
-                }
-                Ok(cur)
-            }
+            ChunksReader::new(v)
         } else {
             panic!("Invalid state BodyImage(::Fs)::reader");
         }
+    }
+}
+
+pub struct ChunksReader<'a> {
+    current: Cursor<&'a [u8]>,
+    remainder: &'a [Chunk]
+}
+
+impl<'a> ChunksReader<'a> {
+    pub fn new(chunks: &'a [Chunk]) -> Self {
+        match chunks.split_first() {
+            Some((c, remainder)) => {
+                ChunksReader { current: Cursor::new(c), remainder }
+            }
+            None => {
+                ChunksReader { current: Cursor::new(&[]), remainder: &[] }
+            }
+        }
+    }
+
+    fn pop(&mut self) -> bool {
+        match self.remainder.split_first() {
+            Some((c, rem)) => {
+                self.current = Cursor::new(c);
+                self.remainder = rem;
+                true
+            }
+            None => false
+        }
+    }
+}
+
+impl<'a> Read for ChunksReader<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let n = self.current.read(buf)?;
+        if n == 0 && !buf.is_empty() && self.pop() {
+            return self.read(buf); // recurse
+        }
+        Ok(n)
     }
 }
 
