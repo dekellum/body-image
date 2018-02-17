@@ -194,6 +194,9 @@ impl HyperBowl {
             .and_then(|prolog| self.resp_future(prolog))
             .and_then(|dialog| futres(dialog.prepare()));
 
+        // FIXME: Handle content encoding (deflate, gzip) AFTER
+        // completion (see libflate-rs)
+
         // Run until completion
         core.run(work)
             .map_err(FlError::from)
