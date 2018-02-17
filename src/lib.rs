@@ -280,8 +280,9 @@ mod tests {
         http::Request::builder()
             .method(http::Method::GET)
             .header(http::header::ACCEPT,
-                    "text/html, application/xhtml+xml, application/xml; q=0.9, \
-                     */*; q=0.8" )
+                    "text/html, application/xhtml+xml, \
+                     application/xml;q=0.9, \
+                     */*;q=0.8" )
             .header(http::header::ACCEPT_LANGUAGE, "en")
             .header(http::header::ACCEPT_ENCODING, "gzip, deflate")
             .header(http::header::USER_AGENT,
