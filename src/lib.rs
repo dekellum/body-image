@@ -392,6 +392,7 @@ mod tests {
             .header(http::header::USER_AGENT,
                     "Mozilla/5.0 \
                      (compatible; Iudex 1.4.0; +http://gravitext.com/iudex)")
+            // Referer? Etag, If-Modified...?
             // "Connection: keep-alive" (header) is default for HTTP 1.1
             .uri(url)
             .body(HyBody::empty())
