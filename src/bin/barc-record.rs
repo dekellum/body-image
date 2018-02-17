@@ -34,6 +34,9 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
 
     let hb = HyperBowl::new()?;
     let mut dl = hb.fetch(req)?;
+
+    dl = dl.map_if_fs()?;
+
     let bfile = BarcFile::open(barc_path)?;
     let mut bw = bfile.writer()?;
     bw.write(&mut dl)?;

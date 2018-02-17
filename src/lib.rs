@@ -3,6 +3,7 @@ extern crate futures;
 extern crate http;
 extern crate hyper;
 extern crate hyper_tls;
+extern crate memmap;
 extern crate tempfile;
 extern crate tokio_core;
 
@@ -22,6 +23,7 @@ use futures::future::err as futerr;
 use futures::future::result as futres;
 use hyper::{Chunk, Client};
 use hyper::client::compat::CompatFutureResponse;
+use memmap::Mmap;
 use tempfile::tempfile;
 use tokio_core::reactor::Core;
 
@@ -34,6 +36,13 @@ pub type HyRequest = http::Request<HyBody>;
 pub enum BodyImage {
     Ram(Vec<Chunk>),
     Fs(File),
+    MemMap(Mapped),
+}
+
+#[derive(Debug)]
+pub struct Mapped {
+    file: File,
+    map: Mmap,
 }
 
 impl BodyImage {
@@ -63,6 +72,10 @@ impl BodyImage {
             BodyImage::Fs(ref mut f) => {
                 f.write_all(&chunk)
             }
+            BodyImage::MemMap(_) => {
+                panic!("Invalid state BodyImage::MemMap::save");
+            }
+
         }.map_err(FlError::from)
     }
 
@@ -85,7 +98,7 @@ impl BodyImage {
             }
             Ok(BodyImage::Fs(f))
         } else {
-            panic!("Invalid state BodyImage(::Fs)::write_back");
+            panic!("Invalid state BodyImage(::!Ram)::write_back");
         }
     }
 
@@ -99,11 +112,42 @@ impl BodyImage {
         Ok(())
     }
 
-    pub fn reader(&self) -> ChunksReader {
-        if let BodyImage::Ram(ref v) = *self {
-            ChunksReader::new(v)
+    /// Consumes self variant BodyImage::Fs, returning a
+    /// BodyImage::MemMap.
+    /// Panics if self is not Fs.
+    fn map(self) -> Result<BodyImage, FlError> {
+        if let BodyImage::Fs(file) = self {
+            let map = unsafe { Mmap::map(&file)? };
+            Ok(BodyImage::MemMap(Mapped { file, map }))
         } else {
-            panic!("Invalid state BodyImage(::Fs)::reader");
+            panic!("Invalid state BodyImage(::!Fs)::map");
+        }
+    }
+
+    pub fn reader(&self) -> BodyReader {
+        match *self {
+            BodyImage::Ram(ref v) =>
+                BodyReader::FromRam(ChunksReader::new(v)),
+            BodyImage::MemMap(ref m) =>
+                BodyReader::FromMemMap(Cursor::new(&m.map)),
+            BodyImage::Fs(ref f) =>
+                BodyReader::FromFs(f),
+        }
+    }
+}
+
+pub enum BodyReader<'a> {
+    FromRam(ChunksReader<'a>),
+    FromMemMap(Cursor<&'a [u8]>),
+    FromFs(&'a File),
+}
+
+impl<'a> BodyReader<'a> {
+    pub fn as_read(&mut self) -> &mut Read {
+        match *self {
+            BodyReader::FromRam(ref mut cr) => cr,
+            BodyReader::FromMemMap(ref mut cur) => cur,
+            BodyReader::FromFs(ref mut f) => f,
         }
     }
 }
@@ -162,6 +206,11 @@ impl fmt::Debug for BodyImage {
                     .field(file)
                     .finish()
             }
+            BodyImage::MemMap(ref m) => {
+                f.debug_tuple("MemMap")
+                    .field(m)
+                    .finish()
+            }
         }
     }
 }
@@ -191,6 +240,13 @@ impl Dialog {
     /// Prepare for consumption
     pub fn prepare(mut self) -> Result<Self, FlError> {
         self.body.prepare()?;
+        Ok(self)
+    }
+
+    pub fn map_if_fs(mut self) -> Result<Self, FlError> {
+        if let BodyImage::Fs(_) = self.body {
+            self.body = self.body.map()?;
+        }
         Ok(self)
     }
 }

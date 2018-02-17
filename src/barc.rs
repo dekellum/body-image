@@ -51,7 +51,7 @@ const BARC_2_HEAD_SIZE: usize = 54;
 
 impl<'a> BarcWriter<'a> {
 
-    pub fn write(&mut self, dialog: &mut Dialog) -> Result<(), FlError>
+    pub fn write(&mut self, dialog: &Dialog) -> Result<(), FlError>
     {
         let inner = &mut *self.guard;
         let fout = &mut inner.file;
@@ -70,7 +70,8 @@ impl<'a> BarcWriter<'a> {
         // FIXME: Write any request body (e.g. POST) when available
 
         let res_h = write_headers(fout, &dialog.res_headers)?;
-        let res_b = write_body(fout, &mut dialog.body)?;
+
+        let res_b = write_body(fout, &dialog.body)?;
 
         // Compute total, excluding the fixed head length
         let total_ex: u64 = (meta_h + req_h + res_h) as u64 + res_b;
@@ -150,25 +151,18 @@ fn write_headers(out: &mut Write, headers: &http::HeaderMap)
     Ok(size)
 }
 
-fn write_body(out: &mut Write, body: &mut BodyImage)
+fn write_body(out: &mut Write, body: &BodyImage)
     -> Result<u64, FlError>
 {
     let mut size: u64 = 0;
 
-    match *body {
-        BodyImage::Ram(ref v) => {
-            for c in v {
-                size += write_all_len(out, c)? as u64;
-            }
-        }
-        BodyImage::Fs(ref mut f) => {
-            size += std::io::copy(f, out)?;
-        }
-    }
+    let mut r = body.reader();
+    size += std::io::copy(r.as_read(), out)?;
 
     if size > 0 {
         size += write_all_len(out, b"\r\n")? as u64;
     }
+
     Ok(size)
 }
 
