@@ -147,6 +147,29 @@ impl BodyImage {
                 BodyReader::FromMemMap(Cursor::new(&m.map)),
         }
     }
+
+    pub fn write_to(&self, out: &mut Write) -> Result<u64, FlError> {
+        match *self {
+            BodyImage::Ram(ref v) => {
+                let mut size: u64 = 0;
+                for c in v {
+                    let b = &c;
+                    out.write_all(b)?;
+                    size += b.len() as u64;
+                }
+                Ok(size)
+            }
+            BodyImage::MemMap(ref m) => {
+                let map = &m.map;
+                out.write_all(map)?;
+                Ok(map.len() as u64)
+            }
+            _ => {
+                panic!("Invalid state for write_to: {:?}", self);
+            }
+
+        }
+    }
 }
 
 pub enum BodyReader<'a> {

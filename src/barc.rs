@@ -154,10 +154,7 @@ fn write_headers(out: &mut Write, headers: &http::HeaderMap)
 fn write_body(out: &mut Write, body: &BodyImage)
     -> Result<u64, FlError>
 {
-    let mut size: u64 = 0;
-
-    let mut r = body.reader();
-    size += std::io::copy(r.as_read(), out)?;
+    let mut size = body.write_to(out)?;
 
     if size > 0 {
         size += write_all_len(out, b"\r\n")? as u64;
