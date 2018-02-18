@@ -31,18 +31,17 @@ pub use hyper::Body as HyBody;
 
 pub type HyRequest = http::Request<HyBody>;
 
-/// Represents a resolved HTTP body payload via RAM or File-System
-/// based buffering strategies
+/// Represents an HTTP body payload via RAM or File-System
+/// based buffering strategies.
 pub enum BodyImage {
 
     /// Body in random access memory, as a vector of separate chunks.
     Ram(Vec<Chunk>),
 
-    /// Body in the process of being written to a (temporary) file
+    /// Body in the process of being written to a temporary file
     FsWrite(File),
 
-    /// Body in (temporary) file, ready for (one time, mutating)
-    /// reading.
+    /// Body in temporary file, ready for mutating, sequential read.
     FsRead(File),
 
     /// Body memory mapped (from file), for efficient, concurrent and
@@ -50,6 +49,7 @@ pub enum BodyImage {
     MemMap(Mapped),
 }
 
+/// File and associated memory map handle.
 #[derive(Debug)]
 pub struct Mapped {
     file: File,
@@ -84,13 +84,13 @@ impl BodyImage {
                 f.write_all(&chunk)
             }
             _ => {
-                panic!("Invalid state for save: {:?}", self);
+                panic!("Invalid state for save(): {:?}", self);
             }
 
         }.map_err(FlError::from)
     }
 
-    /// Return true if self variant is Ram
+    /// Return true if self variant is `BodyImage::Ram`
     pub fn is_ram(&self) -> bool {
         match *self {
             BodyImage::Ram(_) => true,
@@ -98,9 +98,9 @@ impl BodyImage {
         }
     }
 
-    /// Consumes self variant BodyImage::Ram, returning a
-    /// BodyImage::FsWrite with all chunks written.
-    /// Panics if self is not Ram.
+    /// Consumes self variant `BodyImage::Ram` and returns a
+    /// `BodyImage::FsWrite` with all chunks written.
+    /// Panics if in some other state.
     pub fn write_back(self) -> Result<BodyImage, FlError> {
         if let BodyImage::Ram(v) = self {
             let mut f = tempfile()?;
@@ -109,11 +109,13 @@ impl BodyImage {
             }
             Ok(BodyImage::FsWrite(f))
         } else {
-            panic!("Invalid state BodyImage(::!Ram)::write_back");
+            panic!("Invalid state for write_back(): {:?}", self);
         }
     }
 
-    /// Prepare for consumption
+    /// Prepare for (re-)reading. Converts `BodyImage::FsWrite` to
+    /// `BodyImage::FsRead`.  Seeks to beginning for either of these
+    /// states. NoOp for other states.
     pub fn prepare(self) -> Result<BodyImage, FlError> {
         match self {
             BodyImage::FsWrite(mut f) | BodyImage::FsRead(mut f) => {
@@ -126,17 +128,20 @@ impl BodyImage {
         }
     }
 
-    /// Consumes self variant BodyImage::FsRead, returning a
-    /// BodyImage::MemMap.  Panics if self is not Fs.
+    /// Consumes self variant `BodyImage::FsRead`, returning a
+    /// `BodyImage::MemMap` by memory mapping the file.  Panics if
+    /// self is not FsRead.
     fn map(self) -> Result<BodyImage, FlError> {
         if let BodyImage::FsRead(file) = self {
             let map = unsafe { Mmap::map(&file)? };
             Ok(BodyImage::MemMap(Mapped { file, map }))
         } else {
-            panic!("Invalid state for map: {:?}", self);
+            panic!("Invalid state for map(): {:?}", self);
         }
     }
 
+    /// Return a new BodyReader over self. Panics if self is
+    /// `BodyImage::FsWrite`. Use `BodyImage::prepare` first.
     pub fn reader(&self) -> BodyReader {
         match *self {
             BodyImage::Ram(ref v) =>
@@ -150,6 +155,9 @@ impl BodyImage {
         }
     }
 
+    /// Specialized and efficient write for states `BodyImage::Ram`
+    /// and `BodyImage::MemMap` that can be written without mutating
+    /// self. Panics if not one of those states.
     pub fn write_to(&self, out: &mut Write) -> Result<u64, FlError> {
         match *self {
             BodyImage::Ram(ref v) => {
@@ -167,13 +175,43 @@ impl BodyImage {
                 Ok(map.len() as u64)
             }
             _ => {
-                panic!("Invalid state for write_to: {:?}", self);
+                panic!("Invalid state for write_to(): {:?}", self);
             }
 
         }
     }
 }
 
+impl fmt::Debug for BodyImage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BodyImage::Ram(ref v) => {
+                // Avoids showing all chunks as u8 lists
+                f.debug_struct("Ram(Vec<Chunk>)")
+                    .field("capacity", &v.capacity())
+                    .field("len", &v.len())
+                    .finish()
+            }
+            BodyImage::FsRead(ref file) => {
+                f.debug_tuple("FsRead")
+                    .field(file)
+                    .finish()
+            }
+            BodyImage::FsWrite(ref file) => {
+                f.debug_tuple("FsWrite")
+                    .field(file)
+                    .finish()
+            }
+            BodyImage::MemMap(ref m) => {
+                f.debug_tuple("MemMap")
+                    .field(m)
+                    .finish()
+            }
+        }
+    }
+}
+
+/// Reader for `BodyImage` variants.
 pub enum BodyReader<'a> {
     FromRam(ChunksReader<'a>),
     FromFs(&'a File),
@@ -181,6 +219,7 @@ pub enum BodyReader<'a> {
 }
 
 impl<'a> BodyReader<'a> {
+    /// Return a Read reference for self.
     pub fn as_read(&mut self) -> &mut Read {
         match *self {
             BodyReader::FromRam(ref mut cr) => cr,
@@ -190,6 +229,7 @@ impl<'a> BodyReader<'a> {
     }
 }
 
+/// Specialized Reader for `BodyImage::Ram`
 pub struct ChunksReader<'a> {
     current: Cursor<&'a [u8]>,
     remainder: &'a [Chunk]
@@ -229,35 +269,6 @@ impl<'a> Read for ChunksReader<'a> {
     }
 }
 
-impl fmt::Debug for BodyImage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            BodyImage::Ram(ref v) => {
-                // Avoids showing all chunks as u8 lists
-                f.debug_struct("Ram(Vec<Chunk>)")
-                    .field("capacity", &v.capacity())
-                    .field("len", &v.len())
-                    .finish()
-            }
-            BodyImage::FsRead(ref file) => {
-                f.debug_tuple("FsRead")
-                    .field(file)
-                    .finish()
-            }
-            BodyImage::FsWrite(ref file) => {
-                f.debug_tuple("FsWrite")
-                    .field(file)
-                    .finish()
-            }
-            BodyImage::MemMap(ref m) => {
-                f.debug_tuple("MemMap")
-                    .field(m)
-                    .finish()
-            }
-        }
-    }
-}
-
 /// Response wrapper, preserving various fields from the Request
 struct Prolog {
     method:       http::Method,
@@ -286,6 +297,8 @@ impl Dialog {
         Ok(self)
     }
 
+    /// If body is `BodyImage::FsRead`, convert to `BodyImage::MemMap`
+    /// via `BodyImage::map`, else No-Op.
     pub fn map_if_fs(mut self) -> Result<Self, FlError> {
         if let BodyImage::FsRead(_) = self.body {
             self.body = self.body.map()?;

@@ -155,11 +155,9 @@ fn write_body(out: &mut Write, body: &BodyImage)
     -> Result<u64, FlError>
 {
     let mut size = body.write_to(out)?;
-
     if size > 0 {
         size += write_all_len(out, b"\r\n")? as u64;
     }
-
     Ok(size)
 }
 
