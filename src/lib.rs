@@ -115,12 +115,14 @@ impl BodyImage {
 
     /// Prepare for consumption
     pub fn prepare(self) -> Result<BodyImage, FlError> {
-        if let BodyImage::FsWrite(mut f) = self {
-            f.seek(SeekFrom::Start(0))?;
-            Ok(BodyImage::FsRead(f))
-        }
-        else {
-            Ok(self)
+        match self {
+            BodyImage::FsWrite(mut f) | BodyImage::FsRead(mut f) => {
+                f.seek(SeekFrom::Start(0))?;
+                Ok(BodyImage::FsRead(f))
+            }
+            _ => {
+                Ok(self)
+            }
         }
     }
 
