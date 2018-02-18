@@ -39,6 +39,6 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
 
     let bfile = BarcFile::open(barc_path)?;
     let mut bw = bfile.writer()?;
-    bw.write(&mut dl)?;
+    bw.write(&dl)?;
     Ok(())
 }
