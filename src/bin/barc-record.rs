@@ -25,7 +25,7 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
                  application/xml;q=0.9, \
                  */*;q=0.8" )
         .header(http::header::ACCEPT_LANGUAGE, "en")
-        .header(http::header::ACCEPT_ENCODING, "gzip, deflate")
+        .header(http::header::ACCEPT_ENCODING, "br, gzip, deflate")
         .header(http::header::USER_AGENT,
                 "Mozilla/5.0 \
                  (compatible; Hyper-bowl 0.0.1; +http://gravitext.com/)")
