@@ -8,6 +8,7 @@ extern crate tempfile;
 extern crate tokio_core;
 
 pub mod barc;
+pub mod compress;
 
 // FIXME: Use atleast while prototyping. Might switch to an error enum
 // to get clear separation between hyper::Error and application

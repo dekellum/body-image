@@ -6,6 +6,7 @@ use failure::Error as FlError;
 
 use hyper_barc::{HyBody, HyperBowl};
 use hyper_barc::barc::BarcFile;
+use hyper_barc::compress::decode_body;
 
 fn main() {
     let mut args = std::env::args();
@@ -34,6 +35,8 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
 
     let hb = HyperBowl::new()?;
     let mut dl = hb.fetch(req)?;
+
+    decode_body(&mut dl)?;
 
     dl = dl.map_if_fs()?;
 
