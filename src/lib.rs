@@ -134,6 +134,7 @@ impl BodyImage {
     /// self is not FsRead.
     fn map(self) -> Result<BodyImage, FlError> {
         if let BodyImage::FsRead(file) = self {
+            // FIXME: Check zero length case?
             let map = unsafe { Mmap::map(&file)? };
             Ok(BodyImage::MemMap(Mapped { file, map }))
         } else {
