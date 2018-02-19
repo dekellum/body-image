@@ -74,7 +74,17 @@ impl BodyImage {
         Ok(BodyImage::FsWrite(f))
     }
 
-    /// Save chunk based on variant
+    /// Return true if self variant is `BodyImage::Ram`
+    pub fn is_ram(&self) -> bool {
+        match *self {
+            BodyImage::Ram(_) => true,
+            _ => false
+        }
+    }
+
+    /// Save `Chunk` based on variant, appending to `BodyImage::Ram`
+    /// or writing to `BodyImage::FsWrite`. Panics if in some other
+    /// state.
     pub fn save(&mut self, chunk: Chunk) -> Result<(), FlError> {
         match *self {
             BodyImage::Ram(ref mut v) => {
@@ -89,14 +99,6 @@ impl BodyImage {
             }
 
         }.map_err(FlError::from)
-    }
-
-    /// Return true if self variant is `BodyImage::Ram`
-    pub fn is_ram(&self) -> bool {
-        match *self {
-            BodyImage::Ram(_) => true,
-            _ => false
-        }
     }
 
     /// Consumes self variant `BodyImage::Ram` and returns a
@@ -143,7 +145,7 @@ impl BodyImage {
 
     /// Consumes self variant `BodyImage::FsRead`, returning a
     /// `BodyImage::MemMap` by memory mapping the file.  Panics if
-    /// self is not FsRead.
+    /// self is in some other state.
     fn map(self) -> Result<BodyImage, FlError> {
         if let BodyImage::FsRead(file) = self {
             // FIXME: Check zero length case?
