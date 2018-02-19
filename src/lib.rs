@@ -114,6 +114,18 @@ impl BodyImage {
         }
     }
 
+    /// Write all of slice to `BodyImage::FsWrite`. This can be an
+    /// optimization over `BodyImage::save` when the state is
+    /// known. Panics if in some other state.
+    pub fn write_all(&mut self, buf: &[u8]) -> Result<(), FlError> {
+        if let BodyImage::FsWrite(ref mut f) = *self {
+            f.write_all(buf).map_err(FlError::from)
+        }
+        else {
+            panic!("Invalid state for write_all(): {:?}", self);
+        }
+    }
+
     /// Prepare for (re-)reading. Converts `BodyImage::FsWrite` to
     /// `BodyImage::FsRead`.  Seeks to beginning for either of these
     /// states. NoOp for other states.
