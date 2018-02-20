@@ -1,13 +1,15 @@
 extern crate failure;
 extern crate flate2;
 extern crate http;
+extern crate hyper;
 extern crate bytes;
 
+use std::io::{ErrorKind, Read};
 use failure::Error as FlError;
 use self::bytes::{BytesMut, BufMut};
 use self::flate2::read::GzDecoder;
+use hyper::header::{ContentEncoding, Encoding, Header, Raw};
 use super::{BodyImage, Dialog};
-use std::io::{ErrorKind, Read};
 
 pub fn decode_body(dialog: &mut Dialog) -> Result<(), FlError> {
     let headers = &mut dialog.res_headers;
@@ -20,8 +22,8 @@ pub fn decode_body(dialog: &mut Dialog) -> Result<(), FlError> {
                .iter());
 
     for v in encodings {
-        if let Ok(s) = v.to_str() {
-            if s.find("gzip").is_some() {
+        if let Ok(v) = ContentEncoding::parse_header(&Raw::from(v.as_bytes())) {
+            if v.contains(&Encoding::Gzip) {
                 let (newb, size) = {
                     println!("Body to decode: {:?}", dialog.body);
                     let mut reader = dialog.body.reader();
