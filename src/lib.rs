@@ -130,7 +130,7 @@ impl BodyImage {
 
     /// Prepare for (re-)reading. Converts `BodyImage::FsWrite` to
     /// `BodyImage::FsRead`.  Seeks to beginning for either of these
-    /// states. NoOp for other states.
+    /// states. No-op for other states.
     pub fn prepare(self) -> Result<BodyImage, FlError> {
         match self {
             BodyImage::FsWrite(mut f) => {
@@ -319,7 +319,7 @@ impl Dialog {
     }
 
     /// If body is `BodyImage::FsRead`, convert to `BodyImage::MemMap`
-    /// via `BodyImage::map`, else No-Op.
+    /// via `BodyImage::map`, else no-op.
     pub fn map_if_fs(mut self) -> Result<Self, FlError> {
         if let BodyImage::FsRead(_) = self.body {
             self.body = self.body.map()?;
