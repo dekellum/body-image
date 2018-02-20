@@ -34,9 +34,9 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
         .body(HyBody::empty())?;
 
     let tune = Tunables::new()?;
-    let mut dl = fetch(req, tune)?;
+    let mut dl = fetch(req, &tune)?;
 
-    decode_body(&mut dl)?;
+    decode_body(&mut dl, &tune)?;
 
     dl = dl.map_if_fs()?;
 

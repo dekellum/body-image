@@ -345,7 +345,7 @@ impl Tunables {
 }
 
 // Run an HTTP request to completion, returning the full `Dialog`
-pub fn fetch(req: HyRequest, tune: Tunables) -> Result<Dialog, FlError> {
+pub fn fetch(req: HyRequest, tune: &Tunables) -> Result<Dialog, FlError> {
     // FIXME: State of the Core (v Reactor), incl. construction,
     // use from multiple threads is under flux:
     // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
@@ -374,7 +374,7 @@ pub fn fetch(req: HyRequest, tune: Tunables) -> Result<Dialog, FlError> {
             Prolog { method, url, req_headers, response }
         })
         .map_err(FlError::from)
-        .and_then(|prolog| resp_future(prolog, tune))
+        .and_then(|prolog| resp_future(prolog, *tune))
         .and_then(|dialog| futres(dialog.prepare()));
 
     // Run until completion
@@ -475,7 +475,7 @@ mod tests {
         let tune = Tunables::new().unwrap();
         let req = create_request("http://gravitext.com").unwrap();
 
-        let dl = fetch(req, tune).unwrap();
+        let dl = fetch(req, &tune).unwrap();
         println!("Response {:#?}", dl);
 
         assert!(dl.body.is_ram());
@@ -487,7 +487,7 @@ mod tests {
         let tune = Tunables::new().unwrap();
         let req = create_request("http://gravitext.com/no/existe").unwrap();
 
-        let dl = fetch(req, tune).unwrap();
+        let dl = fetch(req, &tune).unwrap();
         println!("Response {:#?}", dl);
 
         assert_eq!(dl.status.as_u16(), 404);
@@ -504,7 +504,7 @@ mod tests {
             "https://sqoop.com/blog/2016-03-28-search-in-metropolitan-areas"
         ).unwrap();
 
-        let dl = fetch(req, tune).unwrap();
+        let dl = fetch(req, &tune).unwrap();
         println!("Response {:#?}", dl);
 
         assert!(dl.body_len > 100_000 );
