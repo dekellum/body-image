@@ -51,12 +51,14 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> 
             match comp {
                 Compress::Gzip => {
                     let mut decoder = GzDecoder::new(reader.as_read());
-                    let len_est = dialog.body_len * 5; // FIXME: extract const
+                    let len_est = dialog.body_len *
+                        u64::from(tune.gzip_size_x_est);
                     read_to_body(&mut decoder, len_est, tune)?
                 }
                 Compress::Deflate => {
                     let mut decoder = DeflateDecoder::new(reader.as_read());
-                    let len_est = dialog.body_len * 4; // FIXME: extract const
+                    let len_est = dialog.body_len *
+                        u64::from(tune.deflate_size_x_est);
                     read_to_body(&mut decoder, len_est, tune)?
                 }
             }
@@ -85,7 +87,7 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
 
     let mut size: u64 = 0;
     'eof: loop {
-        let mut buf = BytesMut::with_capacity(8 * 1024); // FIXME: const
+        let mut buf = BytesMut::with_capacity(tune.decode_buffer_ram);
         'fill: loop {
             let len = match r.read( unsafe { buf.bytes_mut() } ) {
                 Ok(len) => len,
@@ -132,7 +134,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodyImage, tune: &Tunables)
     -> Result<(BodyImage, u64), FlError>
 {
     let mut size: u64 = 0;
-    let mut buf = BytesMut::with_capacity(32 * 1024); // FIXME: const
+    let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs);
     loop {
         let len = match r.read( unsafe { buf.bytes_mut() } ) {
             Ok(len) => len,

@@ -329,10 +329,15 @@ impl Dialog {
     }
 }
 
+/// A collection of size limits and (performance) tuning constants.
 #[derive(Clone, Copy)]
 pub struct Tunables {
-    max_body_ram: u64,
-    max_body:     u64,
+    max_body_ram:            u64,
+    max_body:                u64,
+    decode_buffer_ram:       usize,
+    decode_buffer_fs:        usize,
+    deflate_size_x_est:      u16,
+    gzip_size_x_est:         u16,
 }
 
 impl Tunables {
@@ -340,8 +345,14 @@ impl Tunables {
         Ok(Tunables {
             max_body_ram:        96 * 1024,
             max_body:     48 * 1024 * 1024,
+            decode_buffer_ram:    8 * 1024,
+            decode_buffer_fs:    64 * 1024,
+            deflate_size_x_est:          4,
+            gzip_size_x_est:             5,
         })
     }
+
+    // FIXME: Add builder interface, setters
 }
 
 // Run an HTTP request to completion, returning the full `Dialog`
