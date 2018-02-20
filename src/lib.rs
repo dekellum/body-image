@@ -151,7 +151,7 @@ impl BodyImage {
     /// Consumes self variant `BodyImage::FsRead`, returning a
     /// `BodyImage::MemMap` by memory mapping the file.  Panics if
     /// self is in some other state.
-    fn map(self) -> Result<BodyImage, FlError> {
+    pub fn map(self) -> Result<BodyImage, FlError> {
         if let BodyImage::FsRead(file) = self {
             // FIXME: Check zero length case?
             let map = unsafe { Mmap::map(&file)? };
