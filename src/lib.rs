@@ -329,129 +329,122 @@ impl Dialog {
     }
 }
 
-/// Asynchronous recorder of HTTP request and response details as a
-/// Dialog, with adaptive handling of bodies based on size.
-pub struct HyperBowl {
+#[derive(Clone, Copy)]
+pub struct Tunables {
     max_body_ram: u64,
-    max_body_len: u64,
+    max_body:     u64,
 }
 
-impl HyperBowl {
-    pub fn new() -> Result<HyperBowl, FlError> {
-        Ok(HyperBowl {
+impl Tunables {
+    pub fn new() -> Result<Tunables, FlError> {
+        Ok(Tunables {
             max_body_ram:        96 * 1024,
-            max_body_len: 48 * 1024 * 1024,
+            max_body:     48 * 1024 * 1024,
         })
     }
+}
 
-    pub fn fetch(&self, req: HyRequest) -> Result<Dialog, FlError> {
-        // FIXME: State of the Core (v Reactor), incl. construction,
-        // use from multiple threads is under flux:
-        // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
-        //
-        // But hyper, as of 0.11.18 still depends on tokio-core, io,
-        // service:
-        // https://crates.io/crates/hyper
-        let mut core = Core::new()?;
-        let client = Client::configure()
-            .connector(hyper_tls::HttpsConnector::new(4, &core.handle())?)
-            // FIXME: threads ------------------------^
-            .build(&core.handle());
+// Run an HTTP request to completion, returning the full `Dialog`
+pub fn fetch(req: HyRequest, tune: Tunables) -> Result<Dialog, FlError> {
+    // FIXME: State of the Core (v Reactor), incl. construction,
+    // use from multiple threads is under flux:
+    // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
+    //
+    // But hyper, as of 0.11.18 still depends on tokio-core, io,
+    // service:
+    // https://crates.io/crates/hyper
+    let mut core = Core::new()?;
+    let client = Client::configure()
+        .connector(hyper_tls::HttpsConnector::new(4, &core.handle())?)
+        // FIXME: threads ------------------------^
+        .build(&core.handle());
 
-        // FIXME: What about Timeouts? Appears to also be under flux:
-        // https://github.com/hyperium/hyper/issues/1234
-        // https://hyper.rs/guides/client/timeout/
+    // FIXME: What about Timeouts? Appears to also be under flux:
+    // https://github.com/hyperium/hyper/issues/1234
+    // https://hyper.rs/guides/client/timeout/
 
-        let method = req.method().clone();
-        let url = req.uri().clone();
-        let req_headers = req.headers().clone();
+    let method = req.method().clone();
+    let url = req.uri().clone();
+    let req_headers = req.headers().clone();
 
-        let fr: CompatFutureResponse = client.request_compat(req);
+    let fr: CompatFutureResponse = client.request_compat(req);
 
-        let work = fr
-            .map(|response| {
-                Prolog { method, url, req_headers, response }
-            })
-            .map_err(FlError::from)
-            .and_then(|prolog| self.resp_future(prolog))
-            .and_then(|dialog| futres(dialog.prepare()));
+    let work = fr
+        .map(|response| {
+            Prolog { method, url, req_headers, response }
+        })
+        .map_err(FlError::from)
+        .and_then(|prolog| resp_future(prolog, tune))
+        .and_then(|dialog| futres(dialog.prepare()));
 
-        // FIXME: Handle content encoding (deflate, gzip) AFTER
-        // completion (see libflate-rs)
+    // Run until completion
+    core.run(work)
+        .map_err(FlError::from)
+}
 
-        // Run until completion
-        core.run(work)
-            .map_err(FlError::from)
-    }
+fn resp_future(prolog: Prolog, tune: Tunables)
+    -> Box<Future<Item=Dialog, Error=FlError> + Send>
+{
+    let (resp_parts, body) = prolog.response.into_parts();
 
-    fn check_length(v: &http::header::HeaderValue, max: u64)
-        -> Result<u64, FlError>
-    {
-        let v = v.to_str()?;
-        let l: u64 = v.parse()?;
-        if l > max {
-            bail!("Response Content-Length too long: {}", l);
-        }
-        Ok(l)
-    }
+    // Result<BodyImage> based on CONTENT_LENGTH header.
+    let bf = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
+        Some(v) => check_length(v, tune.max_body).and_then(|cl| {
+            if cl > tune.max_body_ram {
+                BodyImage::with_fs()
+            } else {
+                Ok(BodyImage::with_ram(cl))
+            }
+        }),
+        None => Ok(BodyImage::with_ram(tune.max_body_ram))
+    };
 
-    fn resp_future(&self, prolog: Prolog)
-        -> Box<Future<Item=Dialog, Error=FlError> + Send>
-    {
-        let (resp_parts, body) = prolog.response.into_parts();
+    // Unwrap BodyImage, returning any error as Future
+    let bf = match bf {
+        Ok(b) => b,
+        Err(e) => { return Box::new(futerr(e)); }
+    };
 
-        // Avoid borrowing self in below closures
-        let max_body_ram = self.max_body_ram;
-        let max_body_len = self.max_body_len;
+    let dialog = Dialog {
+        method:      prolog.method,
+        url:         prolog.url,
+        req_headers: prolog.req_headers,
+        version:     resp_parts.version,
+        status:      resp_parts.status,
+        res_headers: resp_parts.headers,
+        body:        bf,
+        body_len:    0u64,
+    };
 
-        // Result<BodyImage> based on CONTENT_LENGTH header.
-        let bf = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
-            Some(v) => Self::check_length(v, max_body_len).and_then(|cl| {
-                if cl > max_body_ram {
-                    BodyImage::with_fs()
-                } else {
-                    Ok(BodyImage::with_ram(cl))
+    let s = body
+        .map_err(FlError::from)
+        .fold(dialog, move |mut dialog, chunk| {
+            let chunk_len = chunk.len() as u64;
+            dialog.body_len += chunk_len;
+            if dialog.body_len > tune.max_body {
+                bail!("Response stream too long: {}+", dialog.body_len);
+            } else {
+                if dialog.body.is_ram() && dialog.body_len > tune.max_body_ram {
+                    dialog.body = dialog.body.write_back()?;
                 }
-            }),
-            None => Ok(BodyImage::with_ram(max_body_ram))
-        };
+                println!("to save chunk (len: {})", chunk_len);
+                dialog.body
+                    .save(chunk)
+                    .and(Ok(dialog))
+            }
+        });
+    Box::new(s)
+}
 
-        // Unwrap BodyImage, returning any error as Future
-        let bf = match bf {
-            Ok(b) => b,
-            Err(e) => { return Box::new(futerr(e)); }
-        };
-
-        let dialog = Dialog {
-            method:      prolog.method,
-            url:         prolog.url,
-            req_headers: prolog.req_headers,
-            version:     resp_parts.version,
-            status:      resp_parts.status,
-            res_headers: resp_parts.headers,
-            body:        bf,
-            body_len:    0u64,
-        };
-
-        let s = body
-            .map_err(FlError::from)
-            .fold(dialog, move |mut dialog, chunk| {
-                let chunk_len = chunk.len() as u64;
-                dialog.body_len += chunk_len;
-                if dialog.body_len > max_body_len {
-                    bail!("Response stream too long: {}+", dialog.body_len);
-                } else {
-                    if dialog.body.is_ram() && dialog.body_len > max_body_ram {
-                        dialog.body = dialog.body.write_back()?;
-                    }
-                    println!("to save chunk (len: {})", chunk_len);
-                    dialog.body
-                        .save(chunk)
-                        .and(Ok(dialog))
-                }
-            });
-        Box::new(s)
+fn check_length(v: &http::header::HeaderValue, max: u64)
+    -> Result<u64, FlError>
+{
+    let v = v.to_str()?;
+    let l: u64 = v.parse()?;
+    if l > max {
+        bail!("Response Content-Length too long: {}", l);
     }
+    Ok(l)
 }
 
 #[cfg(test)]
@@ -479,10 +472,10 @@ mod tests {
 
     #[test]
     fn test_small_http() {
-        let bw = HyperBowl::new().unwrap();
+        let tune = Tunables::new().unwrap();
         let req = create_request("http://gravitext.com").unwrap();
 
-        let dl = bw.fetch(req).unwrap();
+        let dl = fetch(req, tune).unwrap();
         println!("Response {:#?}", dl);
 
         assert!(dl.body.is_ram());
@@ -491,10 +484,10 @@ mod tests {
 
     #[test]
     fn test_not_found() {
-        let bw = HyperBowl::new().unwrap();
+        let tune = Tunables::new().unwrap();
         let req = create_request("http://gravitext.com/no/existe").unwrap();
 
-        let dl = bw.fetch(req).unwrap();
+        let dl = fetch(req, tune).unwrap();
         println!("Response {:#?}", dl);
 
         assert_eq!(dl.status.as_u16(), 404);
@@ -506,12 +499,12 @@ mod tests {
 
     #[test]
     fn test_large_https() {
-        let bw = HyperBowl::new().unwrap();
+        let tune = Tunables::new().unwrap();
         let req = create_request(
             "https://sqoop.com/blog/2016-03-28-search-in-metropolitan-areas"
         ).unwrap();
 
-        let dl = bw.fetch(req).unwrap();
+        let dl = fetch(req, tune).unwrap();
         println!("Response {:#?}", dl);
 
         assert!(dl.body_len > 100_000 );

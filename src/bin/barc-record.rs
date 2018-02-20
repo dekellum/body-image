@@ -4,7 +4,7 @@ extern crate hyper_barc;
 
 use failure::Error as FlError;
 
-use hyper_barc::{HyBody, HyperBowl};
+use hyper_barc::{fetch, HyBody, Tunables};
 use hyper_barc::barc::BarcFile;
 use hyper_barc::compress::decode_body;
 
@@ -33,8 +33,8 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
         .uri(url)
         .body(HyBody::empty())?;
 
-    let hb = HyperBowl::new()?;
-    let mut dl = hb.fetch(req)?;
+    let tune = Tunables::new()?;
+    let mut dl = fetch(req, tune)?;
 
     decode_body(&mut dl)?;
 
