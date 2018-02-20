@@ -9,20 +9,41 @@ use std::path::Path;
 
 use super::{BodyImage, Dialog};
 
+/// Fixed record head size including CRLF terminator:
+/// 54 Bytes
+pub const V2_HEAD_SIZE: usize = 54;
+
+/// Maximum total record length, excluding the record head:
+/// 2<sup>48</sup> (256 TiB) - 1.
+/// Note: this exceeds the file or partition size limits of many
+/// filesystems.
+pub const V2_MAX_RECORD: u64 = 0xfff_fff_fff_fff;
+
+/// Maximum header (meta, request, response) block size, including
+/// CRLF terminator:
+/// 2<sup>20</sup> (1 MiB) - 1.
+pub const V2_MAX_HBLOCK: usize =        0xff_fff;
+
+/// Maximum request body size, including CRLF terminator:
+/// 2<sup>40</sup> (1 TiB) - 1.
+pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
+
 pub struct BarcFile {
     lock: RwLock<BarcFileInner>
 }
 
 struct BarcFileInner {
     // FIXME: Each reader will need a new, independent File instance
-    // openned read-only and closed when dropped, with its own
-    // position. Save off the Path for this purpose.
+    // opened read-only and closed when dropped, with its own
+    // position. Save off the Path for this purpose. On unix could
+    // alternatively used FileExt offset-based read/write.
     file: File,
 }
 
 pub struct BarcWriter<'a> {
-    // FIXME: RwLock isn't a perfect fit, since it is possible from a
-    // File level to support 1-writer and N-readers at the same time.
+    // FIXME: RwLock isn't a perfect fit, since it is possible with
+    // the format, at file level, to support 1-writer AND N-readers
+    // concurrently.
     guard: RwLockWriteGuard<'a, BarcFileInner>
 }
 
@@ -44,23 +65,6 @@ impl BarcFile {
         Ok(BarcWriter { guard })
     }
 }
-
-/// Fixed record head size including CRLF terminator:
-/// 54 Bytes
-pub const V2_HEAD_SIZE: usize = 54;
-
-/// Maximum total record length, excluding the record head:
-/// 2<sup>48</sup> (256 TiB) - 1
-pub const V2_MAX_RECORD: u64 = 0xfff_fff_fff_fff;
-
-/// Maximum header (meta, request, response) block size, including
-/// CRLF terminator:
-/// 2<sup>20</sup> (1 MiB) - 1
-pub const V2_MAX_HBLOCK: usize =        0xff_fff;
-
-/// Maximum request body size, including CRLF terminator:
-/// 2<sup>40</sup> (1 TiB) - 1
-pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
 
 impl<'a> BarcWriter<'a> {
 

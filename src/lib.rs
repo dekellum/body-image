@@ -331,7 +331,7 @@ impl Dialog {
     }
 }
 
-/// A collection of size limits and (performance) tuning constants.
+/// A collection of size limits and performance tuning constants.
 #[derive(Clone, Copy)]
 pub struct Tunables {
     max_body_ram:            u64,
