@@ -10,10 +10,10 @@ extern crate tokio_core;
 pub mod barc;
 pub mod compress;
 
-// FIXME: Use atleast while prototyping. Might switch to an error enum
-// to get clear separation between hyper::Error and application
-// errors.
+/// Alias for failure crate `failure::Error`
 use failure::Error as FlError;
+// FIXME: Use atleast while prototyping. Could switch to an error enum
+// for clear separation between hyper::Error and application errors.
 
 use std::fmt;
 use std::fs::File;
@@ -28,6 +28,7 @@ use memmap::Mmap;
 use tempfile::tempfile;
 use tokio_core::reactor::Core;
 
+/// Alias for `hyper::Body`
 pub use hyper::Body as HyBody;
 
 pub type HyRequest = http::Request<HyBody>;
