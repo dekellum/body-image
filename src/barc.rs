@@ -2,7 +2,6 @@ extern crate failure;
 extern crate http;
 
 use failure::Error as FlError;
-use std;
 use std::io::{Seek, SeekFrom, Write};
 use std::fs::{File, OpenOptions};
 use std::sync::{RwLock, RwLockWriteGuard};
@@ -46,8 +45,22 @@ impl BarcFile {
     }
 }
 
-/// Fixed Record Head size in bytes, for version 2
-const BARC_2_HEAD_SIZE: usize = 54;
+/// Fixed record head size including CRLF terminator:
+/// 54 Bytes
+pub const V2_HEAD_SIZE: usize = 54;
+
+/// Maximum total record length, excluding the record head:
+/// 2<sup>48</sup> (256 TiB) - 1
+pub const V2_MAX_RECORD: u64 = 0xfff_fff_fff_fff;
+
+/// Maximum header (meta, request, response) block size, including
+/// CRLF terminator:
+/// 2<sup>20</sup> (1 MiB) - 1
+pub const V2_MAX_HBLOCK: usize =        0xff_fff;
+
+/// Maximum request body size, including CRLF terminator:
+/// 2<sup>40</sup> (1 TiB) - 1
+pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
 
 impl<'a> BarcWriter<'a> {
 
@@ -71,10 +84,14 @@ impl<'a> BarcWriter<'a> {
 
         let res_h = write_headers(fout, &dialog.res_headers)?;
 
+        // Compute total thus far, excluding the fixed head length
+        let mut total_ex: u64 = (meta_h + req_h + res_h) as u64;
+
+        assert!((total_ex + dialog.body_len + 2) <= V2_MAX_RECORD,
+                "body exceeds size limit");
         let res_b = write_body(fout, &dialog.body)?;
 
-        // Compute total, excluding the fixed head length
-        let total_ex: u64 = (meta_h + req_h + res_h) as u64 + res_b;
+        total_ex += res_b; // New total
 
         // Seek back and write final record head, with known sizes
         fout.seek(SeekFrom::Start(start))?;
@@ -83,10 +100,10 @@ impl<'a> BarcWriter<'a> {
             total_ex,
             'H',  // FIXME: option?
             'P',  // FIXME: compression support
-            meta_h as u32,
-            req_h  as u32,
+            meta_h,
+            req_h,
             0u64, // FIXME: req body
-            res_h  as u32)?;
+            res_h)?;
 
         fout.seek(SeekFrom::End(0))?;
 
@@ -109,7 +126,7 @@ fn derive_meta(dialog: &Dialog) -> Result<http::HeaderMap, FlError> {
 }
 
 fn write_record_place_holder(out: &mut Write) -> Result<(), FlError> {
-    write_record_head(out, 0u64, 'R', 'U', 0u32, 0u32, 0u64, 0u32)
+    write_record_head(out, 0, 'R', 'U', 0, 0, 0, 0)
 }
 
 #[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
@@ -118,26 +135,26 @@ fn write_record_head(
     len:    u64,
     type_f: char,
     cmpr_f: char,
-    meta:   u32,
-    req_h:  u32,
+    meta:   usize,
+    req_h:  usize,
     req_b:  u64,
-    res_h:  u32) -> Result<(), FlError>
+    res_h:  usize) -> Result<(), FlError>
 {
     // Check input ranges
-    assert!(len   <= 0xfff_fff_fff_fff, "len");
-    assert!(type_f.is_ascii(),          "type_f");
-    assert!(cmpr_f.is_ascii(),          "cmpr_f");
-    assert!(meta  <=          0xff_fff, "meta");
-    assert!(req_h <=          0xff_fff, "req_h");
-    assert!(req_b <=   0xf_fff_fff_fff, "req_b");
-    assert!(res_h <=          0xff_fff, "res_h");
+    assert!(len   <= V2_MAX_RECORD,   "len exceeded");
+    assert!(type_f.is_ascii(),        "type_f not ascii");
+    assert!(cmpr_f.is_ascii(),        "cmpr_f not ascii");
+    assert!(meta  <= V2_MAX_HBLOCK,   "meta exceeded");
+    assert!(req_h <= V2_MAX_HBLOCK,   "req_h exceeded");
+    assert!(req_b <= V2_MAX_REQ_BODY, "req_b exceeded");
+    assert!(res_h <= V2_MAX_HBLOCK,   "res_h exceeded");
 
     let size = write_all_len(out, format!(
         // ---6------19---22-----28-----34------45----50------54
         "BARC2 {:012x} {}{} {:05x} {:05x} {:010x} {:05x}\r\n\r\n",
         len, type_f, cmpr_f, meta, req_h, req_b, res_h
     ).as_bytes())?;
-    assert_eq!(size, BARC_2_HEAD_SIZE, "BARC 2 record head size invariant");
+    assert_eq!(size, V2_HEAD_SIZE, "wrong record head size");
     Ok(())
 }
 
@@ -156,7 +173,7 @@ fn write_headers(out: &mut Write, headers: &http::HeaderMap)
     }
     // FIXME: Use TryFrom here and for all u* conversions, when its lands...
     // https://github.com/rust-lang/rfcs/pull/1542
-    assert!(size <= (std::u16::MAX as usize));
+    assert!(size <= V2_MAX_HBLOCK);
     Ok(size)
 }
 
