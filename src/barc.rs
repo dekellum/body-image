@@ -78,11 +78,7 @@ impl<'a> BarcWriter<'a> {
         write_record_place_holder(fout)?;
         fout.flush()?;
 
-        // FIXME: Externalize meta, so users can add whatever is
-        // desired, possibly providing a convenience "derive_meta" off
-        // of Dialog?
-        let meta = derive_meta(dialog)?;
-        let meta_h = write_headers(fout, &meta)?;
+        let meta_h = write_headers(fout, &dialog.meta)?;
 
         let req_h = write_headers(fout, &dialog.req_headers)?;
         // FIXME: Write any request body (e.g. POST) when available
@@ -114,20 +110,6 @@ impl<'a> BarcWriter<'a> {
         fout.flush()?;
         Ok(())
     }
-}
-
-fn derive_meta(dialog: &Dialog) -> Result<http::HeaderMap, FlError> {
-    let mut hs = http::HeaderMap::new();
-    hs.append("url", dialog.url.to_string().parse()?);
-    hs.append("method", dialog.method.to_string().parse()?);
-
-    // FIXME: Rely on debug format of version for now. Should probably
-    // replace this with match and custom representation.
-    let v = format!("{:?}", dialog.version);
-    hs.append("response-version", v.parse()?);
-
-    hs.append("response-status",  dialog.status.to_string().parse()?);
-    Ok(hs)
 }
 
 fn write_record_place_holder(out: &mut Write) -> Result<(), FlError> {

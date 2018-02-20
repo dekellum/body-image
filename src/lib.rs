@@ -304,6 +304,7 @@ struct Prolog {
 /// An HTTP request and response recording.
 #[derive(Debug)]
 pub struct Dialog {
+    meta:         http::HeaderMap,
     method:       http::Method,
     url:          http::Uri,
     req_headers:  http::HeaderMap,
@@ -318,7 +319,25 @@ impl Dialog {
     /// Prepare for consumption
     pub fn prepare(mut self) -> Result<Self, FlError> {
         self.body = self.body.prepare()?;
+        self.meta = self.derive_meta()?;
         Ok(self)
+    }
+
+    fn derive_meta(&self) -> Result<http::HeaderMap, FlError> {
+        let mut hs = http::HeaderMap::with_capacity(6);
+
+        hs.append("url", self.url.to_string().parse()?);
+        hs.append("method", self.method.to_string().parse()?);
+
+        // FIXME: Rely on debug format of version for now. Should probably
+        // replace this with match and custom representation.
+        let v = format!("{:?}", self.version);
+        hs.append("response-version", v.parse()?);
+
+        hs.append("response-status",  self.status.to_string().parse()?);
+
+        //FIXME: HeaderName constants?
+        Ok(hs)
     }
 
     /// If body is `BodyImage::FsRead`, convert to `BodyImage::MemMap`
@@ -419,6 +438,7 @@ fn resp_future(prolog: Prolog, tune: Tunables)
     };
 
     let dialog = Dialog {
+        meta:        http::HeaderMap::with_capacity(0),
         method:      prolog.method,
         url:         prolog.url,
         req_headers: prolog.req_headers,
