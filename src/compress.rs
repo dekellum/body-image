@@ -11,6 +11,12 @@ use self::flate2::read::{DeflateDecoder, GzDecoder};
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
 use super::{BodyImage, Dialog};
 
+#[derive(Debug)]
+enum Compress {
+    Gzip,
+    Deflate,
+}
+
 pub fn decode_body(dialog: &mut Dialog) -> Result<(), FlError> {
     let headers = &mut dialog.res_headers;
 
@@ -21,37 +27,49 @@ pub fn decode_body(dialog: &mut Dialog) -> Result<(), FlError> {
                .get_all(http::header::CONTENT_ENCODING)
                .iter());
 
+    let mut compress = None;
+
     for v in encodings {
+        // Content-Encoding includes Brotli (br) and is otherwise a
+        // super-set of Transfer-Encoding, so parse that way for both.
         if let Ok(v) = ContentEncoding::parse_header(&Raw::from(v.as_bytes())) {
             if v.contains(&Encoding::Gzip) {
-                let (newb, size) = {
-                    println!("Body to decode: {:?}", dialog.body);
-                    let mut reader = dialog.body.reader();
-                    let mut decoder = GzDecoder::new(reader.as_read());
-                    let len_est = dialog.body_len * 4; // FIXME: extract const
-                    read_to_body(&mut decoder, len_est)?
-                };
-                dialog.body = newb.prepare()?;
-                println!("Body update: {:?}", dialog.body);
-                dialog.body_len = size;
+                compress = Some(Compress::Gzip);
+                break;
             }
-            else if v.contains(&Encoding::Deflate) {
-                let (newb, size) = {
-                    println!("Body to decode: {:?}", dialog.body);
-                    let mut reader = dialog.body.reader();
+            if v.contains(&Encoding::Deflate) {
+                compress = Some(Compress::Deflate);
+                break;
+            }
+        }
+    }
+
+    if let Some(comp) = compress {
+        let (new_body, size) = {
+            println!("Body to {:?} decode: {:?}", comp, dialog.body);
+            let mut reader = dialog.body.reader();
+            match comp {
+                Compress::Gzip => {
+                    let mut decoder = GzDecoder::new(reader.as_read());
+                    let len_est = dialog.body_len * 5; // FIXME: extract const
+                    read_to_body(&mut decoder, len_est)?
+                }
+                Compress::Deflate => {
                     let mut decoder = DeflateDecoder::new(reader.as_read());
                     let len_est = dialog.body_len * 4; // FIXME: extract const
                     read_to_body(&mut decoder, len_est)?
-                };
-                dialog.body = newb.prepare()?;
-                println!("Body update: {:?}", dialog.body);
-                dialog.body_len = size;
+                }
             }
-            // FIXME: Adjust response headers accordingly:
-            // Transfer/Content-Encoding and Content-Length are no
-            // longer valid
-        }
+        };
+        dialog.body = new_body.prepare()?;
+        println!("Body update: {:?}", dialog.body);
+        dialog.body_len = size;
+
+        // FIXME: Adjust response headers accordingly:
+        // Transfer/Content-Encoding and Content-Length are no longer
+        // valid
     }
+
     Ok(())
 }
 
