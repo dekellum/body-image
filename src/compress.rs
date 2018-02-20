@@ -67,9 +67,7 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> 
         println!("Body update: {:?}", dialog.body);
         dialog.body_len = size;
 
-        // FIXME: Adjust response headers accordingly:
-        // Transfer/Content-Encoding and Content-Length are no longer
-        // valid
+        // FIXME: Add meta-headers to clearly describe changes made here.
     }
 
     Ok(())
@@ -89,7 +87,7 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
     'eof: loop {
         let mut buf = BytesMut::with_capacity(tune.decode_buffer_ram);
         'fill: loop {
-            let len = match r.read( unsafe { buf.bytes_mut() } ) {
+            let len = match r.read(unsafe { buf.bytes_mut() }) {
                 Ok(len) => len,
                 Err(e) => {
                     if e.kind() == ErrorKind::Interrupted {
@@ -136,7 +134,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodyImage, tune: &Tunables)
     let mut size: u64 = 0;
     let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs);
     loop {
-        let len = match r.read( unsafe { buf.bytes_mut() } ) {
+        let len = match r.read(unsafe { buf.bytes_mut() }) {
             Ok(len) => len,
             Err(e) => {
                 if e.kind() == ErrorKind::Interrupted {
