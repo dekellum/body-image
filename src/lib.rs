@@ -133,7 +133,12 @@ impl BodyImage {
     /// states. NoOp for other states.
     pub fn prepare(self) -> Result<BodyImage, FlError> {
         match self {
-            BodyImage::FsWrite(mut f) | BodyImage::FsRead(mut f) => {
+            BodyImage::FsWrite(mut f) => {
+                f.flush()?;
+                f.seek(SeekFrom::Start(0))?;
+                Ok(BodyImage::FsRead(f))
+            }
+            BodyImage::FsRead(mut f) => {
                 f.seek(SeekFrom::Start(0))?;
                 Ok(BodyImage::FsRead(f))
             }
