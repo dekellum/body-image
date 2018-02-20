@@ -83,10 +83,10 @@ impl<'a> BarcWriter<'a> {
             total_ex,
             'H',  // FIXME: option?
             'P',  // FIXME: compression support
-            meta_h as u16,
-            req_h as u16,
-            0u32, // FIXME: req body
-            res_h as u16)?;
+            meta_h as u32,
+            req_h  as u32,
+            0u64, // FIXME: req body
+            res_h  as u32)?;
 
         fout.seek(SeekFrom::End(0))?;
 
@@ -109,23 +109,32 @@ fn derive_meta(dialog: &Dialog) -> Result<http::HeaderMap, FlError> {
 }
 
 fn write_record_place_holder(out: &mut Write) -> Result<(), FlError> {
-    write_record_head(out, 0u64, 'R', 'U', 0u16, 0u16, 0u32, 0u16)
+    write_record_head(out, 0u64, 'R', 'U', 0u32, 0u32, 0u64, 0u32)
 }
 
 #[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
 fn write_record_head(
     out: &mut Write,
-    len: u64,
+    len:    u64,
     type_f: char,
     cmpr_f: char,
-    meta: u16,
-    req_h: u16,
-    req_b: u32,
-    res_h: u16) -> Result<(), FlError>
+    meta:   u32,
+    req_h:  u32,
+    req_b:  u64,
+    res_h:  u32) -> Result<(), FlError>
 {
+    // Check input ranges
+    assert!(len   <= 0xfff_fff_fff_fff, "len");
+    assert!(type_f.is_ascii(),          "type_f");
+    assert!(cmpr_f.is_ascii(),          "cmpr_f");
+    assert!(meta  <=          0xff_fff, "meta");
+    assert!(req_h <=          0xff_fff, "req_h");
+    assert!(req_b <=   0xf_fff_fff_fff, "req_b");
+    assert!(res_h <=          0xff_fff, "res_h");
+
     let size = write_all_len(out, format!(
-        // ----7------24---27-----32-----37-----46----50------54
-        "BARC 2 {:016x} {}{} {:04x} {:04x} {:08x} {:04x}\r\n\r\n",
+        // ---6------19---22-----28-----34------45----50------54
+        "BARC2 {:012x} {}{} {:05x} {:05x} {:010x} {:05x}\r\n\r\n",
         len, type_f, cmpr_f, meta, req_h, req_b, res_h
     ).as_bytes())?;
     assert_eq!(size, BARC_2_HEAD_SIZE, "BARC 2 record head size invariant");
