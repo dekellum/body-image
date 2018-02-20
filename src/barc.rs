@@ -13,7 +13,7 @@ pub struct BarcFile {
     lock: RwLock<BarcFileInner>
 }
 
-pub struct BarcFileInner {
+struct BarcFileInner {
     // FIXME: Each reader will need a new, independent File instance
     // openned read-only and closed when dropped, with its own
     // position. Save off the Path for this purpose.
