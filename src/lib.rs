@@ -315,6 +315,11 @@ pub struct Dialog {
     body_len:     u64,
 }
 
+static META_URL: &'static [u8]             = b"url";
+static META_METHOD: &'static [u8]          = b"method";
+static META_RES_VERSION: &'static [u8]     = b"response-version";
+static META_RES_STATUS: &'static [u8]      = b"response-status";
+
 impl Dialog {
     /// Prepare for consumption
     pub fn prepare(mut self) -> Result<Self, FlError> {
@@ -325,18 +330,21 @@ impl Dialog {
 
     fn derive_meta(&self) -> Result<http::HeaderMap, FlError> {
         let mut hs = http::HeaderMap::with_capacity(6);
+        use http::header::HeaderName;
 
-        hs.append("url", self.url.to_string().parse()?);
-        hs.append("method", self.method.to_string().parse()?);
+        hs.append(HeaderName::from_lowercase(META_URL).unwrap(),
+                  self.url.to_string().parse()?);
+        hs.append(HeaderName::from_lowercase(META_METHOD).unwrap(),
+                  self.method.to_string().parse()?);
 
         // FIXME: Rely on debug format of version for now. Should probably
         // replace this with match and custom representation.
         let v = format!("{:?}", self.version);
-        hs.append("response-version", v.parse()?);
+        hs.append(HeaderName::from_lowercase(META_RES_VERSION).unwrap(),
+                  v.parse()?);
 
-        hs.append("response-status",  self.status.to_string().parse()?);
-
-        //FIXME: HeaderName constants?
+        hs.append(HeaderName::from_lowercase(META_RES_STATUS).unwrap(),
+                  self.status.to_string().parse()?);
         Ok(hs)
     }
 
