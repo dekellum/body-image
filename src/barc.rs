@@ -74,9 +74,9 @@ impl<'a> BarcWriter<'a> {
         write_record_place_holder(fout)?;
         fout.flush()?;
 
-        // FIXME: Should probably externalize meta, so users can add
-        // whatever desirend, and possibly providing a convenience
-        // "derive_meta" off of Dialog?
+        // FIXME: Externalize meta, so users can add whatever is
+        // desired, possibly providing a convenience "derive_meta" off
+        // of Dialog?
         let meta = derive_meta(dialog)?;
         let meta_h = write_headers(fout, &meta)?;
 
