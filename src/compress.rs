@@ -7,7 +7,7 @@ extern crate bytes;
 use std::io::{ErrorKind, Read};
 use failure::Error as FlError;
 use self::bytes::{BytesMut, BufMut};
-use self::flate2::read::GzDecoder;
+use self::flate2::read::{DeflateDecoder, GzDecoder};
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
 use super::{BodyImage, Dialog};
 
@@ -34,10 +34,22 @@ pub fn decode_body(dialog: &mut Dialog) -> Result<(), FlError> {
                 dialog.body = newb.prepare()?;
                 println!("Body update: {:?}", dialog.body);
                 dialog.body_len = size;
-
-                // FIXME: Adjust response headers accordingly:
-                // Transfer/Content-Encoding, Content-Length
             }
+            else if v.contains(&Encoding::Deflate) {
+                let (newb, size) = {
+                    println!("Body to decode: {:?}", dialog.body);
+                    let mut reader = dialog.body.reader();
+                    let mut decoder = DeflateDecoder::new(reader.as_read());
+                    let len_est = dialog.body_len * 4; // FIXME: extract const
+                    read_to_body(&mut decoder, len_est)?
+                };
+                dialog.body = newb.prepare()?;
+                println!("Body update: {:?}", dialog.body);
+                dialog.body_len = size;
+            }
+            // FIXME: Adjust response headers accordingly:
+            // Transfer/Content-Encoding and Content-Length are no
+            // longer valid
         }
     }
     Ok(())
