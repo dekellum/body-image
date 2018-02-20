@@ -112,6 +112,9 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
             break 'eof;
         }
         size += len;
+        if size > tune.max_body {
+            bail!("Decompressed response stream too long: {}+", size);
+        }
         if size > tune.max_body_ram {
             body = body.write_back()?;
             println!("Write (Fs) decoded buf len {}", len);
