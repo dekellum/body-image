@@ -72,6 +72,7 @@ impl<'a> BarcWriter<'a> {
         // Write initial head as reserved place holder
         let start = fout.seek(SeekFrom::End(0))?;
         write_record_place_holder(fout)?;
+        fout.flush()?;
 
         // FIXME: Should probably externalize meta, so users can add
         // whatever desirend, and possibly providing a convenience
@@ -106,7 +107,7 @@ impl<'a> BarcWriter<'a> {
             res_h)?;
 
         fout.seek(SeekFrom::End(0))?;
-
+        fout.flush()?;
         Ok(())
     }
 }
