@@ -9,7 +9,7 @@ use failure::Error as FlError;
 use self::bytes::{BytesMut, BufMut};
 use self::flate2::read::{DeflateDecoder, GzDecoder};
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
-use super::{BodyImage, Dialog, Tunables};
+use super::{BodyImage, Dialog, META_RES_DECODED, Tunables};
 
 pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> {
     let headers = &mut dialog.res_headers;
@@ -21,15 +21,18 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> 
                .get_all(http::header::CONTENT_ENCODING)
                .iter());
 
+    let mut chunked = false;
     let mut compress = None;
 
     'headers: for v in encodings {
-        // Content-Encoding includes Brotli (br) and is otherwise a
-        // super-set of Transfer-Encoding, so parse that way for both.
+        // Hyper's Content-Encoding includes Brotli (br) _and_ Chunked
+        // and is is thus a super-set of Transfer-Encoding, so parse
+        // all of these headers that way.
         if let Ok(v) = ContentEncoding::parse_header(&Raw::from(v.as_bytes())) {
             for av in v.iter() {
                 match *av {
-                    Encoding::Gzip | Encoding::Deflate => {
+                    Encoding::Chunked => chunked = true,
+                    Encoding::Gzip | Encoding::Deflate => { // supported
                         compress = Some(av.clone()); // FIXME: sad clone
                         break 'headers;
                     }
@@ -56,16 +59,26 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> 
                         u64::from(tune.deflate_size_x_est);
                     read_to_body(&mut decoder, len_est, tune)?
                 }
-                _ => unreachable!("Not matched above: {:?}", comp)
+                _ => unreachable!("Not supported: {:?}", comp)
             }
         };
         dialog.body = new_body.prepare()?;
         println!("Body update: {:?}", dialog.body);
         dialog.body_len = size;
-
-        // FIXME: Add meta-headers to clearly describe changes made here.
     }
 
+    if chunked || compress.is_some() {
+        let mut ds = Vec::with_capacity(2);
+        if chunked {
+            ds.push(Encoding::Chunked.to_string())
+        }
+        if let Some(ref e) = compress {
+            ds.push(e.to_string())
+        }
+        dialog.meta.append(http::header::HeaderName
+                           ::from_lowercase(META_RES_DECODED).unwrap(),
+                           ds.join(", ").parse()?);
+    }
     Ok(())
 }
 

@@ -320,6 +320,9 @@ static META_METHOD: &'static [u8]          = b"method";
 static META_RES_VERSION: &'static [u8]     = b"response-version";
 static META_RES_STATUS: &'static [u8]      = b"response-status";
 
+/// List of encodings decoded, in HTTP content-encoding headers format
+static META_RES_DECODED: &'static [u8]     = b"response-decoded";
+
 impl Dialog {
     /// Prepare for consumption
     pub fn prepare(mut self) -> Result<Self, FlError> {
