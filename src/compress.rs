@@ -26,8 +26,8 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> 
     let mut compress = None;
 
     'headers: for v in encodings {
-        // Hyper's Content-Encoding includes Brotli (br) _and_ Chunked
-        // and is is thus a super-set of Transfer-Encoding, so parse
+        // Hyper's Content-Encoding includes Brotli (br) _and_
+        // Chunked, is thus a super-set of Transfer-Encoding, so parse
         // all of these headers that way.
         if let Ok(v) = ContentEncoding::parse_header(&Raw::from(v.as_bytes())) {
             for av in v.iter() {
