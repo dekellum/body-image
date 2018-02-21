@@ -37,6 +37,7 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> 
                         compress = Some(av.clone()); // FIXME: sad clone
                         break 'headers;
                     }
+                    Encoding::Identity => (),
                     _ => {
                         println!("Unsupported Encoding for decode: {:?}", av);
                         break 'headers;
