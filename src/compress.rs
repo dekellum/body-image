@@ -11,12 +11,6 @@ use self::flate2::read::{DeflateDecoder, GzDecoder};
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
 use super::{BodyImage, Dialog, Tunables};
 
-#[derive(Debug)]
-enum Compress {
-    Gzip,
-    Deflate,
-}
-
 pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> {
     let headers = &mut dialog.res_headers;
 
@@ -29,38 +23,40 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> 
 
     let mut compress = None;
 
-    for v in encodings {
+    'headers: for v in encodings {
         // Content-Encoding includes Brotli (br) and is otherwise a
         // super-set of Transfer-Encoding, so parse that way for both.
         if let Ok(v) = ContentEncoding::parse_header(&Raw::from(v.as_bytes())) {
-            if v.contains(&Encoding::Gzip) {
-                compress = Some(Compress::Gzip);
-                break;
-            }
-            if v.contains(&Encoding::Deflate) {
-                compress = Some(Compress::Deflate);
-                break;
+            for av in v.iter() {
+                match *av {
+                    Encoding::Gzip | Encoding::Deflate => {
+                        compress = Some(av.clone()); // FIXME: sad clone
+                        break 'headers;
+                    }
+                    _ => (),
+                }
             }
         }
     }
 
-    if let Some(comp) = compress {
+    if let Some(ref comp) = compress {
         let (new_body, size) = {
             println!("Body to {:?} decode: {:?}", comp, dialog.body);
             let mut reader = dialog.body.reader();
-            match comp {
-                Compress::Gzip => {
+            match *comp {
+                Encoding::Gzip => {
                     let mut decoder = GzDecoder::new(reader.as_read());
                     let len_est = dialog.body_len *
                         u64::from(tune.gzip_size_x_est);
                     read_to_body(&mut decoder, len_est, tune)?
                 }
-                Compress::Deflate => {
+                Encoding::Deflate => {
                     let mut decoder = DeflateDecoder::new(reader.as_read());
                     let len_est = dialog.body_len *
                         u64::from(tune.deflate_size_x_est);
                     read_to_body(&mut decoder, len_est, tune)?
                 }
+                _ => unreachable!("Not matched above: {:?}", comp)
             }
         };
         dialog.body = new_body.prepare()?;
