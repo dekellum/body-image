@@ -11,9 +11,10 @@ use self::flate2::read::{DeflateDecoder, GzDecoder};
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
 use super::{BodyImage, Dialog, META_RES_DECODED, Tunables};
 
+/// Decode any gzip or deflate Transfer-Encoding or Content-Encoding
+/// into a new `BodyItem`, and update `Dialog` accordingly.
 pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> {
-    let headers = &mut dialog.res_headers;
-
+    let headers = &dialog.res_headers;
     let encodings = headers
         .get_all(http::header::TRANSFER_ENCODING)
         .iter()
