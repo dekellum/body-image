@@ -14,34 +14,44 @@ use super::{BodyImage, Dialog};
 /// concurrently.
 pub struct BarcFile {
     path: Box<Path>,
-    write_lock: Mutex<File>,
+    write_lock: Mutex<Option<File>>,
 }
 
 /// BARC File handle for write access
 pub struct BarcWriter<'a> {
-    guard: MutexGuard<'a, File>
+    guard: MutexGuard<'a, Option<File>>
 }
 
 impl BarcFile {
-    pub fn open<P>(path: P) -> Result<BarcFile, FlError>
+    pub fn new<P>(path: P) -> BarcFile
         where P: AsRef<Path>
     {
         // Each reader will own an independent File instance openned
         // read-only and closed when dropped, with its own
         // position. Save off the Path for this purpose.
         let path: Box<Path> = path.as_ref().into();
-        let file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(&path)?;
-        let write_lock = Mutex::new(file);
-        Ok(BarcFile { path, write_lock })
+        let write_lock = Mutex::new(None);
+        BarcFile { path, write_lock }
     }
 
+    /// Get a writer for this file, opening the file for write (and
+    /// possibly erroring) if this is the first time called. May block
+    /// on the write lock, as only one `BarcWriter` instance is
+    /// allowed.
     pub fn writer(&self) -> Result<BarcWriter, FlError> {
-        let guard = self.write_lock.lock().unwrap(); // FIXME:
+        let mut guard = self.write_lock.lock().unwrap(); // FIXME:
         // PoisonError is not send, so can't map to FlError
+
+        if (*guard).is_none() {
+            let file = OpenOptions::new()
+                .create(true)
+                .read(true)
+                .write(true)
+                .open(&self.path)?;
+            // FIXME: Use fs2 crate for: file.try_lock_exclusive()?
+            *guard = Some(file);
+        }
+
         Ok(BarcWriter { guard })
     }
 }
@@ -53,7 +63,8 @@ impl<'a> BarcWriter<'a> {
 
     pub fn write(&mut self, dialog: &Dialog) -> Result<(), FlError>
     {
-        let fout = &mut *self.guard;
+        // BarcFile::writer() guarantees Some(fout)
+        let fout = &mut *self.guard.as_mut().unwrap();
 
         // Write initial head as reserved place holder
         let start = fout.seek(SeekFrom::End(0))?;
