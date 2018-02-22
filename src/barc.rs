@@ -38,13 +38,17 @@ pub struct BarcWriter<'a> {
     guard: MutexGuard<'a, Option<File>>
 }
 
+/// BARC File handle for read access. Each reader has its own File
+/// handle and position.
+pub struct BarcReader {
+    file: File
+}
+
 impl BarcFile {
     pub fn new<P>(path: P) -> BarcFile
         where P: AsRef<Path>
     {
-        // Each reader will own an independent File instance openned
-        // read-only and closed when dropped, with its own
-        // position. Save off the Path for this purpose.
+        // Save off owned path to re-open for readers
         let path: Box<Path> = path.as_ref().into();
         let write_lock = Mutex::new(None);
         BarcFile { path, write_lock }
@@ -69,6 +73,16 @@ impl BarcFile {
         }
 
         Ok(BarcWriter { guard })
+    }
+
+    /// Get a reader for this file. Errors if the file does not
+    /// exist.
+    pub fn reader(&self) -> Result<BarcReader, FlError> {
+        let file = OpenOptions::new()
+            .read(true)
+            .open(&self.path)?;
+        // FIXME: Use fs2 crate for: file.try_lock_shared()?
+        Ok(BarcReader { file })
     }
 }
 
