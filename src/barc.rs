@@ -10,19 +10,16 @@ use std::path::Path;
 
 use super::{BodyImage, Dialog};
 
+/// BARC File handle, supporting 1-writer and N-readers
+/// concurrently.
 pub struct BarcFile {
-    write_lock: Mutex<BarcFileInner>
+    path: Box<Path>,
+    write_lock: Mutex<File>,
 }
 
-pub struct BarcFileInner {
-    file: File,
-    path: Box<Path>
-}
-
+/// BARC File handle for write access
 pub struct BarcWriter<'a> {
-    // FIXME: RwLock isn't a perfect fit, since it is possible from a
-    // File level to support 1-writer and N-readers at the same time.
-    guard: MutexGuard<'a, BarcFileInner>
+    guard: MutexGuard<'a, File>
 }
 
 impl BarcFile {
@@ -38,11 +35,8 @@ impl BarcFile {
             .read(true)
             .write(true)
             .open(&path)?;
-        Ok(BarcFile {
-            write_lock: Mutex::new(BarcFileInner {
-                file,
-                path })
-        })
+        let write_lock = Mutex::new(file);
+        Ok(BarcFile { path, write_lock })
     }
 
     pub fn writer(&self) -> Result<BarcWriter, FlError> {
@@ -59,8 +53,7 @@ impl<'a> BarcWriter<'a> {
 
     pub fn write(&mut self, dialog: &Dialog) -> Result<(), FlError>
     {
-        let inner = &mut *self.guard;
-        let fout = &mut inner.file;
+        let fout = &mut *self.guard;
 
         // Write initial head as reserved place holder
         let start = fout.seek(SeekFrom::End(0))?;
