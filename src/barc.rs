@@ -5,13 +5,13 @@ use failure::Error as FlError;
 use std;
 use std::io::{Seek, SeekFrom, Write};
 use std::fs::{File, OpenOptions};
-use std::sync::{RwLock, RwLockWriteGuard};
+use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 
 use super::{BodyImage, Dialog};
 
 pub struct BarcFile {
-    lock: RwLock<BarcFileInner>
+    write_lock: Mutex<BarcFileInner>
 }
 
 pub struct BarcFileInner {
@@ -22,7 +22,7 @@ pub struct BarcFileInner {
 pub struct BarcWriter<'a> {
     // FIXME: RwLock isn't a perfect fit, since it is possible from a
     // File level to support 1-writer and N-readers at the same time.
-    guard: RwLockWriteGuard<'a, BarcFileInner>
+    guard: MutexGuard<'a, BarcFileInner>
 }
 
 impl BarcFile {
@@ -39,14 +39,14 @@ impl BarcFile {
             .write(true)
             .open(&path)?;
         Ok(BarcFile {
-            lock: RwLock::new(BarcFileInner {
+            write_lock: Mutex::new(BarcFileInner {
                 file,
                 path })
         })
     }
 
     pub fn writer(&self) -> Result<BarcWriter, FlError> {
-        let guard = self.lock.write().unwrap(); // FIXME:
+        let guard = self.write_lock.lock().unwrap(); // FIXME:
         // PoisonError is not send, so can't map to FlError
         Ok(BarcWriter { guard })
     }
