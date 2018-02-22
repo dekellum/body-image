@@ -15,10 +15,8 @@ pub struct BarcFile {
 }
 
 pub struct BarcFileInner {
-    // FIXME: Each reader will need a new, independent File instance
-    // openned read-only and closed when dropped, with its own
-    // position. Save off the Path for this purpose.
     file: File,
+    path: Box<Path>
 }
 
 pub struct BarcWriter<'a> {
@@ -31,12 +29,20 @@ impl BarcFile {
     pub fn open<P>(path: P) -> Result<BarcFile, FlError>
         where P: AsRef<Path>
     {
+        // Each reader will own an independent File instance openned
+        // read-only and closed when dropped, with its own
+        // position. Save off the Path for this purpose.
+        let path: Box<Path> = path.as_ref().into();
         let file = OpenOptions::new()
             .create(true)
             .read(true)
             .write(true)
-            .open(path)?;
-        Ok(BarcFile { lock: RwLock::new(BarcFileInner { file }) })
+            .open(&path)?;
+        Ok(BarcFile {
+            lock: RwLock::new(BarcFileInner {
+                file,
+                path })
+        })
     }
 
     pub fn writer(&self) -> Result<BarcWriter, FlError> {
