@@ -19,7 +19,6 @@ use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
-use std::ops::Deref;
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
@@ -483,8 +482,7 @@ fn resp_future(prolog: Prolog, tune: Tunables)
 fn check_length(v: &http::header::HeaderValue, max: u64)
     -> Result<u64, FlError>
 {
-    let l = ContentLength::parse_header(&Raw::from(v.as_bytes()))?;
-    let l = *l.deref();
+    let l = *ContentLength::parse_header(&Raw::from(v.as_bytes()))?;
     if l > max {
         bail!("Response Content-Length too long: {}", l);
     }
