@@ -573,7 +573,8 @@ mod tests {
             .header(http::header::ACCEPT_ENCODING, "gzip, deflate")
             .header(http::header::USER_AGENT,
                     "Mozilla/5.0 \
-                     (compatible; Iudex 1.4.0; +http://gravitext.com/iudex)")
+                     (compatible; hyper-bowl 0.1.0; \
+                      +http://github.com/dekellum/hyper-bowl)")
             // Referer? Etag, If-Modified...?
             // "Connection: keep-alive" (header) is default for HTTP 1.1
             .uri(url)

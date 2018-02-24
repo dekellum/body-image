@@ -28,7 +28,8 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
         .header(http::header::ACCEPT_ENCODING, "br, gzip, deflate")
         .header(http::header::USER_AGENT,
                 "Mozilla/5.0 \
-                 (compatible; Hyper-bowl 0.0.1; +http://gravitext.com/)")
+                 (compatible; hyper-bowl 0.1.0; \
+                  +http://github.com/dekellum/hyper-bowl)")
         // "Connection: keep-alive" (header) is default for HTTP 1.1
         .uri(url)
         .record()?;
