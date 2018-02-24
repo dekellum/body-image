@@ -80,7 +80,7 @@ impl<'a> BarcWriter<'a> {
 
         let meta_h = write_headers(fout, &dialog.meta)?;
 
-        let req_h = write_headers(fout, &dialog.req_headers)?;
+        let req_h = write_headers(fout, &dialog.prolog.req_headers)?;
         // FIXME: Write any request body (e.g. POST) when available
 
         let res_h = write_headers(fout, &dialog.res_headers)?;

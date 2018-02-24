@@ -60,15 +60,21 @@ pub struct Mapped {
 }
 
 impl BodyImage {
+    pub fn empty() -> BodyImage {
+        BodyImage::with_chunks_capacity(0)
+    }
+
     pub fn with_ram(size_estimate: u64) -> BodyImage {
         if size_estimate == 0 {
-            BodyImage::Ram(Vec::with_capacity(0))
+            BodyImage::empty()
         } else {
             // Estimate capacity based on observed 8 KiB chunks
-            BodyImage::Ram(
-                Vec::with_capacity((size_estimate / 0x2000 + 1) as usize)
-            )
+            let chunks = (size_estimate / 0x2000 + 1) as usize;
+            BodyImage::with_chunks_capacity(chunks)
         }
+    }
+    pub fn with_chunks_capacity(cap: usize) -> BodyImage {
+        BodyImage::Ram(Vec::with_capacity(cap))
     }
 
     pub fn with_fs() -> Result<BodyImage, FlError> {
@@ -292,11 +298,22 @@ impl<'a> Read for ChunksReader<'a> {
     }
 }
 
-/// Response wrapper, preserving various fields from the Request
-struct Prolog {
+#[derive(Debug)]
+pub struct Prolog {
     method:       http::Method,
     url:          http::Uri,
     req_headers:  http::HeaderMap,
+    req_body:     BodyImage,
+}
+
+pub struct RecordedRequest {
+    request:      HyRequest,
+    prolog:       Prolog,
+}
+
+/// Response wrapper, preserving Prolog
+struct Monolog {
+    prolog:       Prolog,
     response:     http::Response<HyBody>,
 }
 
@@ -304,9 +321,7 @@ struct Prolog {
 #[derive(Debug)]
 pub struct Dialog {
     meta:         http::HeaderMap,
-    method:       http::Method,
-    url:          http::Uri,
-    req_headers:  http::HeaderMap,
+    prolog:       Prolog,
     version:      http::version::Version,
     status:       http::status::StatusCode,
     res_headers:  http::HeaderMap,
@@ -335,9 +350,9 @@ impl Dialog {
         use http::header::HeaderName;
 
         hs.append(HeaderName::from_lowercase(META_URL).unwrap(),
-                  self.url.to_string().parse()?);
+                  self.prolog.url.to_string().parse()?);
         hs.append(HeaderName::from_lowercase(META_METHOD).unwrap(),
-                  self.method.to_string().parse()?);
+                  self.prolog.method.to_string().parse()?);
 
         // FIXME: Rely on debug format of version for now. Should probably
         // replace this with match and custom representation.
@@ -387,7 +402,7 @@ impl Tunables {
 }
 
 // Run an HTTP request to completion, returning the full `Dialog`
-pub fn fetch(req: HyRequest, tune: &Tunables) -> Result<Dialog, FlError> {
+pub fn fetch(rr: RecordedRequest, tune: &Tunables) -> Result<Dialog, FlError> {
     // FIXME: State of the Core (v Reactor), incl. construction,
     // use from multiple threads is under flux:
     // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
@@ -405,18 +420,14 @@ pub fn fetch(req: HyRequest, tune: &Tunables) -> Result<Dialog, FlError> {
     // https://github.com/hyperium/hyper/issues/1234
     // https://hyper.rs/guides/client/timeout/
 
-    let method = req.method().clone();
-    let url = req.uri().clone();
-    let req_headers = req.headers().clone();
+    let prolog = rr.prolog;
 
-    let fr: CompatFutureResponse = client.request_compat(req);
+    let fr: CompatFutureResponse = client.request_compat(rr.request);
 
     let work = fr
-        .map(|response| {
-            Prolog { method, url, req_headers, response }
-        })
+        .map(|response| Monolog { prolog, response } )
         .map_err(FlError::from)
-        .and_then(|prolog| resp_future(prolog, *tune))
+        .and_then(|monolog| resp_future(monolog, *tune))
         .and_then(|dialog| futres(dialog.prepare()));
 
     // Run until completion
@@ -424,10 +435,11 @@ pub fn fetch(req: HyRequest, tune: &Tunables) -> Result<Dialog, FlError> {
         .map_err(FlError::from)
 }
 
-fn resp_future(prolog: Prolog, tune: Tunables)
+fn resp_future(monolog: Monolog, tune: Tunables)
     -> Box<Future<Item=Dialog, Error=FlError> + Send>
 {
-    let (resp_parts, body) = prolog.response.into_parts();
+    let prolog = monolog.prolog;
+    let (resp_parts, body) = monolog.response.into_parts();
 
     // Result<BodyImage> based on CONTENT_LENGTH header.
     let bf = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
@@ -449,9 +461,7 @@ fn resp_future(prolog: Prolog, tune: Tunables)
 
     let dialog = Dialog {
         meta:        http::HeaderMap::with_capacity(0),
-        method:      prolog.method,
-        url:         prolog.url,
-        req_headers: prolog.req_headers,
+        prolog:      prolog,
         version:     resp_parts.version,
         status:      resp_parts.status,
         res_headers: resp_parts.headers,
@@ -489,11 +499,44 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
     Ok(l)
 }
 
+pub trait RequestRecordable {
+    fn recorded_request<C>(&mut self, body_chunk: C)
+        -> Result<RecordedRequest, FlError>
+        where C: Into<Chunk> + Clone;
+}
+
+impl RequestRecordable for http::request::Builder {
+    fn recorded_request<C>(&mut self, body_chunk: C)
+        -> Result<RecordedRequest, FlError>
+        where C: Into<Chunk> + Clone
+    {
+        let chunk: Chunk = body_chunk.clone().into();
+        let chunk_copy: Chunk = body_chunk.into();
+        let request = self.body(chunk.into())?;
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+        let req_body = if chunk_copy.is_empty() {
+            BodyImage::empty()
+        } else {
+            let mut b = BodyImage::with_chunks_capacity(1);
+            b.save(chunk_copy.into())?;
+            b
+        };
+        Ok(RecordedRequest {
+            request,
+            prolog: Prolog { method,
+                             url,
+                             req_headers,
+                             req_body } })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn create_request(url: &str) -> Result<HyRequest, FlError> {
+    fn create_request(url: &str) -> Result<RecordedRequest, FlError> {
         http::Request::builder()
             .method(http::Method::GET)
             .header(http::header::ACCEPT,
@@ -508,8 +551,7 @@ mod tests {
             // Referer? Etag, If-Modified...?
             // "Connection: keep-alive" (header) is default for HTTP 1.1
             .uri(url)
-            .body(HyBody::empty())
-            .map_err(FlError::from)
+            .recorded_request("".to_owned())
     }
 
     #[test]

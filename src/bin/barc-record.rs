@@ -4,7 +4,7 @@ extern crate hyper_barc;
 
 use failure::Error as FlError;
 
-use hyper_barc::{fetch, HyBody, Tunables};
+use hyper_barc::{fetch, RequestRecordable, Tunables};
 use hyper_barc::barc::BarcFile;
 use hyper_barc::compress::decode_body;
 
@@ -31,7 +31,7 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
                  (compatible; Hyper-bowl 0.0.1; +http://gravitext.com/)")
         // "Connection: keep-alive" (header) is default for HTTP 1.1
         .uri(url)
-        .body(HyBody::empty())?;
+        .recorded_request("".to_owned())?;
 
     let tune = Tunables::new()?;
     let mut dl = fetch(req, &tune)?;
