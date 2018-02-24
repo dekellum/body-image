@@ -31,7 +31,7 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
                  (compatible; Hyper-bowl 0.0.1; +http://gravitext.com/)")
         // "Connection: keep-alive" (header) is default for HTTP 1.1
         .uri(url)
-        .recorded_request("".to_owned())?;
+        .record()?;
 
     let tune = Tunables::new()?;
     let mut dl = fetch(req, &tune)?;

@@ -298,6 +298,7 @@ impl<'a> Read for ChunksReader<'a> {
     }
 }
 
+/// Saved extract from an HTTP request.
 #[derive(Debug)]
 pub struct Prolog {
     method:       http::Method,
@@ -306,12 +307,13 @@ pub struct Prolog {
     req_body:     BodyImage,
 }
 
-pub struct RecordedRequest {
+/// An `http::Request` with extracted Prolog.
+pub struct RequestRecord {
     request:      HyRequest,
     prolog:       Prolog,
 }
 
-/// Response wrapper, preserving Prolog
+/// Temporary `http::Response` wrapper, preserving Prolog.
 struct Monolog {
     prolog:       Prolog,
     response:     http::Response<HyBody>,
@@ -402,7 +404,7 @@ impl Tunables {
 }
 
 // Run an HTTP request to completion, returning the full `Dialog`
-pub fn fetch(rr: RecordedRequest, tune: &Tunables) -> Result<Dialog, FlError> {
+pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
     // FIXME: State of the Core (v Reactor), incl. construction,
     // use from multiple threads is under flux:
     // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
@@ -499,36 +501,60 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
     Ok(l)
 }
 
+/// Extension trait for `http::request::Builder`, to enable recording
+/// key portions of the request for the final `Dialog`. In particular
+/// any request body (e.g. POST, PUT) needs to be cloned in advance of
+/// finishing the request, because `hyper::Body` isn't `Clone`.
+///
+/// _Limitation_: Currently only a contiguous RAM buffer (implementing
+/// `Into<Chunk>`and `Clone`) is supported as the request body
+/// impemenation.
 pub trait RequestRecordable {
-    fn recorded_request<C>(&mut self, body_chunk: C)
-        -> Result<RecordedRequest, FlError>
+    // Short-hand for completing the builder with an empty body, as is
+    // the case with many HTTP request methods (e.g. GET).
+    fn record(&mut self) -> Result<RequestRecord, FlError>;
+
+    // Complete the builder with any body that can be converted to a
+    // single `hyper::Chunk`
+    fn record_body<C>(&mut self, body: C) -> Result<RequestRecord, FlError>
         where C: Into<Chunk> + Clone;
 }
 
 impl RequestRecordable for http::request::Builder {
-    fn recorded_request<C>(&mut self, body_chunk: C)
-        -> Result<RecordedRequest, FlError>
+    fn record(&mut self) -> Result<RequestRecord, FlError> {
+        let request = self.body(HyBody::empty())?;
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        let req_body = BodyImage::empty();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body } })
+    }
+
+    fn record_body<C>(&mut self, body: C) -> Result<RequestRecord, FlError>
         where C: Into<Chunk> + Clone
     {
-        let chunk: Chunk = body_chunk.clone().into();
-        let chunk_copy: Chunk = body_chunk.into();
+        let chunk_copy: Chunk = body.clone().into();
+        let chunk: Chunk = body.into();
         let request = self.body(chunk.into())?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
         let req_headers = request.headers().clone();
+
         let req_body = if chunk_copy.is_empty() {
             BodyImage::empty()
         } else {
             let mut b = BodyImage::with_chunks_capacity(1);
-            b.save(chunk_copy.into())?;
+            b.save(chunk_copy)?;
             b
         };
-        Ok(RecordedRequest {
+
+        Ok(RequestRecord {
             request,
-            prolog: Prolog { method,
-                             url,
-                             req_headers,
-                             req_body } })
+            prolog: Prolog { method, url, req_headers, req_body } })
     }
 }
 
@@ -536,7 +562,7 @@ impl RequestRecordable for http::request::Builder {
 mod tests {
     use super::*;
 
-    fn create_request(url: &str) -> Result<RecordedRequest, FlError> {
+    fn create_request(url: &str) -> Result<RequestRecord, FlError> {
         http::Request::builder()
             .method(http::Method::GET)
             .header(http::header::ACCEPT,
@@ -551,7 +577,7 @@ mod tests {
             // Referer? Etag, If-Modified...?
             // "Connection: keep-alive" (header) is default for HTTP 1.1
             .uri(url)
-            .recorded_request("".to_owned())
+            .record()
     }
 
     #[test]
