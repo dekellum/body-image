@@ -4,7 +4,7 @@ extern crate http;
 use failure::Error as FlError;
 use std::io::{Seek, SeekFrom, Write};
 use std::fs::{File, OpenOptions};
-use std::sync::{RwLock, RwLockWriteGuard};
+use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 
 use super::{BodyImage, Dialog};
@@ -29,39 +29,45 @@ pub const V2_MAX_HBLOCK: usize =        0xff_fff;
 pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
 
 pub struct BarcFile {
-    lock: RwLock<BarcFileInner>
+    path: Box<Path>,
+    write_lock: Mutex<Option<File>>,
 }
 
-struct BarcFileInner {
-    // FIXME: Each reader will need a new, independent File instance
-    // opened read-only and closed when dropped, with its own
-    // position. Save off the Path for this purpose. On unix could
-    // alternatively used FileExt offset-based read/write.
-    file: File,
-}
-
+/// BARC File handle for write access
 pub struct BarcWriter<'a> {
-    // FIXME: RwLock isn't a perfect fit, since it is possible with
-    // the format, at file level, to support 1-writer AND N-readers
-    // concurrently.
-    guard: RwLockWriteGuard<'a, BarcFileInner>
+    guard: MutexGuard<'a, Option<File>>
 }
 
 impl BarcFile {
-    pub fn open<P>(path: P) -> Result<BarcFile, FlError>
+    pub fn new<P>(path: P) -> BarcFile
         where P: AsRef<Path>
     {
-        let file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(path)?;
-        Ok(BarcFile { lock: RwLock::new(BarcFileInner { file }) })
+        // Each reader will own an independent File instance openned
+        // read-only and closed when dropped, with its own
+        // position. Save off the Path for this purpose.
+        let path: Box<Path> = path.as_ref().into();
+        let write_lock = Mutex::new(None);
+        BarcFile { path, write_lock }
     }
 
+    /// Get a writer for this file, opening the file for write (and
+    /// possibly erroring) if this is the first time called. May block
+    /// on the write lock, as only one `BarcWriter` instance is
+    /// allowed.
     pub fn writer(&self) -> Result<BarcWriter, FlError> {
-        let guard = self.lock.write().unwrap(); // FIXME:
+        let mut guard = self.write_lock.lock().unwrap(); // FIXME:
         // PoisonError is not send, so can't map to FlError
+
+        if (*guard).is_none() {
+            let file = OpenOptions::new()
+                .create(true)
+                .read(true)
+                .write(true)
+                .open(&self.path)?;
+            // FIXME: Use fs2 crate for: file.try_lock_exclusive()?
+            *guard = Some(file);
+        }
+
         Ok(BarcWriter { guard })
     }
 }
@@ -70,8 +76,8 @@ impl<'a> BarcWriter<'a> {
 
     pub fn write(&mut self, dialog: &Dialog) -> Result<(), FlError>
     {
-        let inner = &mut *self.guard;
-        let fout = &mut inner.file;
+        // BarcFile::writer() guarantees Some(fout)
+        let fout = &mut *self.guard.as_mut().unwrap();
 
         // Write initial head as reserved place holder
         let start = fout.seek(SeekFrom::End(0))?;
