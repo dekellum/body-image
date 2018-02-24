@@ -2,8 +2,9 @@ extern crate failure;
 extern crate http;
 
 use failure::Error as FlError;
-use std::io::{Seek, SeekFrom, Write};
 use std::fs::{File, OpenOptions};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
+use std::ops::{AddAssign,ShlAssign};
 use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 
@@ -55,9 +56,9 @@ impl BarcFile {
     }
 
     /// Get a writer for this file, opening the file for write (and
-    /// possibly erroring) if this is the first time called. May block
-    /// on the write lock, as only one `BarcWriter` instance is
-    /// allowed.
+    /// possibly creating it, or erroring) if this is the first time
+    /// called. May block on the write lock, as only one `BarcWriter`
+    /// instance is allowed.
     pub fn writer(&self) -> Result<BarcWriter, FlError> {
         let mut guard = self.write_lock.lock().unwrap(); // FIXME:
         // PoisonError is not send, so can't map to FlError
@@ -198,4 +199,90 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError>
 {
     out.write_all(bs)?;
     Ok(bs.len())
+}
+
+impl BarcReader {
+}
+
+struct RecordHead {
+    len:    u64,
+    type_f: char,
+    cmpr_f: char,
+    meta:   u32,
+    req_h:  u32,
+    req_b:  u64,
+    res_h:  u32,
+}
+
+// Return RecordHead or None if EOF
+fn read_record_head(r: &mut Read)
+    -> Result<Option<RecordHead>, FlError>
+{
+    let mut buf: [u8; BARC_2_HEAD_SIZE] = unsafe { std::mem::uninitialized() };
+    let size = read_record_head_buf(r, &mut buf)?;
+    if size == 0 {
+        return Ok(None);
+    }
+    if size < BARC_2_HEAD_SIZE {
+        bail!( "Incomplete header len {}", size );
+    }
+    if &buf[0..6] != b"BARC2 " {
+        bail!( "Invalid header suffix" );
+    }
+
+    let len       = parse_hex(&buf[7..18])?;
+    let type_f    = char::from(buf[20]);
+    let cmpr_f    = char::from(buf[21]);
+    let meta      = parse_hex(&buf[23..27])?;
+    let req_h     = parse_hex(&buf[29..33])?;
+    let req_b     = parse_hex(&buf[35..44])?;
+    let res_h     = parse_hex(&buf[46..50])?;
+    Ok(Some(RecordHead { len, type_f, cmpr_f, meta, req_h, req_b, res_h }))
+}
+
+// Like `Read::read_exact` but we need to distinguish 0 bytes read
+// (EOF) from partial bytes read (a format error), so it also returns
+// the number of bytes read.
+fn read_record_head_buf(r: &mut Read, mut buf: &mut [u8])
+    -> Result<usize, FlError>
+{
+    let mut size = 0;
+    loop {
+        match r.read(buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                size += n;
+                if size == BARC_2_HEAD_SIZE {
+                    break;
+                }
+                let t = buf;
+                buf = &mut t[n..];
+            }
+            Err(e) => {
+                if e.kind() == ErrorKind::Interrupted {
+                    continue;
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
+    }
+    Ok(size)
+}
+
+fn parse_hex<T>(buf: &[u8]) -> Result<T, FlError>
+where T: AddAssign<T> + From<u8> + ShlAssign<u8>
+{
+    let mut v = T::from(0u8);
+    for d in buf {
+        v <<= 4u8;
+        if *d >= b'0' && *d <= b'9' {
+            v += T::from(*d - b'0');
+        } else if *d >= b'a' && *d <= b'f' {
+            v += T::from(10 + (*d - b'a'));
+        } else {
+            bail!( "Illegal hex digit: [{}]", d);
+        }
+    }
+    Ok(v)
 }
