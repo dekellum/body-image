@@ -218,12 +218,15 @@ struct RecordHead {
 fn read_record_head(r: &mut Read)
     -> Result<Option<RecordHead>, FlError>
 {
-    let mut buf: [u8; BARC_2_HEAD_SIZE] = unsafe { std::mem::uninitialized() };
+    // FIXME: Is uninitialized safe enough?
+    use std::mem;
+    let mut buf: [u8; V2_HEAD_SIZE] = unsafe { mem::uninitialized() };
+
     let size = read_record_head_buf(r, &mut buf)?;
     if size == 0 {
         return Ok(None);
     }
-    if size < BARC_2_HEAD_SIZE {
+    if size != V2_HEAD_SIZE {
         bail!( "Incomplete header len {}", size );
     }
     if &buf[0..6] != b"BARC2 " {
@@ -252,7 +255,7 @@ fn read_record_head_buf(r: &mut Read, mut buf: &mut [u8])
             Ok(0) => break,
             Ok(n) => {
                 size += n;
-                if size == BARC_2_HEAD_SIZE {
+                if size >= V2_HEAD_SIZE {
                     break;
                 }
                 let t = buf;
