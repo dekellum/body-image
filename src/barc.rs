@@ -168,7 +168,7 @@ impl<'a> BarcWriter<'a> {
         let meta = write_headers(fout, &dialog.meta)?;
 
         let req_h = write_headers(fout, &dialog.prolog.req_headers)?;
-        // FIXME: Write any request body (e.g. POST) when available
+        let req_b = write_body(fout, &dialog.prolog.req_body)?;
 
         let res_h = write_headers(fout, &dialog.res_headers)?;
 
@@ -189,7 +189,7 @@ impl<'a> BarcWriter<'a> {
             compress: Compression::Plain, // FIXME: compression support
             meta,
             req_h,
-            req_b: 0u64, // FIXME: req body
+            req_b,
             res_h })?;
 
         fout.seek(SeekFrom::End(0))?;
@@ -230,8 +230,6 @@ fn write_headers(out: &mut Write, headers: &http::HeaderMap)
     if size > 0 {
         size += write_all_len(out, b"\r\n")?;
     }
-    // FIXME: Use TryFrom here and for all u* conversions, when its lands...
-    // https://github.com/rust-lang/rfcs/pull/1542
     assert!(size <= V2_MAX_HBLOCK);
     Ok(size)
 }
