@@ -45,6 +45,72 @@ pub struct BarcReader {
     file: File
 }
 
+struct RecordHead {
+    len:    u64,
+    rec_type: RecordType,
+    compress: Compression,
+    meta:   usize,
+    req_h:  usize,
+    req_b:  u64,
+    res_h:  usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum RecordType {
+    Reserved,
+    Dialog,
+}
+
+impl RecordType {
+    fn flag(self) -> char {
+        match self {
+            RecordType::Reserved => 'R',
+            RecordType::Dialog => 'D',
+        }
+    }
+
+    fn try_from(f: u8) -> Result<Self, FlError> {
+        match f {
+            b'R' => Ok(RecordType::Reserved),
+            b'D' => Ok(RecordType::Dialog),
+            _ => Err(format_err!("Unknown record type flag [{}]", f))
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Compression {
+    Unknown,
+    Plain,
+}
+
+impl Compression {
+    fn flag(self) -> char {
+        match self {
+            Compression::Unknown => 'U',
+            Compression::Plain   => 'P',
+        }
+    }
+
+    fn try_from(f: u8) -> Result<Self, FlError> {
+        match f {
+            b'U' => Ok(Compression::Unknown),
+            b'P' => Ok(Compression::Plain),
+            _ => Err(format_err!("Unknown compression flag [{}]", f))
+        }
+    }
+}
+
+const V2_RESERVE_HEAD: RecordHead = RecordHead {
+    len: 0,
+    rec_type: RecordType::Reserved,
+    compress: Compression::Unknown,
+    meta: 0,
+    req_h: 0,
+    req_b: 0,
+    res_h: 0
+};
+
 impl BarcFile {
     pub fn new<P>(path: P) -> BarcFile
         where P: AsRef<Path>
@@ -96,10 +162,10 @@ impl<'a> BarcWriter<'a> {
 
         // Write initial head as reserved place holder
         let start = fout.seek(SeekFrom::End(0))?;
-        write_record_place_holder(fout)?;
+        write_record_head(fout, &V2_RESERVE_HEAD)?;
         fout.flush()?;
 
-        let meta_h = write_headers(fout, &dialog.meta)?;
+        let meta = write_headers(fout, &dialog.meta)?;
 
         let req_h = write_headers(fout, &dialog.req_headers)?;
         // FIXME: Write any request body (e.g. POST) when available
@@ -107,25 +173,24 @@ impl<'a> BarcWriter<'a> {
         let res_h = write_headers(fout, &dialog.res_headers)?;
 
         // Compute total thus far, excluding the fixed head length
-        let mut total_ex: u64 = (meta_h + req_h + res_h) as u64;
+        let mut len: u64 = (meta + req_h + res_h) as u64;
 
-        assert!((total_ex + dialog.body_len + 2) <= V2_MAX_RECORD,
+        assert!((len + dialog.body_len + 2) <= V2_MAX_RECORD,
                 "body exceeds size limit");
         let res_b = write_body(fout, &dialog.body)?;
 
-        total_ex += res_b; // New total
+        len += res_b; // New total
 
         // Seek back and write final record head, with known sizes
         fout.seek(SeekFrom::Start(start))?;
-        write_record_head(
-            fout,
-            total_ex,
-            'H',  // FIXME: option?
-            'P',  // FIXME: compression support
-            meta_h,
+        write_record_head( fout, &RecordHead {
+            len,
+            rec_type: RecordType::Dialog, // FIXME: option?
+            compress: Compression::Plain, // FIXME: compression support
+            meta,
             req_h,
-            0u64, // FIXME: req body
-            res_h)?;
+            req_b: 0u64, // FIXME: req body
+            res_h })?;
 
         fout.seek(SeekFrom::End(0))?;
         fout.flush()?;
@@ -133,34 +198,20 @@ impl<'a> BarcWriter<'a> {
     }
 }
 
-fn write_record_place_holder(out: &mut Write) -> Result<(), FlError> {
-    write_record_head(out, 0, 'R', 'U', 0, 0, 0, 0)
-}
-
-#[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
-fn write_record_head(
-    out: &mut Write,
-    len:    u64,
-    type_f: char,
-    cmpr_f: char,
-    meta:   usize,
-    req_h:  usize,
-    req_b:  u64,
-    res_h:  usize) -> Result<(), FlError>
+fn write_record_head(out: &mut Write, head: &RecordHead) -> Result<(), FlError>
 {
     // Check input ranges
-    assert!(len   <= V2_MAX_RECORD,   "len exceeded");
-    assert!(type_f.is_ascii(),        "type_f not ascii");
-    assert!(cmpr_f.is_ascii(),        "cmpr_f not ascii");
-    assert!(meta  <= V2_MAX_HBLOCK,   "meta exceeded");
-    assert!(req_h <= V2_MAX_HBLOCK,   "req_h exceeded");
-    assert!(req_b <= V2_MAX_REQ_BODY, "req_b exceeded");
-    assert!(res_h <= V2_MAX_HBLOCK,   "res_h exceeded");
+    assert!(head.len   <= V2_MAX_RECORD,   "len exceeded");
+    assert!(head.meta  <= V2_MAX_HBLOCK,   "meta exceeded");
+    assert!(head.req_h <= V2_MAX_HBLOCK,   "req_h exceeded");
+    assert!(head.req_b <= V2_MAX_REQ_BODY, "req_b exceeded");
+    assert!(head.res_h <= V2_MAX_HBLOCK,   "res_h exceeded");
 
     let size = write_all_len(out, format!(
         // ---6------19---22-----28-----34------45----50------54
         "BARC2 {:012x} {}{} {:05x} {:05x} {:010x} {:05x}\r\n\r\n",
-        len, type_f, cmpr_f, meta, req_h, req_b, res_h
+        head.len, head.rec_type.flag(), head.compress.flag(),
+        head.meta, head.req_h, head.req_b, head.res_h
     ).as_bytes())?;
     assert_eq!(size, V2_HEAD_SIZE, "wrong record head size");
     Ok(())
@@ -204,16 +255,6 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError>
 impl BarcReader {
 }
 
-struct RecordHead {
-    len:    u64,
-    type_f: char,
-    cmpr_f: char,
-    meta:   u32,
-    req_h:  u32,
-    req_b:  u64,
-    res_h:  u32,
-}
-
 // Return RecordHead or None if EOF
 fn read_record_head(r: &mut Read)
     -> Result<Option<RecordHead>, FlError>
@@ -234,13 +275,13 @@ fn read_record_head(r: &mut Read)
     }
 
     let len       = parse_hex(&buf[7..18])?;
-    let type_f    = char::from(buf[20]);
-    let cmpr_f    = char::from(buf[21]);
+    let rec_type  = RecordType::try_from(buf[20])?;
+    let compress  = Compression::try_from(buf[21])?;
     let meta      = parse_hex(&buf[23..27])?;
     let req_h     = parse_hex(&buf[29..33])?;
     let req_b     = parse_hex(&buf[35..44])?;
     let res_h     = parse_hex(&buf[46..50])?;
-    Ok(Some(RecordHead { len, type_f, cmpr_f, meta, req_h, req_b, res_h }))
+    Ok(Some(RecordHead { len, rec_type, compress, meta, req_h, req_b, res_h }))
 }
 
 // Like `Read::read_exact` but we need to distinguish 0 bytes read
