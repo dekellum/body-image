@@ -60,15 +60,21 @@ pub struct Mapped {
 }
 
 impl BodyImage {
+    pub fn empty() -> BodyImage {
+        BodyImage::with_chunks_capacity(0)
+    }
+
     pub fn with_ram(size_estimate: u64) -> BodyImage {
         if size_estimate == 0 {
-            BodyImage::Ram(Vec::with_capacity(0))
+            BodyImage::empty()
         } else {
             // Estimate capacity based on observed 8 KiB chunks
-            BodyImage::Ram(
-                Vec::with_capacity((size_estimate / 0x2000 + 1) as usize)
-            )
+            let chunks = (size_estimate / 0x2000 + 1) as usize;
+            BodyImage::with_chunks_capacity(chunks)
         }
+    }
+    pub fn with_chunks_capacity(cap: usize) -> BodyImage {
+        BodyImage::Ram(Vec::with_capacity(cap))
     }
 
     pub fn with_fs() -> Result<BodyImage, FlError> {
@@ -292,11 +298,24 @@ impl<'a> Read for ChunksReader<'a> {
     }
 }
 
-/// Response wrapper, preserving various fields from the Request
-struct Prolog {
+/// Saved extract from an HTTP request.
+#[derive(Debug)]
+pub struct Prolog {
     method:       http::Method,
     url:          http::Uri,
     req_headers:  http::HeaderMap,
+    req_body:     BodyImage,
+}
+
+/// An `http::Request` with extracted Prolog.
+pub struct RequestRecord {
+    request:      HyRequest,
+    prolog:       Prolog,
+}
+
+/// Temporary `http::Response` wrapper, preserving Prolog.
+struct Monolog {
+    prolog:       Prolog,
     response:     http::Response<HyBody>,
 }
 
@@ -304,9 +323,7 @@ struct Prolog {
 #[derive(Debug)]
 pub struct Dialog {
     meta:         http::HeaderMap,
-    method:       http::Method,
-    url:          http::Uri,
-    req_headers:  http::HeaderMap,
+    prolog:       Prolog,
     version:      http::version::Version,
     status:       http::status::StatusCode,
     res_headers:  http::HeaderMap,
@@ -335,9 +352,9 @@ impl Dialog {
         use http::header::HeaderName;
 
         hs.append(HeaderName::from_lowercase(META_URL).unwrap(),
-                  self.url.to_string().parse()?);
+                  self.prolog.url.to_string().parse()?);
         hs.append(HeaderName::from_lowercase(META_METHOD).unwrap(),
-                  self.method.to_string().parse()?);
+                  self.prolog.method.to_string().parse()?);
 
         // FIXME: Rely on debug format of version for now. Should probably
         // replace this with match and custom representation.
@@ -387,7 +404,7 @@ impl Tunables {
 }
 
 // Run an HTTP request to completion, returning the full `Dialog`
-pub fn fetch(req: HyRequest, tune: &Tunables) -> Result<Dialog, FlError> {
+pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
     // FIXME: State of the Core (v Reactor), incl. construction,
     // use from multiple threads is under flux:
     // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
@@ -405,18 +422,14 @@ pub fn fetch(req: HyRequest, tune: &Tunables) -> Result<Dialog, FlError> {
     // https://github.com/hyperium/hyper/issues/1234
     // https://hyper.rs/guides/client/timeout/
 
-    let method = req.method().clone();
-    let url = req.uri().clone();
-    let req_headers = req.headers().clone();
+    let prolog = rr.prolog;
 
-    let fr: CompatFutureResponse = client.request_compat(req);
+    let fr: CompatFutureResponse = client.request_compat(rr.request);
 
     let work = fr
-        .map(|response| {
-            Prolog { method, url, req_headers, response }
-        })
+        .map(|response| Monolog { prolog, response } )
         .map_err(FlError::from)
-        .and_then(|prolog| resp_future(prolog, *tune))
+        .and_then(|monolog| resp_future(monolog, *tune))
         .and_then(|dialog| futres(dialog.prepare()));
 
     // Run until completion
@@ -424,10 +437,11 @@ pub fn fetch(req: HyRequest, tune: &Tunables) -> Result<Dialog, FlError> {
         .map_err(FlError::from)
 }
 
-fn resp_future(prolog: Prolog, tune: Tunables)
+fn resp_future(monolog: Monolog, tune: Tunables)
     -> Box<Future<Item=Dialog, Error=FlError> + Send>
 {
-    let (resp_parts, body) = prolog.response.into_parts();
+    let prolog = monolog.prolog;
+    let (resp_parts, body) = monolog.response.into_parts();
 
     // Result<BodyImage> based on CONTENT_LENGTH header.
     let bf = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
@@ -449,9 +463,7 @@ fn resp_future(prolog: Prolog, tune: Tunables)
 
     let dialog = Dialog {
         meta:        http::HeaderMap::with_capacity(0),
-        method:      prolog.method,
-        url:         prolog.url,
-        req_headers: prolog.req_headers,
+        prolog:      prolog,
         version:     resp_parts.version,
         status:      resp_parts.status,
         res_headers: resp_parts.headers,
@@ -489,11 +501,68 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
     Ok(l)
 }
 
+/// Extension trait for `http::request::Builder`, to enable recording
+/// key portions of the request for the final `Dialog`. In particular
+/// any request body (e.g. POST, PUT) needs to be cloned in advance of
+/// finishing the request, because `hyper::Body` isn't `Clone`.
+///
+/// _Limitation_: Currently only a contiguous RAM buffer (implementing
+/// `Into<Chunk>`and `Clone`) is supported as the request body
+/// impemenation.
+pub trait RequestRecordable {
+    // Short-hand for completing the builder with an empty body, as is
+    // the case with many HTTP request methods (e.g. GET).
+    fn record(&mut self) -> Result<RequestRecord, FlError>;
+
+    // Complete the builder with any body that can be converted to a
+    // single `hyper::Chunk`
+    fn record_body<C>(&mut self, body: C) -> Result<RequestRecord, FlError>
+        where C: Into<Chunk> + Clone;
+}
+
+impl RequestRecordable for http::request::Builder {
+    fn record(&mut self) -> Result<RequestRecord, FlError> {
+        let request = self.body(HyBody::empty())?;
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        let req_body = BodyImage::empty();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body } })
+    }
+
+    fn record_body<C>(&mut self, body: C) -> Result<RequestRecord, FlError>
+        where C: Into<Chunk> + Clone
+    {
+        let chunk_copy: Chunk = body.clone().into();
+        let chunk: Chunk = body.into();
+        let request = self.body(chunk.into())?;
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        let req_body = if chunk_copy.is_empty() {
+            BodyImage::empty()
+        } else {
+            let mut b = BodyImage::with_chunks_capacity(1);
+            b.save(chunk_copy)?;
+            b
+        };
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body } })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn create_request(url: &str) -> Result<HyRequest, FlError> {
+    fn create_request(url: &str) -> Result<RequestRecord, FlError> {
         http::Request::builder()
             .method(http::Method::GET)
             .header(http::header::ACCEPT,
@@ -504,12 +573,12 @@ mod tests {
             .header(http::header::ACCEPT_ENCODING, "gzip, deflate")
             .header(http::header::USER_AGENT,
                     "Mozilla/5.0 \
-                     (compatible; Iudex 1.4.0; +http://gravitext.com/iudex)")
+                     (compatible; hyper-bowl 0.1.0; \
+                      +http://github.com/dekellum/hyper-bowl)")
             // Referer? Etag, If-Modified...?
             // "Connection: keep-alive" (header) is default for HTTP 1.1
             .uri(url)
-            .body(HyBody::empty())
-            .map_err(FlError::from)
+            .record()
     }
 
     #[test]

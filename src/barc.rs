@@ -167,13 +167,13 @@ impl<'a> BarcWriter<'a> {
 
         let meta = write_headers(fout, &dialog.meta)?;
 
-        let req_h = write_headers(fout, &dialog.req_headers)?;
+        let req_h = write_headers(fout, &dialog.prolog.req_headers)?;
         // FIXME: Write any request body (e.g. POST) when available
 
         let res_h = write_headers(fout, &dialog.res_headers)?;
 
         // Compute total thus far, excluding the fixed head length
-        let mut len: u64 = (meta + req_h + res_h) as u64;
+        let mut len: u64 = (meta + req_h + res_h) as u64 + req_b;
 
         assert!((len + dialog.body_len + 2) <= V2_MAX_RECORD,
                 "body exceeds size limit");
