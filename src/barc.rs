@@ -371,27 +371,6 @@ where T: AddAssign<T> + From<u8> + ShlAssign<u8>
     Ok(v)
 }
 
-fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
-    use self::bytes::{BytesMut, BufMut};
-    use hyper::Chunk;
-
-    if len == 0 {
-        return Ok(BodyImage::empty());
-    }
-
-    assert!( len > 2 );
-
-    let mut buf = BytesMut::with_capacity(len);
-    r.read_exact(unsafe { buf.bytes_mut() })?;
-    // Exclude last CRLF ----------v
-    unsafe { buf.advance_mut(len - 2) };
-
-    let chunk: Chunk = buf.freeze().into();
-    let mut b = BodyImage::with_chunks_capacity(1);
-    b.save(chunk)?;
-    Ok(b)
-}
-
 fn read_headers(r: &mut Read, len: usize) -> Result<http::HeaderMap, FlError> {
     use self::bytes::{BytesMut, BufMut};
 
@@ -425,4 +404,25 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
         Ok(httparse::Status::Partial) => bail!("partial headers?"),
         Err(e) => Err(FlError::from(e))
     }
+}
+
+fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
+    use self::bytes::{BytesMut, BufMut};
+    use hyper::Chunk;
+
+    if len == 0 {
+        return Ok(BodyImage::empty());
+    }
+
+    assert!( len > 2 );
+
+    let mut buf = BytesMut::with_capacity(len);
+    r.read_exact(unsafe { buf.bytes_mut() })?;
+    // Exclude last CRLF ----------v
+    unsafe { buf.advance_mut(len - 2) };
+
+    let chunk: Chunk = buf.freeze().into();
+    let mut b = BodyImage::with_chunks_capacity(1);
+    b.save(chunk)?;
+    Ok(b)
 }
