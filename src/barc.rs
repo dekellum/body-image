@@ -157,8 +157,7 @@ impl BarcFile {
 
 impl<'a> BarcWriter<'a> {
 
-    pub fn write(&mut self, dialog: &Dialog) -> Result<(), FlError>
-    {
+    pub fn write(&mut self, dialog: &Dialog) -> Result<(), FlError> {
         // BarcFile::writer() guarantees Some(fout)
         let fout = &mut *self.guard.as_mut().unwrap();
 
@@ -300,10 +299,10 @@ fn read_record_head(r: &mut Read)
         return Ok(None);
     }
     if size != V2_HEAD_SIZE {
-        bail!( "Incomplete header len {}", size );
+        bail!("Incomplete header len {}", size);
     }
     if &buf[0..6] != b"BARC2 " {
-        bail!( "Invalid header suffix" );
+        bail!("Invalid header suffix");
     }
 
     let len       = parse_hex(&buf[7..18])?;
@@ -391,4 +390,3 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
         Err(e) => return Err(FlError::from(e))
     }
 }
-
