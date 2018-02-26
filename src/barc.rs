@@ -48,13 +48,22 @@ pub struct BarcReader {
 }
 
 struct RecordHead {
-    len:    u64,
-    rec_type: RecordType,
-    compress: Compression,
-    meta:   usize,
-    req_h:  usize,
-    req_b:  u64,
-    res_h:  usize,
+    len:              u64,
+    rec_type:         RecordType,
+    compress:         Compression,
+    meta:             usize,
+    req_h:            usize,
+    req_b:            u64,
+    res_h:            usize,
+}
+
+pub struct Record {
+    rec_type:         RecordType,
+    meta:             http::HeaderMap,
+    req_headers:      http::HeaderMap,
+    req_body:         BodyImage,
+    res_headers:      http::HeaderMap,
+    res_body:         BodyImage,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -252,7 +261,7 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError>
 }
 
 impl BarcReader {
-    pub fn next(&mut self) -> Result<Option<Dialog>, FlError> {
+    pub fn next(&mut self) -> Result<Option<Record>, FlError> {
         let fin = &mut self.file;
 
         let rhead = match read_record_head(fin) {
@@ -261,28 +270,28 @@ impl BarcReader {
             Err(e) => return Err(e)
         };
 
+        let rec_type = rhead.rec_type;
+        // FIXME: Rewind and return None when RecordType::Reserved
+
+        // FIXME: Compressed record support?
+
         let meta = read_headers(fin, rhead.meta)?;
-        // FIXME: Use meta headers for Prolog: method, url?
 
-        let req_h = read_headers(fin, rhead.req_h)?;
+        let req_headers = read_headers(fin, rhead.req_h)?;
+        let req_body  = read_body_ram(fin, rhead.req_b as usize)?;
 
-        if rhead.req_b > 0 {
-            bail!("FIXME: read request body not yet supported");
-        }
+        let res_headers = read_headers(fin, rhead.res_h)?;
 
-        let res_h = read_headers(fin, rhead.res_h)?;
+        let total: u64 = (rhead.meta + rhead.req_h + rhead.res_h) as u64 +
+            rhead.req_b;
+        let body_len = rhead.len - total;
+        let res_body = read_body_ram(fin, body_len as usize)?;
 
-        //let dl = Dialog {
-        // meta:        http::HeaderMap::with_capacity(0),
-        // prolog:      prolog,
-        // version:     resp_parts.version,
-        // status:      resp_parts.status,
-        // res_headers: resp_parts.headers,
-        // body:        bf,
-        // body_len:    0u64,
-        // };
+        // FIXME: Support memory mapped bodies at some threshold size,
+        // and decompression to tempfile.
 
-        Ok(None) // FIXME
+        Ok(Some(Record { rec_type, meta, req_headers, req_body,
+                         res_headers, res_body }))
     }
 }
 
@@ -362,8 +371,35 @@ where T: AddAssign<T> + From<u8> + ShlAssign<u8>
     Ok(v)
 }
 
+fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
+    use self::bytes::{BytesMut, BufMut};
+    use hyper::Chunk;
+
+    if len == 0 {
+        return Ok(BodyImage::empty());
+    }
+
+    assert!( len > 2 );
+
+    let mut buf = BytesMut::with_capacity(len);
+    r.read_exact(unsafe { buf.bytes_mut() })?;
+    // Exclude last CRLF ----------v
+    unsafe { buf.advance_mut(len - 2) };
+
+    let chunk: Chunk = buf.freeze().into();
+    let mut b = BodyImage::with_chunks_capacity(1);
+    b.save(chunk)?;
+    Ok(b)
+}
+
 fn read_headers(r: &mut Read, len: usize) -> Result<http::HeaderMap, FlError> {
     use self::bytes::{BytesMut, BufMut};
+
+    if len == 0 {
+        return Ok(http::HeaderMap::with_capacity(0));
+    }
+
+    assert!( len > 2 );
 
     let mut buf = BytesMut::with_capacity(len);
     r.read_exact(unsafe { buf.bytes_mut() })?;
