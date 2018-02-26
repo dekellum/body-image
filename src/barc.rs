@@ -57,6 +57,7 @@ struct RecordHead {
     res_h:            usize,
 }
 
+#[derive(Debug)]
 pub struct Record {
     rec_type:         RecordType,
     meta:             http::HeaderMap,
@@ -439,6 +440,24 @@ mod tests {
         let record = reader.next().unwrap().unwrap();
 
         assert_eq!(record.rec_type, RecordType::Dialog);
+
+        println!("{:#?}", record);
+
+        if let BodyImage::Ram(ref v) = record.req_body {
+            assert_eq!(v.len(), 0, "empty");
+        } else {
+            panic!("Unexpected req_body variant");
+        }
+
+        if let BodyImage::Ram(ref v) = record.res_body {
+            assert_eq!(v.len(), 1, "one chunk");
+            let c = &v[0];
+            assert_eq!(c.len(), 1270);
+            assert_eq!(&c[0..15], b"<!doctype html>");
+            assert_eq!(&c[(c.len()-8)..], b"</html>\n");
+        } else {
+            panic!("Unexpected res_body variant");
+        }
 
         let record = reader.next().unwrap();
         assert!(record.is_none());
