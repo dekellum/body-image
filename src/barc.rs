@@ -1,5 +1,7 @@
 extern crate failure;
 extern crate http;
+extern crate httparse;
+extern crate bytes;
 
 use failure::Error as FlError;
 use std::fs::{File, OpenOptions};
@@ -251,6 +253,38 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError>
 }
 
 impl BarcReader {
+    pub fn next(&mut self) -> Result<Option<Dialog>, FlError> {
+        let fin = &mut self.file;
+
+        let rhead = match read_record_head(fin) {
+            Ok(Some(rh)) => rh,
+            Ok(None) => return Ok(None),
+            Err(e) => return Err(e)
+        };
+
+        let meta = read_headers(fin, rhead.meta)?;
+        // FIXME: Use meta headers for Prolog: method, url?
+
+        let req_h = read_headers(fin, rhead.req_h)?;
+
+        if rhead.req_b > 0 {
+            bail!("FIXME: read request body not yet supported");
+        }
+
+        let res_h = read_headers(fin, rhead.res_h)?;
+
+        //let dl = Dialog {
+        // meta:        http::HeaderMap::with_capacity(0),
+        // prolog:      prolog,
+        // version:     resp_parts.version,
+        // status:      resp_parts.status,
+        // res_headers: resp_parts.headers,
+        // body:        bf,
+        // body_len:    0u64,
+        // };
+
+        Ok(None) // FIXME
+    }
 }
 
 // Return RecordHead or None if EOF
@@ -323,8 +357,38 @@ where T: AddAssign<T> + From<u8> + ShlAssign<u8>
         } else if *d >= b'a' && *d <= b'f' {
             v += T::from(10 + (*d - b'a'));
         } else {
-            bail!( "Illegal hex digit: [{}]", d);
+            bail!("Illegal hex digit: [{}]", d);
         }
     }
     Ok(v)
 }
+
+fn read_headers(r: &mut Read, len: usize) -> Result<http::HeaderMap, FlError> {
+    use self::bytes::{BytesMut, BufMut};
+
+    let mut buf = BytesMut::with_capacity(len);
+    r.read_exact(unsafe { buf.bytes_mut() })?;
+    unsafe { buf.advance_mut(len) };
+    // FIXME: Exclude last CRLF? ---v
+    parse_headers(&buf[..(buf.len()-2)])
+}
+
+fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
+    use http::header::{HeaderName, HeaderValue};
+
+    let mut headbuf = [httparse::EMPTY_HEADER; 128]; //FIXME
+    match httparse::parse_headers(buf, &mut headbuf) {
+        Ok(httparse::Status::Complete((size, heads))) => {
+            let mut hmap = http::HeaderMap::with_capacity(heads.len());
+            assert_eq!(size, buf.len());
+            for h in heads {
+                hmap.append(HeaderName::from_bytes(h.name.as_bytes())?,
+                            HeaderValue::from_bytes(h.value)?);
+            }
+            Ok(hmap)
+        },
+        Ok(httparse::Status::Partial) => bail!("partial headers?"),
+        Err(e) => return Err(FlError::from(e))
+    }
+}
+
