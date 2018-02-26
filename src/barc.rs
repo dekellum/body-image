@@ -262,7 +262,7 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError>
 }
 
 impl BarcReader {
-    pub fn next(&mut self) -> Result<Option<Record>, FlError> {
+    pub fn read_record(&mut self) -> Result<Option<Record>, FlError> {
         let fin = &mut self.file;
 
         let rhead = match read_record_head(fin) {
@@ -437,7 +437,7 @@ mod tests {
     fn test_read_sample() {
         let bfile = BarcFile::new("sample/example.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.next().unwrap().unwrap();
+        let record = reader.read_record().unwrap().unwrap();
 
         assert_eq!(record.rec_type, RecordType::Dialog);
 
@@ -450,6 +450,8 @@ mod tests {
         }
 
         if let BodyImage::Ram(ref v) = record.res_body {
+            // FIXME: Read to local buffer here to avoid dependency on
+            // one-chunk-in-RAM representation.
             assert_eq!(v.len(), 1, "one chunk");
             let c = &v[0];
             assert_eq!(c.len(), 1270);
@@ -459,7 +461,7 @@ mod tests {
             panic!("Unexpected res_body variant");
         }
 
-        let record = reader.next().unwrap();
+        let record = reader.read_record().unwrap();
         assert!(record.is_none());
     }
 }
