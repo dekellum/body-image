@@ -375,7 +375,7 @@ fn read_headers(r: &mut Read, len: usize) -> Result<http::HeaderMap, FlError> {
 fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
     use http::header::{HeaderName, HeaderValue};
 
-    let mut headbuf = [httparse::EMPTY_HEADER; 128]; //FIXME
+    let mut headbuf = [httparse::EMPTY_HEADER; 128]; // FIXME: loop instead?
     match httparse::parse_headers(buf, &mut headbuf) {
         Ok(httparse::Status::Complete((size, heads))) => {
             let mut hmap = http::HeaderMap::with_capacity(heads.len());
@@ -387,6 +387,6 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
             Ok(hmap)
         },
         Ok(httparse::Status::Partial) => bail!("partial headers?"),
-        Err(e) => return Err(FlError::from(e))
+        Err(e) => Err(FlError::from(e))
     }
 }
