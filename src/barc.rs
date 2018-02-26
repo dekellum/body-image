@@ -381,7 +381,7 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
             let mut hmap = http::HeaderMap::with_capacity(heads.len());
             assert_eq!(size, buf.len());
             for h in heads {
-                hmap.append(HeaderName::from_bytes(h.name.as_bytes())?,
+                hmap.append(h.name.parse::<HeaderName>()?,
                             HeaderValue::from_bytes(h.value)?);
             }
             Ok(hmap)
