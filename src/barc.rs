@@ -66,7 +66,7 @@ pub struct Record {
     res_body:         BodyImage,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum RecordType {
     Reserved,
     Dialog,
@@ -89,7 +89,7 @@ impl RecordType {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Compression {
     Unknown,
     Plain,
@@ -314,13 +314,13 @@ fn read_record_head(r: &mut Read)
         bail!("Invalid header suffix");
     }
 
-    let len       = parse_hex(&buf[7..18])?;
-    let rec_type  = RecordType::try_from(buf[20])?;
-    let compress  = Compression::try_from(buf[21])?;
-    let meta      = parse_hex(&buf[23..27])?;
-    let req_h     = parse_hex(&buf[29..33])?;
-    let req_b     = parse_hex(&buf[35..44])?;
-    let res_h     = parse_hex(&buf[46..50])?;
+    let len       = parse_hex(&buf[6..18])?;
+    let rec_type  = RecordType::try_from(buf[19])?;
+    let compress  = Compression::try_from(buf[20])?;
+    let meta      = parse_hex(&buf[22..27])?;
+    let req_h     = parse_hex(&buf[28..33])?;
+    let req_b     = parse_hex(&buf[34..44])?;
+    let res_h     = parse_hex(&buf[45..50])?;
     Ok(Some(RecordHead { len, rec_type, compress, meta, req_h, req_b, res_h }))
 }
 
@@ -383,8 +383,9 @@ fn read_headers(r: &mut Read, len: usize) -> Result<http::HeaderMap, FlError> {
     let mut buf = BytesMut::with_capacity(len);
     r.read_exact(unsafe { buf.bytes_mut() })?;
     unsafe { buf.advance_mut(len) };
-    // FIXME: Exclude last CRLF? ---v
-    parse_headers(&buf[..(buf.len()-2)])
+    // Don't exclude trailing CRLF which is used to signal end of
+    // headers
+    parse_headers(&buf[..])
 }
 
 fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
@@ -425,4 +426,21 @@ fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
     let mut b = BodyImage::with_chunks_capacity(1);
     b.save(chunk)?;
     Ok(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_read_sample() {
+        let bfile = BarcFile::new("sample/example.barc");
+        let mut reader = bfile.reader().unwrap();
+        let record = reader.next().unwrap().unwrap();
+
+        assert_eq!(record.rec_type, RecordType::Dialog);
+
+        let record = reader.next().unwrap();
+        assert!(record.is_none());
+    }
 }
