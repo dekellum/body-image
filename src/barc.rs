@@ -383,6 +383,7 @@ fn read_record_head_buf(r: &mut Read, mut buf: &mut [u8])
     Ok(size)
 }
 
+// Read lowercase hexadecimal unsigned value directly from bytes.
 fn parse_hex<T>(buf: &[u8]) -> Result<T, FlError>
 where T: AddAssign<T> + From<u8> + ShlAssign<u8>
 {
@@ -394,7 +395,7 @@ where T: AddAssign<T> + From<u8> + ShlAssign<u8>
         } else if *d >= b'a' && *d <= b'f' {
             v += T::from(10 + (*d - b'a'));
         } else {
-            bail!("Illegal hex digit: [{}]", d);
+            bail!("Illegal head hex digit: [{}]", d);
         }
     }
     Ok(v)
@@ -448,8 +449,7 @@ fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
 
     let mut buf = BytesMut::with_capacity(len);
     r.read_exact(unsafe { buf.bytes_mut() })?;
-    // Exclude last CRLF ----------v
-    unsafe { buf.advance_mut(len - 2) };
+    unsafe { buf.advance_mut(len - 2) }; // Exclude final CRLF
 
     let chunk: Chunk = buf.freeze().into();
     let mut b = BodyImage::with_chunks_capacity(1);
@@ -457,27 +457,28 @@ fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
     Ok(b)
 }
 
-/// Return `BodyImage::MemMap` for the body in file, at offset and
-/// length. Assumes current is positioned at offset, and seeks file
-/// past the body len.
+// Return `BodyImage::MemMap` for the body in file, at offset and
+// length. Assumes (and asserts that) current is positioned at
+// offset, and seeks file past the body len.
 fn map_body(file: &mut File, offset: u64, len: u64)
     -> Result<BodyImage, FlError>
 {
     assert!( len > 2 );
 
     // Seek past the body, as if read.
-    file.seek(SeekFrom::Current(len as i64))?;
+    let end = file.seek(SeekFrom::Current(len as i64))?;
+    assert_eq!(offset + len, end);
 
-    let nfile = file.try_clone()?;
+    let dup_file = file.try_clone()?;
 
     let map = unsafe {
         MmapOptions::new()
             .offset(offset as usize)
             .len((len - 2) as usize) // Exclude final CRLF
-            .map(&nfile)?
+            .map(&dup_file)?
     };
 
-    Ok(BodyImage::MemMap(Mapped { file: nfile, map }))
+    Ok(BodyImage::MemMap(Mapped { file: dup_file, map }))
 }
 
 #[cfg(test)]
@@ -514,7 +515,7 @@ mod tests {
     #[test]
     fn test_read_sample_mapped() {
         let mut tune = Tunables::new().unwrap();
-        tune.max_body_ram = 1024;
+        tune.max_body_ram = 1024; // < 1270 expected length
         let bfile = BarcFile::new("sample/example.barc");
         let mut reader = bfile.reader().unwrap();
         let record = reader.read_record(&tune).unwrap().unwrap();
