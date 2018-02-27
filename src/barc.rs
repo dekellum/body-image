@@ -458,25 +458,16 @@ mod tests {
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 5);
         assert_eq!(record.req_headers.len(), 4);
+        assert!(record.req_body.is_empty());
         assert_eq!(record.res_headers.len(), 11);
 
-        if let BodyImage::Ram(ref v) = record.req_body {
-            assert_eq!(v.len(), 0, "empty");
-        } else {
-            panic!("Unexpected req_body variant");
-        }
-
-        if let BodyImage::Ram(ref v) = record.res_body {
-            // FIXME: Read to local buffer here to avoid dependency on
-            // one-chunk-in-RAM representation.
-            assert_eq!(v.len(), 1, "one chunk");
-            let c = &v[0];
-            assert_eq!(c.len(), 1270);
-            assert_eq!(&c[0..15], b"<!doctype html>");
-            assert_eq!(&c[(c.len()-8)..], b"</html>\n");
-        } else {
-            panic!("Unexpected res_body variant");
-        }
+        let mut body_reader = record.res_body.reader();
+        let br = body_reader.as_read();
+        let mut buf = Vec::with_capacity(2048);
+        br.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf.len(), 1270);
+        assert_eq!(&buf[0..15], b"<!doctype html>");
+        assert_eq!(&buf[(buf.len()-8)..], b"</html>\n");
 
         let record = reader.read_record().unwrap();
         assert!(record.is_none());

@@ -90,6 +90,14 @@ impl BodyImage {
         }
     }
 
+    /// Return true if self represents an empty body.
+    pub fn is_empty(&self) -> bool {
+        match *self {
+            BodyImage::Ram(ref v) => v.is_empty(),
+            _ => false
+        }
+    }
+
     /// Save `Chunk` based on variant, appending to `BodyImage::Ram`
     /// or writing to `BodyImage::FsWrite`. Panics if in some other
     /// state.
