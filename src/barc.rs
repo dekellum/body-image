@@ -313,9 +313,7 @@ impl BarcReader {
 fn read_record_head(r: &mut Read)
     -> Result<Option<RecordHead>, FlError>
 {
-    // FIXME: Is uninitialized safe enough?
-    use std::mem;
-    let mut buf: [u8; V2_HEAD_SIZE] = unsafe { mem::uninitialized() };
+    let mut buf = [0u8; V2_HEAD_SIZE];
 
     let size = read_record_head_buf(r, &mut buf)?;
     if size == 0 {
