@@ -1,6 +1,7 @@
 extern crate bytes;
 extern crate http;
 extern crate httparse;
+extern crate memmap;
 
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
@@ -12,8 +13,9 @@ use self::bytes::{BytesMut, BufMut};
 use failure::Error as FlError;
 use hyper::Chunk;
 use http::header::{HeaderName, HeaderValue};
+use memmap::MmapOptions;
 
-use super::{BodyImage, Dialog};
+use super::{BodyImage, Dialog, Mapped, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -212,7 +214,8 @@ impl<'a> BarcWriter<'a> {
     }
 }
 
-fn write_record_head(out: &mut Write, head: &RecordHead) -> Result<(), FlError>
+fn write_record_head(out: &mut Write, head: &RecordHead)
+    -> Result<(), FlError>
 {
     // Check input ranges
     assert!(head.len   <= V2_MAX_RECORD,   "len exceeded");
@@ -265,7 +268,9 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError>
 }
 
 impl BarcReader {
-    pub fn read_record(&mut self) -> Result<Option<Record>, FlError> {
+    pub fn read_record(&mut self, tune: &Tunables)
+        -> Result<Option<Record>, FlError>
+    {
         let fin = &mut self.file;
 
         // Record start position in case we need to rewind
@@ -295,17 +300,26 @@ impl BarcReader {
         let meta = read_headers(fin, rhead.meta)?;
 
         let req_headers = read_headers(fin, rhead.req_h)?;
-        let req_body  = read_body_ram(fin, rhead.req_b as usize)?;
+        let mut total: u64 = (rhead.meta + rhead.req_h) as u64;
+
+        let req_body = if rhead.req_b <= tune.max_body_ram {
+            read_body_ram(fin, rhead.req_b as usize)
+        } else {
+            let offset = start + (V2_HEAD_SIZE as u64) + total;
+            map_body(fin, offset, rhead.req_b)
+        }?;
 
         let res_headers = read_headers(fin, rhead.res_h)?;
-
-        let total: u64 = (rhead.meta + rhead.req_h + rhead.res_h) as u64 +
-            rhead.req_b;
+        total += rhead.req_b;
+        total += rhead.res_h as u64;
         let body_len = rhead.len - total;
-        let res_body = read_body_ram(fin, body_len as usize)?;
 
-        // FIXME: Support memory mapped bodies at some threshold size,
-        // and decompression to tempfile.
+        let res_body = if body_len <= tune.max_body_ram {
+            read_body_ram(fin, body_len as usize)
+        } else {
+            let offset = start + (V2_HEAD_SIZE as u64) + total;
+            map_body(fin, offset, body_len)
+        }?;
 
         Ok(Some(Record { rec_type, meta, req_headers, req_body,
                          res_headers, res_body }))
@@ -443,15 +457,39 @@ fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
     Ok(b)
 }
 
+/// Return `BodyImage::MemMap` for the body in file, at offset and
+/// length. Assumes current is positioned at offset, and seeks file
+/// past the body len.
+fn map_body(file: &mut File, offset: u64, len: u64)
+    -> Result<BodyImage, FlError>
+{
+    assert!( len > 2 );
+
+    // Seek past the body, as if read.
+    file.seek(SeekFrom::Current(len as i64))?;
+
+    let nfile = file.try_clone()?;
+
+    let map = unsafe {
+        MmapOptions::new()
+            .offset(offset as usize)
+            .len((len - 2) as usize) // Exclude final CRLF
+            .map(&nfile)?
+    };
+
+    Ok(BodyImage::MemMap(Mapped { file: nfile, map }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_read_sample() {
+        let tune = Tunables::new().unwrap();
         let bfile = BarcFile::new("sample/example.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.read_record().unwrap().unwrap();
+        let record = reader.read_record(&tune).unwrap().unwrap();
 
         println!("{:#?}", record);
 
@@ -469,34 +507,58 @@ mod tests {
         assert_eq!(&buf[0..15], b"<!doctype html>");
         assert_eq!(&buf[(buf.len()-8)..], b"</html>\n");
 
-        let record = reader.read_record().unwrap();
+        let record = reader.read_record(&tune).unwrap();
+        assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_read_sample_mapped() {
+        let mut tune = Tunables::new().unwrap();
+        tune.max_body_ram = 1024;
+        let bfile = BarcFile::new("sample/example.barc");
+        let mut reader = bfile.reader().unwrap();
+        let record = reader.read_record(&tune).unwrap().unwrap();
+
+        println!("{:#?}", record);
+
+        let mut body_reader = record.res_body.reader();
+        let br = body_reader.as_read();
+        let mut buf = Vec::with_capacity(2048);
+        br.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf.len(), 1270);
+        assert_eq!(&buf[0..15], b"<!doctype html>");
+        assert_eq!(&buf[(buf.len()-8)..], b"</html>\n");
+
+        let record = reader.read_record(&tune).unwrap();
         assert!(record.is_none());
     }
 
     #[test]
     fn test_read_empty() {
+        let tune = Tunables::new().unwrap();
         let bfile = BarcFile::new("sample/empty.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.read_record().unwrap();
+        let record = reader.read_record(&tune).unwrap();
         assert!(record.is_none());
 
         // Shouldn't have moved
-        let record = reader.read_record().unwrap();
+        let record = reader.read_record(&tune).unwrap();
         assert!(record.is_none());
     }
 
     #[test]
     fn test_read_over_reserved() {
+        let tune = Tunables::new().unwrap();
         let bfile = BarcFile::new("sample/reserved.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.read_record().unwrap();
+        let record = reader.read_record(&tune).unwrap();
 
         println!("{:#?}", record);
 
         assert!(record.is_none());
 
         // Should seek back to do it again
-        let record = reader.read_record().unwrap();
+        let record = reader.read_record(&tune).unwrap();
         assert!(record.is_none());
     }
 }
