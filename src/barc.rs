@@ -265,6 +265,9 @@ impl BarcReader {
     pub fn read_record(&mut self) -> Result<Option<Record>, FlError> {
         let fin = &mut self.file;
 
+        // Record start position in case we need to rewind
+        let start = fin.seek(SeekFrom::Current(0))?;
+
         let rhead = match read_record_head(fin) {
             Ok(Some(rh)) => rh,
             Ok(None) => return Ok(None),
@@ -272,9 +275,19 @@ impl BarcReader {
         };
 
         let rec_type = rhead.rec_type;
-        // FIXME: Rewind and return None when RecordType::Reserved
 
-        // FIXME: Compressed record support?
+        // With a concurrent writer, its possible to see an
+        // incomplete, Reserved record head, followed by an empty or
+        // partial record payload.  In this case, seek back to start
+        // and return None.
+        if rec_type == RecordType::Reserved {
+            fin.seek(SeekFrom::Start(start))?;
+            return Ok(None);
+        }
+
+        if rhead.compress != Compression::Plain {
+            bail!("FIXME: Compressed records not yet supported");
+        }
 
         let meta = read_headers(fin, rhead.meta)?;
 
@@ -384,15 +397,20 @@ fn read_headers(r: &mut Read, len: usize) -> Result<http::HeaderMap, FlError> {
     let mut buf = BytesMut::with_capacity(len);
     r.read_exact(unsafe { buf.bytes_mut() })?;
     unsafe { buf.advance_mut(len) };
-    // Don't exclude trailing CRLF which is used to signal end of
-    // headers
+    // Don't exclude trailing CRLF, as its used to signal end of
+    // headers (avoids Partial)
     parse_headers(&buf[..])
 }
 
 fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
     use http::header::{HeaderName, HeaderValue};
 
-    let mut headbuf = [httparse::EMPTY_HEADER; 128]; // FIXME: loop instead?
+    let mut headbuf = [httparse::EMPTY_HEADER; 128];
+    // FIXME: parse_headers API will return TooManyHeaders if headbuf
+    // isn't large enough. Hyper 0.11.15 allocates 100, so 128 is room
+    // for "even more" (sarcasm). Might be better to just replace this
+    // with our own parser, as the grammer isn't particularly complex.
+
     match httparse::parse_headers(buf, &mut headbuf) {
         Ok(httparse::Status::Complete((size, heads))) => {
             let mut hmap = http::HeaderMap::with_capacity(heads.len());
@@ -402,8 +420,10 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
                             HeaderValue::from_bytes(h.value)?);
             }
             Ok(hmap)
-        },
-        Ok(httparse::Status::Partial) => bail!("partial headers?"),
+        }
+        Ok(httparse::Status::Partial) => {
+            bail!("Header block not terminated with blank line")
+        }
         Err(e) => Err(FlError::from(e))
     }
 }
@@ -439,9 +459,12 @@ mod tests {
         let mut reader = bfile.reader().unwrap();
         let record = reader.read_record().unwrap().unwrap();
 
-        assert_eq!(record.rec_type, RecordType::Dialog);
-
         println!("{:#?}", record);
+
+        assert_eq!(record.rec_type, RecordType::Dialog);
+        assert_eq!(record.meta.len(), 5);
+        assert_eq!(record.req_headers.len(), 4);
+        assert_eq!(record.res_headers.len(), 11);
 
         if let BodyImage::Ram(ref v) = record.req_body {
             assert_eq!(v.len(), 0, "empty");
@@ -461,6 +484,33 @@ mod tests {
             panic!("Unexpected res_body variant");
         }
 
+        let record = reader.read_record().unwrap();
+        assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_read_empty() {
+        let bfile = BarcFile::new("sample/empty.barc");
+        let mut reader = bfile.reader().unwrap();
+        let record = reader.read_record().unwrap();
+        assert!(record.is_none());
+
+        // Shouldn't have moved
+        let record = reader.read_record().unwrap();
+        assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_read_over_reserved() {
+        let bfile = BarcFile::new("sample/reserved.barc");
+        let mut reader = bfile.reader().unwrap();
+        let record = reader.read_record().unwrap();
+
+        println!("{:#?}", record);
+
+        assert!(record.is_none());
+
+        // Should seek back to do it again
         let record = reader.read_record().unwrap();
         assert!(record.is_none());
     }
