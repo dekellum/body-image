@@ -1,14 +1,17 @@
-extern crate failure;
+extern crate bytes;
 extern crate http;
 extern crate httparse;
-extern crate bytes;
 
-use failure::Error as FlError;
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 use std::ops::{AddAssign,ShlAssign};
 use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
+
+use self::bytes::{BytesMut, BufMut};
+use failure::Error as FlError;
+use hyper::Chunk;
+use http::header::{HeaderName, HeaderValue};
 
 use super::{BodyImage, Dialog};
 
@@ -384,8 +387,6 @@ where T: AddAssign<T> + From<u8> + ShlAssign<u8>
 }
 
 fn read_headers(r: &mut Read, len: usize) -> Result<http::HeaderMap, FlError> {
-    use self::bytes::{BytesMut, BufMut};
-
     if len == 0 {
         return Ok(http::HeaderMap::with_capacity(0));
     }
@@ -401,8 +402,6 @@ fn read_headers(r: &mut Read, len: usize) -> Result<http::HeaderMap, FlError> {
 }
 
 fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
-    use http::header::{HeaderName, HeaderValue};
-
     let mut headbuf = [httparse::EMPTY_HEADER; 128];
     // FIXME: parse_headers API will return TooManyHeaders if headbuf
     // isn't large enough. Hyper 0.11.15 allocates 100, so 128 is room
@@ -427,9 +426,6 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
 }
 
 fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
-    use self::bytes::{BytesMut, BufMut};
-    use hyper::Chunk;
-
     if len == 0 {
         return Ok(BodyImage::empty());
     }
