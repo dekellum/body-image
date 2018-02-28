@@ -72,8 +72,35 @@ pub struct Record {
     res_body:         BodyImage,
 }
 
+pub trait Rec<'a> {
+    fn rec_type(&'a self)    -> RecordType;
+    fn meta(&'a self)        -> &'a http::HeaderMap;
+    fn req_headers(&'a self) -> &'a http::HeaderMap;
+    fn req_body(&'a self)    -> &'a BodyImage;
+    fn res_headers(&'a self) -> &'a http::HeaderMap;
+    fn res_body(&'a self)    -> &'a BodyImage;
+}
+
+impl<'a> Rec<'a> for Record {
+    fn rec_type(&'a self)    -> RecordType           { self.rec_type }
+    fn meta(&'a self)        -> &'a http::HeaderMap  { &self.meta }
+    fn req_headers(&'a self) -> &'a http::HeaderMap  { &self.req_headers }
+    fn req_body(&'a self)    -> &'a BodyImage        { &self.req_body }
+    fn res_headers(&'a self) -> &'a http::HeaderMap  { &self.res_headers }
+    fn res_body(&'a self)    -> &'a BodyImage        { &self.res_body }
+}
+
+impl<'a> Rec<'a> for Dialog {
+    fn rec_type(&'a self)    -> RecordType           { RecordType::Dialog }
+    fn meta(&'a self)        -> &'a http::HeaderMap  { &self.meta }
+    fn req_headers(&'a self) -> &'a http::HeaderMap  { &self.prolog.req_headers }
+    fn req_body(&'a self)    -> &'a BodyImage        { &self.prolog.req_body }
+    fn res_headers(&'a self) -> &'a http::HeaderMap  { &self.res_headers }
+    fn res_body(&'a self)    -> &'a BodyImage        { &self.body }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum RecordType {
+pub enum RecordType {
     Reserved,
     Dialog,
 }
