@@ -478,7 +478,7 @@ fn map_body(file: &mut File, offset: u64, len: u64)
             .map(&dup_file)?
     };
 
-    Ok(BodyImage::MemMap(Mapped { file: dup_file, map }))
+    Ok(BodyImage::MemMap(Mapped { map, _file: dup_file }))
 }
 
 #[cfg(test)]
@@ -514,11 +514,18 @@ mod tests {
 
     #[test]
     fn test_read_sample_mapped() {
-        let mut tune = Tunables::new().unwrap();
-        tune.max_body_ram = 1024; // < 1270 expected length
-        let bfile = BarcFile::new("sample/example.barc");
-        let mut reader = bfile.reader().unwrap();
-        let record = reader.read_record(&tune).unwrap().unwrap();
+        let record = {
+            let mut tune = Tunables::new().unwrap();
+            tune.max_body_ram = 1024; // < 1270 expected length
+            let bfile = BarcFile::new("sample/example.barc");
+            let mut reader = bfile.reader().unwrap();
+            let r = reader.read_record(&tune).unwrap().unwrap();
+
+            let next = reader.read_record(&tune).unwrap();
+            assert!(next.is_none());
+
+            r
+        };
 
         println!("{:#?}", record);
 
@@ -530,8 +537,6 @@ mod tests {
         assert_eq!(&buf[0..15], b"<!doctype html>");
         assert_eq!(&buf[(buf.len()-8)..], b"</html>\n");
 
-        let record = reader.read_record(&tune).unwrap();
-        assert!(record.is_none());
     }
 
     #[test]

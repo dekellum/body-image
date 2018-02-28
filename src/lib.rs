@@ -52,11 +52,13 @@ pub enum BodyImage {
     MemMap(Mapped),
 }
 
-/// File and associated memory map handle.
+/// A memory map handle with its underlying `File` as a RAII guard.
 #[derive(Debug)]
 pub struct Mapped {
-    file: File,
     map: Mmap,
+    _file: File,
+    // This ordered has munmap called before close on destruction,
+    // which seems best.
 }
 
 impl BodyImage {
@@ -171,7 +173,7 @@ impl BodyImage {
         if let BodyImage::FsRead(file) = self {
             // FIXME: Check zero length case?
             let map = unsafe { Mmap::map(&file)? };
-            Ok(BodyImage::MemMap(Mapped { file, map }))
+            Ok(BodyImage::MemMap(Mapped { map, _file: file }))
         } else {
             panic!("Invalid state for map(): {:?}", self);
         }
