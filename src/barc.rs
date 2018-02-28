@@ -146,6 +146,7 @@ enum Compression {
 
     /// No compression was added on write of the record.
     Plain,
+    Gzip,
 }
 
 impl Compression {
@@ -153,6 +154,7 @@ impl Compression {
         match self {
             Compression::Unknown => 'U',
             Compression::Plain   => 'P',
+            Compression::Gzip    => 'G',
         }
     }
 
@@ -160,6 +162,7 @@ impl Compression {
         match f {
             b'U' => Ok(Compression::Unknown),
             b'P' => Ok(Compression::Plain),
+            b'G' => Ok(Compression::Gzip),
             _ => Err(format_err!("Unknown compression flag [{}]", f))
         }
     }
