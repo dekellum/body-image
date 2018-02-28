@@ -57,8 +57,9 @@ pub enum BodyImage {
 pub struct Mapped {
     map: Mmap,
     _file: File,
-    // This ordered has munmap called before close on destruction,
-    // which seems best.
+    // This ordering has munmap called before close on destruction,
+    // which seems best, though it may not actually be a requirement
+    // to keep the File open, at least on Unix.
 }
 
 impl BodyImage {
