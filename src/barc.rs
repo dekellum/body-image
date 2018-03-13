@@ -191,7 +191,7 @@ impl<'a> BarcWriter<'a> {
         // Compute total thus far, excluding the fixed head length
         let mut len: u64 = (meta + req_h + res_h) as u64 + req_b;
 
-        assert!((len + dialog.body_len + 2) <= V2_MAX_RECORD,
+        assert!((len + dialog.body.len() + 2) <= V2_MAX_RECORD,
                 "body exceeds size limit");
         let res_b = write_body(fout, &dialog.body)?;
 
@@ -478,7 +478,7 @@ fn map_body(file: &mut File, offset: u64, len: u64)
             .map(&dup_file)?
     };
 
-    Ok(BodyImage::MemMap(Mapped { map, _file: dup_file }))
+    Ok(BodyImage::with_map(Mapped { map, _file: dup_file }))
 }
 
 #[cfg(test)]
