@@ -2,6 +2,8 @@ extern crate failure;
 extern crate http;
 extern crate hyper_barc;
 
+use std::process;
+
 use failure::Error as FlError;
 
 use hyper_barc::{fetch, RequestRecordable, Tunables};
@@ -14,7 +16,11 @@ fn main() {
     let url = args.next().expect("URL argument required");
     let barc_path = args.next().expect("BARC-FILE argument required");
 
-    run(&url, &barc_path).expect("barc-record");
+    let r = run(&url, &barc_path);
+    if let Err(e) = r {
+        eprintln!("Error cause: {}; (Backtrace) {}", e.cause(), e.backtrace());
+        process::exit(2);
+    }
 }
 
 fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
