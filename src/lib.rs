@@ -541,15 +541,14 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
 /// finishing the request, because `hyper::Body` isn't `Clone`.
 ///
 /// _Limitation_: Currently only a contiguous RAM buffer (implementing
-/// `Into<Chunk>`and `Clone`) is supported as the request body
-/// impemenation.
+/// `Into<Chunk>`and `Clone`) is supported as the request body.
 pub trait RequestRecordable {
     // Short-hand for completing the builder with an empty body, as is
     // the case with many HTTP request methods (e.g. GET).
     fn record(&mut self) -> Result<RequestRecord, FlError>;
 
-    // Complete the builder with any body that can be converted to a
-    // single `hyper::Chunk`
+    // Complete the builder with any request body that can be
+    // converted to a single `hyper::Chunk`
     fn record_body<C>(&mut self, body: C) -> Result<RequestRecord, FlError>
         where C: Into<Chunk> + Clone;
 }
