@@ -365,7 +365,7 @@ pub struct Dialog {
     version:      http::version::Version,
     status:       http::status::StatusCode,
     res_headers:  http::HeaderMap,
-    body:         BodyImage,
+    res_body:     BodyImage,
 }
 
 static META_URL: &'static [u8]             = b"url";
@@ -379,7 +379,7 @@ static META_RES_DECODED: &'static [u8]     = b"response-decoded";
 impl Dialog {
     /// Prepare for consumption
     pub fn prepare(mut self) -> Result<Self, FlError> {
-        self.body = self.body.prepare()?;
+        self.res_body = self.res_body.prepare()?;
         self.meta = self.derive_meta()?;
         Ok(self)
     }
@@ -408,8 +408,8 @@ impl Dialog {
     /// `BodyImageInner::MemMap` via `BodyImageInner::map`, else
     /// no-op.
     pub fn map_if_fs(mut self) -> Result<Self, FlError> {
-        if let BodyImageInner::FsRead(_) = self.body.inner {
-            self.body = self.body.map()?;
+        if let BodyImageInner::FsRead(_) = self.res_body.inner {
+            self.res_body = self.res_body.map()?;
         }
         Ok(self)
     }
@@ -504,21 +504,21 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         version:     resp_parts.version,
         status:      resp_parts.status,
         res_headers: resp_parts.headers,
-        body:        bf,
+        res_body:    bf,
     };
 
     let s = body
         .map_err(FlError::from)
         .fold(dialog, move |mut dialog, chunk| {
-            let new_len = dialog.body.len() + (chunk.len() as u64);
+            let new_len = dialog.res_body.len() + (chunk.len() as u64);
             if new_len > tune.max_body {
                 bail!("Response stream too long: {}+", new_len);
             } else {
-                if dialog.body.is_ram() && new_len > tune.max_body_ram {
-                    dialog.body.write_back()?;
+                if dialog.res_body.is_ram() && new_len > tune.max_body_ram {
+                    dialog.res_body.write_back()?;
                 }
                 println!("to save chunk (len: {})", chunk.len());
-                dialog.body
+                dialog.res_body
                     .save(chunk)
                     .and(Ok(dialog))
             }
@@ -623,8 +623,8 @@ mod tests {
         let dl = fetch(req, &tune).unwrap();
         println!("Response {:#?}", dl);
 
-        assert!(dl.body.is_ram());
-        assert_eq!(dl.body.len(), 8462);
+        assert!(dl.res_body.is_ram());
+        assert_eq!(dl.res_body.len(), 8462);
     }
 
     #[test]
@@ -637,9 +637,9 @@ mod tests {
 
         assert_eq!(dl.status.as_u16(), 404);
 
-        assert!(dl.body.is_ram());
-        assert!(dl.body.len() > 0);
-        assert!(dl.body.len() < 1000);
+        assert!(dl.res_body.is_ram());
+        assert!(dl.res_body.len() > 0);
+        assert!(dl.res_body.len() < 1000);
     }
 
     #[test]
@@ -652,7 +652,7 @@ mod tests {
         let dl = fetch(req, &tune).unwrap();
         println!("Response {:#?}", dl);
 
-        assert!(dl.body.len() > 100_000 );
-        assert!(!dl.body.is_ram());
+        assert!(dl.res_body.len() > 100_000 );
+        assert!(!dl.res_body.is_ram());
     }
 }

@@ -49,26 +49,26 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> 
 
     if let Some(ref comp) = compress {
         let new_body = {
-            println!("Body to {:?} decode: {:?}", comp, dialog.body);
-            let mut reader = dialog.body.reader();
+            println!("Body to {:?} decode: {:?}", comp, dialog.res_body);
+            let mut reader = dialog.res_body.reader();
             match *comp {
                 Encoding::Gzip => {
                     let mut decoder = GzDecoder::new(reader.as_read());
-                    let len_est = dialog.body.len() *
+                    let len_est = dialog.res_body.len() *
                         u64::from(tune.gzip_size_x_est);
                     read_to_body(&mut decoder, len_est, tune)?
                 }
                 Encoding::Deflate => {
                     let mut decoder = DeflateDecoder::new(reader.as_read());
-                    let len_est = dialog.body.len() *
+                    let len_est = dialog.res_body.len() *
                         u64::from(tune.deflate_size_x_est);
                     read_to_body(&mut decoder, len_est, tune)?
                 }
                 _ => unreachable!("Not supported: {:?}", comp)
             }
         };
-        dialog.body = new_body.prepare()?;
-        println!("Body update: {:?}", dialog.body);
+        dialog.res_body = new_body.prepare()?;
+        println!("Body update: {:?}", dialog.res_body);
     }
 
     if chunked || compress.is_some() {

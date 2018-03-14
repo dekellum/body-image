@@ -96,7 +96,7 @@ impl<'a> Rec<'a> for Dialog {
     fn req_headers(&'a self) -> &'a http::HeaderMap  { &self.prolog.req_headers }
     fn req_body(&'a self)    -> &'a BodyImage        { &self.prolog.req_body }
     fn res_headers(&'a self) -> &'a http::HeaderMap  { &self.res_headers }
-    fn res_body(&'a self)    -> &'a BodyImage        { &self.body }
+    fn res_body(&'a self)    -> &'a BodyImage        { &self.res_body }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
