@@ -1,0 +1,22 @@
+BARC2 0000000002a0 DP 0006f 000e7 0000000000 0014a
+
+url: http://getstatuscode.com/204
+method: GET
+response-version: HTTP/1.1
+response-status: 204 No Content
+
+accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
+accept-language: en
+accept-encoding: br, gzip, deflate
+user-agent: Mozilla/5.0 (compatible; hyper-bowl 0.1.0; +http://github.com/dekellum/hyper-bowl)
+
+x-powered-by: PHP/7.0.28
+content-type: text/html; charset=UTF-8
+date: Wed, 14 Mar 2018 20:30:20 GMT
+accept-ranges: bytes
+server: LiteSpeed
+access-control-allow-origin: *
+access-control-allow-headers: origin, x-requested-with, content-type
+access-control-allow-methods: PUT, GET, POST, DELETE, OPTIONS
+connection: close
+

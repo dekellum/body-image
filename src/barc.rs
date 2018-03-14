@@ -617,4 +617,23 @@ mod tests {
         let record = reader.read(&tune).unwrap();
         assert!(record.is_none());
     }
+
+    #[test]
+    fn test_read_204_no_body() {
+        let tune = Tunables::new().unwrap();
+        let bfile = BarcFile::new("sample/204_no_body.barc");
+        let mut reader = bfile.reader().unwrap();
+        let record = reader.read(&tune).unwrap().unwrap();
+
+        println!("{:#?}", record);
+
+        assert_eq!(record.rec_type, RecordType::Dialog);
+        assert_eq!(record.meta.len(), 4);
+        assert_eq!(record.req_headers.len(), 4);
+        assert!(record.req_body.is_empty());
+        assert_eq!(record.res_headers.len(), 9);
+
+        assert!(record.res_body.is_empty());
+    }
+
 }
