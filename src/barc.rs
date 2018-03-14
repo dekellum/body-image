@@ -41,13 +41,13 @@ pub struct BarcFile {
     write_lock: Mutex<Option<File>>,
 }
 
-/// BARC File handle for write access
+/// BARC file handle for write access.
 pub struct BarcWriter<'a> {
     guard: MutexGuard<'a, Option<File>>
 }
 
-/// BARC File handle for read access. Each reader has its own File
-/// handle and position.
+/// BARC file handle for read access. Each reader has its own file handle
+/// and position.
 pub struct BarcReader {
     file: File
 }
@@ -156,6 +156,8 @@ const V2_RESERVE_HEAD: RecordHead = RecordHead {
 };
 
 impl BarcFile {
+    /// Return new instance for the specified path, which may be an
+    /// existing file, or one to be created when `writer` is opened.
     pub fn new<P>(path: P) -> BarcFile
         where P: AsRef<Path>
     {
@@ -198,7 +200,6 @@ impl BarcFile {
 }
 
 impl<'a> BarcWriter<'a> {
-
     /// Write a new record, returning the record's offset from the
     /// start of the BARC file. The writer position is then advanced
     /// to the end of the file, for the next `write`.
@@ -303,7 +304,10 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError>
 
 impl BarcReader {
 
-    /// Read and return the next Record or None if EOF.
+    /// Read and return the next Record or None if EOF. The provided
+    /// Tunables `max_body_ram` controls, depending on record sizes,
+    /// whether the request and response bodies are read directly
+    /// intro RAM or returned as memory mapped regions.
     pub fn read(&mut self, tune: &Tunables)
         -> Result<Option<Record>, FlError>
     {
