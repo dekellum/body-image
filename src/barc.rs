@@ -414,7 +414,7 @@ fn read_record_head_buf(r: &mut Read, mut buf: &mut [u8])
 
 // Read lowercase hexadecimal unsigned value directly from bytes.
 fn parse_hex<T>(buf: &[u8]) -> Result<T, FlError>
-where T: AddAssign<T> + From<u8> + ShlAssign<u8>
+    where T: AddAssign<T> + From<u8> + ShlAssign<u8>
 {
     let mut v = T::from(0u8);
     for d in buf {
@@ -430,7 +430,9 @@ where T: AddAssign<T> + From<u8> + ShlAssign<u8>
     Ok(v)
 }
 
-fn read_headers(r: &mut Read, len: usize) -> Result<http::HeaderMap, FlError> {
+fn read_headers(r: &mut Read, len: usize)
+    -> Result<http::HeaderMap, FlError>
+{
     if len == 0 {
         return Ok(http::HeaderMap::with_capacity(0));
     }
@@ -565,7 +567,6 @@ mod tests {
         assert_eq!(buf.len(), 1270);
         assert_eq!(&buf[0..15], b"<!doctype html>");
         assert_eq!(&buf[(buf.len()-8)..], b"</html>\n");
-
     }
 
     #[test]

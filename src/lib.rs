@@ -81,6 +81,7 @@ impl BodyImage {
             BodyImage::with_chunks_capacity(chunks)
         }
     }
+
     pub fn with_chunks_capacity(cap: usize) -> BodyImage {
         BodyImage {
             inner: BodyImageInner::Ram(Vec::with_capacity(cap)),
