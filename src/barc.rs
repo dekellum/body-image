@@ -199,7 +199,9 @@ impl BarcFile {
 
 impl<'a> BarcWriter<'a> {
 
-    pub fn write(&mut self, dialog: &Dialog) -> Result<(), FlError> {
+    pub fn write<R>(&mut self, rec: &'a R) -> Result<(), FlError>
+        where R: Rec<'a> + 'a
+    {
         // BarcFile::writer() guarantees Some(fout)
         let fout = &mut *self.guard.as_mut().unwrap();
 
@@ -208,19 +210,19 @@ impl<'a> BarcWriter<'a> {
         write_record_head(fout, &V2_RESERVE_HEAD)?;
         fout.flush()?;
 
-        let meta = write_headers(fout, &dialog.meta)?;
+        let meta = write_headers(fout, rec.meta())?;
 
-        let req_h = write_headers(fout, &dialog.prolog.req_headers)?;
-        let req_b = write_body(fout, &dialog.prolog.req_body)?;
+        let req_h = write_headers(fout, rec.req_headers())?;
+        let req_b = write_body(fout, rec.req_body())?;
 
-        let res_h = write_headers(fout, &dialog.res_headers)?;
+        let res_h = write_headers(fout, rec.res_headers())?;
 
         // Compute total thus far, excluding the fixed head length
         let mut len: u64 = (meta + req_h + res_h) as u64 + req_b;
 
-        assert!((len + dialog.body.len() + 2) <= V2_MAX_RECORD,
+        assert!((len + rec.res_body().len() + 2) <= V2_MAX_RECORD,
                 "body exceeds size limit");
-        let res_b = write_body(fout, &dialog.body)?;
+        let res_b = write_body(fout, rec.res_body())?;
 
         len += res_b; // New total
 
