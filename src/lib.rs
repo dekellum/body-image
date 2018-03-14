@@ -132,10 +132,7 @@ impl BodyImage {
 
     /// Return true if body is empty.
     pub fn is_empty(&self) -> bool {
-        match self.inner {
-            BodyImageInner::Ram(ref v) => v.is_empty(),
-            _ => false
-        }
+        self.len == 0
     }
 
     /// Return the current length of body in bytes.
