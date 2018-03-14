@@ -213,7 +213,7 @@ impl BodyImage {
     /// mapping the file.  Panics if self is in some other state.
     pub fn map(mut self) -> Result<Self, FlError> {
         if let BodyImageInner::FsRead(file) = self.inner {
-            // FIXME: Check zero length case?
+            assert!(self.len > 0);
             let map = unsafe { Mmap::map(&file)? };
             self.inner = BodyImageInner::MemMap(Mapped { map, _file: file });
             Ok(self)
