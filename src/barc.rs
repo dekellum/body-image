@@ -199,7 +199,10 @@ impl BarcFile {
 
 impl<'a> BarcWriter<'a> {
 
-    pub fn write<R>(&mut self, rec: &'a R) -> Result<(), FlError>
+    /// Write a new record, returning the record's offset from the
+    /// start of the BARC file. The writer position is then advanced
+    /// to the end of the file, for the next `write`.
+    pub fn write<R>(&mut self, rec: &'a R) -> Result<u64, FlError>
         where R: Rec<'a> + 'a
     {
         // BarcFile::writer() guarantees Some(fout)
@@ -237,9 +240,11 @@ impl<'a> BarcWriter<'a> {
             req_b,
             res_h })?;
 
+        // Seek to end and flush
         fout.seek(SeekFrom::End(0))?;
         fout.flush()?;
-        Ok(())
+
+        Ok(start)
     }
 }
 
