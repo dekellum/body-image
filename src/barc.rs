@@ -230,7 +230,7 @@ impl<'a> BarcWriter<'a> {
         fout.seek(SeekFrom::Start(start))?;
         write_record_head( fout, &RecordHead {
             len,
-            rec_type: RecordType::Dialog, // FIXME: option?
+            rec_type: rec.rec_type(),
             compress: Compression::Plain, // FIXME: compression support
             meta,
             req_h,
