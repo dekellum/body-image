@@ -302,7 +302,9 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError>
 }
 
 impl BarcReader {
-    pub fn read_record(&mut self, tune: &Tunables)
+
+    /// Read and return the next Record or None if EOF.
+    pub fn read(&mut self, tune: &Tunables)
         -> Result<Option<Record>, FlError>
     {
         let fin = &mut self.file;
@@ -357,6 +359,15 @@ impl BarcReader {
 
         Ok(Some(Record { rec_type, meta, req_headers, req_body,
                          res_headers, res_body }))
+    }
+
+    /// Seek to a known offset (e.g. 0 or returned from
+    /// `BarcWriter::write` for a specific record) from the start of
+    /// the BARC file. This effects subsequent calls to `read`, which
+    /// may error if the position is not to a valid record head.
+    pub fn seek(&mut self, offset: u64) -> Result<(), FlError> {
+        self.file.seek(SeekFrom::Start(offset))?;
+        Ok(())
     }
 }
 
@@ -526,7 +537,7 @@ mod tests {
         let tune = Tunables::new().unwrap();
         let bfile = BarcFile::new("sample/example.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.read_record(&tune).unwrap().unwrap();
+        let record = reader.read(&tune).unwrap().unwrap();
 
         println!("{:#?}", record);
 
@@ -544,7 +555,7 @@ mod tests {
         assert_eq!(&buf[0..15], b"<!doctype html>");
         assert_eq!(&buf[(buf.len()-8)..], b"</html>\n");
 
-        let record = reader.read_record(&tune).unwrap();
+        let record = reader.read(&tune).unwrap();
         assert!(record.is_none());
     }
 
@@ -555,9 +566,9 @@ mod tests {
             tune.max_body_ram = 1024; // < 1270 expected length
             let bfile = BarcFile::new("sample/example.barc");
             let mut reader = bfile.reader().unwrap();
-            let r = reader.read_record(&tune).unwrap().unwrap();
+            let r = reader.read(&tune).unwrap().unwrap();
 
-            let next = reader.read_record(&tune).unwrap();
+            let next = reader.read(&tune).unwrap();
             assert!(next.is_none());
 
             r
@@ -579,11 +590,11 @@ mod tests {
         let tune = Tunables::new().unwrap();
         let bfile = BarcFile::new("sample/empty.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.read_record(&tune).unwrap();
+        let record = reader.read(&tune).unwrap();
         assert!(record.is_none());
 
         // Shouldn't have moved
-        let record = reader.read_record(&tune).unwrap();
+        let record = reader.read(&tune).unwrap();
         assert!(record.is_none());
     }
 
@@ -592,14 +603,14 @@ mod tests {
         let tune = Tunables::new().unwrap();
         let bfile = BarcFile::new("sample/reserved.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.read_record(&tune).unwrap();
+        let record = reader.read(&tune).unwrap();
 
         println!("{:#?}", record);
 
         assert!(record.is_none());
 
         // Should seek back to do it again
-        let record = reader.read_record(&tune).unwrap();
+        let record = reader.read(&tune).unwrap();
         assert!(record.is_none());
     }
 }
