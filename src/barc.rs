@@ -52,6 +52,7 @@ pub struct BarcReader {
     file: File
 }
 
+#[derive(Debug)]
 struct RecordHead {
     len:              u64,
     rec_type:         RecordType,
