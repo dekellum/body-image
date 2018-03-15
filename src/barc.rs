@@ -15,7 +15,7 @@ use hyper::Chunk;
 use http::header::{HeaderName, HeaderValue};
 use memmap::MmapOptions;
 
-use super::{BodyImage, Dialog, Mapped, Tunables};
+use super::{BodyImage, Dialog, Mapped, Recorded, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -75,30 +75,14 @@ pub struct Record {
     res_body:         BodyImage,
 }
 
-/// Trait for access to BARC record-like objects by reference.
-pub trait Rec<'a> {
+/// Access to BARC record-like objects by reference. Extends
+/// `Recorded`.
+pub trait Rec<'a>: Recorded<'a> {
     /// Record type.
     fn rec_type(&'a self)    -> RecordType;
-
-    /// Map of "meta" headers for values which are not part of the
-    /// HTTP request or response headers.
-    fn meta(&'a self)        -> &'a http::HeaderMap;
-
-    /// Map of HTTP request headers.
-    fn req_headers(&'a self) -> &'a http::HeaderMap;
-
-    /// Request body (e.g for HTTP POST, etc.)
-    fn req_body(&'a self)    -> &'a BodyImage;
-
-    /// Map of HTTP response headers.
-    fn res_headers(&'a self) -> &'a http::HeaderMap;
-
-    /// Response body which may or may not be RAM resident.
-    fn res_body(&'a self)    -> &'a BodyImage;
 }
 
-impl<'a> Rec<'a> for Record {
-    fn rec_type(&'a self)    -> RecordType           { self.rec_type }
+impl<'a> Recorded<'a> for Record {
     fn meta(&'a self)        -> &'a http::HeaderMap  { &self.meta }
     fn req_headers(&'a self) -> &'a http::HeaderMap  { &self.req_headers }
     fn req_body(&'a self)    -> &'a BodyImage        { &self.req_body }
@@ -106,13 +90,12 @@ impl<'a> Rec<'a> for Record {
     fn res_body(&'a self)    -> &'a BodyImage        { &self.res_body }
 }
 
+impl<'a> Rec<'a> for Record {
+    fn rec_type(&'a self)    -> RecordType           { self.rec_type }
+}
+
 impl<'a> Rec<'a> for Dialog {
     fn rec_type(&'a self)    -> RecordType           { RecordType::Dialog }
-    fn meta(&'a self)        -> &'a http::HeaderMap  { &self.meta }
-    fn req_headers(&'a self) -> &'a http::HeaderMap  { &self.prolog.req_headers }
-    fn req_body(&'a self)    -> &'a BodyImage        { &self.prolog.req_body }
-    fn res_headers(&'a self) -> &'a http::HeaderMap  { &self.res_headers }
-    fn res_body(&'a self)    -> &'a BodyImage        { &self.res_body }
 }
 
 /// BARC record type.
@@ -143,7 +126,7 @@ impl RecordType {
     }
 }
 
-/// BARC record compression type
+/// BARC record compression mode.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Compression {
     /// Used internally.

@@ -380,6 +380,35 @@ pub struct Dialog {
     res_body:     BodyImage,
 }
 
+/// Access by reference for HTTP request/response recording
+/// types.
+pub trait Recorded<'a> {
+    /// Map of "meta" headers for values which are not strictly part
+    /// of the HTTP request or response headers.
+    fn meta(&'a self)        -> &'a http::HeaderMap;
+
+    /// Map of HTTP request headers.
+    fn req_headers(&'a self) -> &'a http::HeaderMap;
+
+    /// Request body (e.g for HTTP POST, etc.) which may or may not be
+    /// RAM resident.
+    fn req_body(&'a self)    -> &'a BodyImage;
+
+    /// Map of HTTP response headers.
+    fn res_headers(&'a self) -> &'a http::HeaderMap;
+
+    /// Response body which may or may not be RAM resident.
+    fn res_body(&'a self)    -> &'a BodyImage;
+}
+
+impl<'a> Recorded<'a> for Dialog {
+    fn meta(&'a self)        -> &'a http::HeaderMap  { &self.meta }
+    fn req_headers(&'a self) -> &'a http::HeaderMap  { &self.prolog.req_headers }
+    fn req_body(&'a self)    -> &'a BodyImage        { &self.prolog.req_body }
+    fn res_headers(&'a self) -> &'a http::HeaderMap  { &self.res_headers }
+    fn res_body(&'a self)    -> &'a BodyImage        { &self.res_body }
+}
+
 static META_URL: &'static [u8]             = b"url";
 static META_METHOD: &'static [u8]          = b"method";
 static META_RES_VERSION: &'static [u8]     = b"response-version";
