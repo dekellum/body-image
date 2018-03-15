@@ -534,7 +534,63 @@ fn map_body(file: &mut File, offset: u64, len: u64)
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use http::header::{AGE, REFERER, VIA};
     use super::*;
+    fn barc_test_file(name: &str) -> Result<PathBuf, FlError> {
+        let tpath = Path::new("target/testmp");
+        fs::create_dir_all(tpath)?;
+
+        let fname = tpath.join(name);
+        if fname.exists() {
+            fs::remove_file(&fname)?;
+        }
+        Ok(fname)
+    }
+
+    #[test]
+    fn test_write_read_small() {
+        let fname = barc_test_file("small.barc").unwrap();
+        let bfile = BarcFile::new(&fname);
+
+        let req_body_str = "REQUEST BODY";
+        let res_body_str = "RESPONSE BODY";
+
+        let rec_type = RecordType::Dialog;
+        let mut meta = http::HeaderMap::new();
+        meta.insert(AGE, "0".parse().unwrap());
+
+        let mut req_headers = http::HeaderMap::new();
+        req_headers.insert(REFERER, "http:://other.com".parse().unwrap());
+        let mut req_body = BodyImage::with_chunks_capacity(1);
+        req_body.save(req_body_str.into()).unwrap();
+
+        let mut res_headers = http::HeaderMap::new();
+        res_headers.insert(VIA, "test".parse().unwrap());
+        let mut res_body = BodyImage::with_chunks_capacity(1);
+        res_body.save(res_body_str.into()).unwrap();
+
+        let mut writer = bfile.writer().unwrap();
+        assert!(fname.exists()); // on writer creation
+        writer.write(&Record { rec_type, meta,
+                               req_headers, req_body,
+                               res_headers, res_body }).unwrap();
+
+        let tune = Tunables::new().unwrap();
+        let mut reader = bfile.reader().unwrap();
+        let record = reader.read(&tune).unwrap().unwrap();
+
+        println!("{:#?}", record);
+
+        assert_eq!(record.rec_type, RecordType::Dialog);
+        assert_eq!(record.meta.len(), 1);
+        assert_eq!(record.req_headers.len(), 1);
+        assert_eq!(record.req_body.len(), req_body_str.len() as u64);
+        assert_eq!(record.res_headers.len(), 1);
+        assert_eq!(record.res_body.len(), res_body_str.len() as u64);
+    }
 
     #[test]
     fn test_read_sample() {
