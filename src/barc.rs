@@ -597,6 +597,37 @@ mod tests {
         assert_eq!(record.res_body.len(), res_body_str.len() as u64);
     }
 
+
+    #[test]
+    fn test_write_read_empty_record() {
+        let fname = barc_test_file("empty_record.barc").unwrap();
+        let bfile = BarcFile::new(&fname);
+
+        let mut writer = bfile.writer().unwrap();
+        let rec_type = RecordType::Dialog;
+        let meta = http::HeaderMap::with_capacity(0);
+        let req_headers = http::HeaderMap::with_capacity(0);
+        let req_body = BodyImage::empty();
+        let res_headers = http::HeaderMap::with_capacity(0);
+        let res_body = BodyImage::empty();
+        writer.write(&Record { rec_type, meta,
+                               req_headers, req_body,
+                               res_headers, res_body }).unwrap();
+
+        let tune = Tunables::new().unwrap();
+        let mut reader = bfile.reader().unwrap();
+        let record = reader.read(&tune).unwrap().unwrap();
+
+        println!("{:#?}", record);
+
+        assert_eq!(record.rec_type, RecordType::Dialog);
+        assert_eq!(record.meta.len(), 0);
+        assert_eq!(record.req_headers.len(), 0);
+        assert_eq!(record.req_body.len(), 0);
+        assert_eq!(record.res_headers.len(), 0);
+        assert_eq!(record.res_body.len(), 0);
+    }
+
     #[test]
     fn test_read_sample() {
         let tune = Tunables::new().unwrap();
@@ -651,7 +682,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_empty() {
+    fn test_read_empty_file() {
         let tune = Tunables::new().unwrap();
         let bfile = BarcFile::new("sample/empty.barc");
         let mut reader = bfile.reader().unwrap();
@@ -696,5 +727,4 @@ mod tests {
 
         assert!(record.res_body.is_empty());
     }
-
 }
