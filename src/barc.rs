@@ -542,9 +542,9 @@ fn map_body(file: &mut File, offset: u64, len: u64)
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
-
     use http::header::{AGE, REFERER, VIA};
     use super::*;
+
     fn barc_test_file(name: &str) -> Result<PathBuf, FlError> {
         let tpath = Path::new("target/testmp");
         fs::create_dir_all(tpath)?;
