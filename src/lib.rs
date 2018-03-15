@@ -493,7 +493,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     let (resp_parts, body) = monolog.response.into_parts();
 
     // Result<BodyImage> based on CONTENT_LENGTH header.
-    let bf = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
+    let bi = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
         Some(v) => check_length(v, tune.max_body).and_then(|cl| {
             if cl > tune.max_body_ram {
                 BodyImage::with_fs()
@@ -505,7 +505,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     };
 
     // Unwrap BodyImage, returning any error as Future
-    let bf = match bf {
+    let bi = match bi {
         Ok(b) => b,
         Err(e) => { return Box::new(futerr(e)); }
     };
@@ -516,7 +516,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         version:     resp_parts.version,
         status:      resp_parts.status,
         res_headers: resp_parts.headers,
-        res_body:    bf,
+        res_body:    bi,
     };
 
     let s = body
