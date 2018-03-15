@@ -460,8 +460,11 @@ fn read_headers(r: &mut Read, len: usize)
     assert!( len > 2 );
 
     let mut buf = BytesMut::with_capacity(len);
-    r.read_exact(unsafe { buf.bytes_mut() })?;
-    unsafe { buf.advance_mut(len) };
+    unsafe {
+        r.read_exact(&mut buf.bytes_mut()[..len])?;
+        buf.advance_mut(len);
+    }
+
     // Don't exclude trailing CRLF, as its used to signal end of
     // headers (avoids Partial)
     parse_headers(&buf[..])
@@ -499,8 +502,10 @@ fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
     assert!( len > 2 );
 
     let mut buf = BytesMut::with_capacity(len);
-    r.read_exact(unsafe { buf.bytes_mut() })?;
-    unsafe { buf.advance_mut(len - 2) }; // Exclude final CRLF
+    unsafe {
+        r.read_exact(&mut buf.bytes_mut()[..len])?;
+        buf.advance_mut(len - 2); // Exclude final CRLF
+    }
 
     let chunk: Chunk = buf.freeze().into();
     let mut b = BodyImage::with_chunks_capacity(1);
