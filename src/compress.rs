@@ -38,7 +38,7 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables)
                 match *av {
                     Encoding::Chunked => chunked = true,
                     Encoding::Gzip | Encoding::Deflate => { // supported
-                        compress = Some(av.clone()); // FIXME: sad clone
+                        compress = Some(av.clone());
                         break 'headers;
                     }
                     Encoding::Identity => (),
