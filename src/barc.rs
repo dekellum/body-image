@@ -1,3 +1,5 @@
+//! Basic Archive (BARC) file format reader and writer.
+
 extern crate bytes;
 extern crate http;
 extern crate httparse;
@@ -36,6 +38,9 @@ pub const V2_MAX_HBLOCK: usize =        0xff_fff;
 /// 2<sup>40</sup> (1 TiB) - 1.
 pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
 
+
+/// Reference to a BARC File by `Path`, supporting up to 1 writer and N
+/// readers concurrently.
 pub struct BarcFile {
     path: Box<Path>,
     write_lock: Mutex<Option<File>>,

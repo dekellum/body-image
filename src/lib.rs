@@ -34,17 +34,22 @@ pub use hyper::Body as HyBody;
 
 pub type HyRequest = http::Request<HyBody>;
 
-/// An HTTP request or response body using one of the following
-/// buffering strategies:
+/// An HTTP request or response body as bytes, which may or may not be
+/// RAM resident.
+///
+/// A `BodyImage` is always in one of the following buffering strategy
+/// states:
 ///
 /// `Ram`
-/// : A vector of buffers in Random Access Memory.
+/// : A vector of one or more buffers in Random Access Memory, for
+///   read or write. This state is also used to represent an empty body
+///   (without allocation).
 ///
 /// `FsWrite`
 /// : Body in process of being written to a (temporary) file.
 ///
 /// `FsRead`
-/// : Body in a (temporary) file, ready for cursor based, single
+/// : Body in a (temporary) file, ready for position based, single
 ///   access, sequential read.
 ///
 /// `MemMap`
@@ -290,7 +295,7 @@ impl fmt::Debug for BodyImageInner {
     }
 }
 
-/// Reader for `BodyImage`.
+/// Provides a `Read` reference for a `BodyImage` in various states.
 pub enum BodyReader<'a> {
     FromRam(ChunksReader<'a>),
     FromFs(&'a File),
@@ -308,7 +313,7 @@ impl<'a> BodyReader<'a> {
     }
 }
 
-/// Specialized Reader for `BodyImage` state `Ram`.
+/// A specialized chaining reader for `BodyImage` in state `Ram`.
 pub struct ChunksReader<'a> {
     current: Cursor<&'a [u8]>,
     remainder: &'a [Chunk]
@@ -578,9 +583,11 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
 }
 
 /// Extension trait for `http::request::Builder`, to enable recording
-/// key portions of the request for the final `Dialog`. In particular
-/// any request body (e.g. POST, PUT) needs to be cloned in advance of
-/// finishing the request, because `hyper::Body` isn't `Clone`.
+/// key portions of the request for the final `Dialog`.
+///
+/// In particular any request body (e.g. POST, PUT) needs to be cloned
+/// in advance of finishing the request, because `hyper::Body` isn't
+/// `Clone`.
 ///
 /// _Limitation_: Currently only a contiguous RAM buffer (implementing
 /// `Into<Chunk>`and `Clone`) is supported as the request body.
