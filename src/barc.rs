@@ -52,6 +52,7 @@ pub struct BarcReader {
     file: File
 }
 
+/// A parsed record head.
 #[derive(Debug)]
 struct RecordHead {
     len:              u64,
@@ -63,6 +64,7 @@ struct RecordHead {
     res_h:            usize,
 }
 
+/// An owned BARC record.
 #[derive(Debug)]
 pub struct Record {
     rec_type:         RecordType,
@@ -73,12 +75,25 @@ pub struct Record {
     res_body:         BodyImage,
 }
 
+/// Trait for access to BARC record-like objects by reference.
 pub trait Rec<'a> {
+    /// Record type.
     fn rec_type(&'a self)    -> RecordType;
+
+    /// Map of "meta" headers for values which are not part of the
+    /// HTTP request or response headers.
     fn meta(&'a self)        -> &'a http::HeaderMap;
+
+    /// Map of HTTP request headers.
     fn req_headers(&'a self) -> &'a http::HeaderMap;
+
+    /// Request body (e.g for HTTP POST, etc.)
     fn req_body(&'a self)    -> &'a BodyImage;
+
+    /// Map of HTTP response headers.
     fn res_headers(&'a self) -> &'a http::HeaderMap;
+
+    /// Response body which may or may not be RAM resident.
     fn res_body(&'a self)    -> &'a BodyImage;
 }
 
@@ -100,9 +115,14 @@ impl<'a> Rec<'a> for Dialog {
     fn res_body(&'a self)    -> &'a BodyImage        { &self.res_body }
 }
 
+/// BARC record type.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RecordType {
+    /// Used internally to _reserve_ a BARC record head.
     Reserved,
+
+    /// A complete HTTP request and response dialog between a client
+    /// and server. See `Dialog`.
     Dialog,
 }
 
@@ -123,9 +143,13 @@ impl RecordType {
     }
 }
 
+/// BARC record compression type
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Compression {
+    /// Used internally.
     Unknown,
+
+    /// No compression was added on write of the record.
     Plain,
 }
 
@@ -600,7 +624,6 @@ mod tests {
         let record = reader.read(&tune).unwrap();
         assert!(record.is_none());
     }
-
 
     #[test]
     fn test_write_read_empty_record() {

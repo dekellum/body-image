@@ -12,8 +12,12 @@ use hyper::header::{ContentEncoding, Encoding, Header, Raw};
 use super::{BodyImage, Dialog, META_RES_DECODED, Tunables};
 
 /// Decode any gzip or deflate Transfer-Encoding or Content-Encoding
-/// into a new `BodyItem`, and update `Dialog` accordingly.
-pub fn decode_body(dialog: &mut Dialog, tune: &Tunables) -> Result<(), FlError> {
+/// into a new `BodyItem`, and update `Dialog` accordingly. The
+/// provided `Tunables` controls decompression buffer sizes and if the
+/// final `BodyItem` will be in `Ram` or `FsRead`.
+pub fn decode_body(dialog: &mut Dialog, tune: &Tunables)
+    -> Result<(), FlError>
+{
     let headers = &dialog.res_headers;
     let encodings = headers
         .get_all(http::header::TRANSFER_ENCODING)
