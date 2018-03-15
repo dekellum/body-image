@@ -596,6 +596,9 @@ mod tests {
         assert_eq!(record.req_body.len(), req_body_str.len() as u64);
         assert_eq!(record.res_headers.len(), 1);
         assert_eq!(record.res_body.len(), res_body_str.len() as u64);
+
+        let record = reader.read(&tune).unwrap();
+        assert!(record.is_none());
     }
 
 
@@ -627,6 +630,9 @@ mod tests {
         assert_eq!(record.req_body.len(), 0);
         assert_eq!(record.res_headers.len(), 0);
         assert_eq!(record.res_body.len(), 0);
+
+        let record = reader.read(&tune).unwrap();
+        assert!(record.is_none());
     }
 
     #[test]
