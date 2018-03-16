@@ -392,8 +392,7 @@ pub struct Dialog {
     res_body:     BodyImage,
 }
 
-/// Access by reference for HTTP request recording
-/// types.
+/// Access by reference for HTTP request recording types.
 pub trait RequestRecorded {
     /// Map of HTTP request headers.
     fn req_headers(&self) -> &http::HeaderMap;
@@ -403,8 +402,7 @@ pub trait RequestRecorded {
     fn req_body(&self)    -> &BodyImage;
 }
 
-/// Access by reference for HTTP request/response recording
-/// types.
+/// Access by reference for HTTP request and response recording types.
 pub trait Recorded: RequestRecorded {
     /// Map of _meta_-headers for values which are not strictly part
     /// of the HTTP request or response headers.
@@ -438,13 +436,24 @@ impl Recorded for Dialog {
     fn res_body(&self)    -> &BodyImage            { &self.res_body }
 }
 
-static META_URL: &'static [u8]             = b"url";
-static META_METHOD: &'static [u8]          = b"method";
-static META_RES_VERSION: &'static [u8]     = b"response-version";
-static META_RES_STATUS: &'static [u8]      = b"response-status";
+/// Meta `HeaderName` for the complete URL used in the request.
+pub static META_URL: &'static [u8]             = b"url";
 
-/// List of encodings decoded, in HTTP content-encoding headers format
-static META_RES_DECODED: &'static [u8]     = b"response-decoded";
+/// Meta `HeaderName` for the HTTP method used in the request,
+/// e.g. "GET", "POST", etc.
+pub static META_METHOD: &'static [u8]          = b"method";
+
+/// Meta `HeaderName` for the HTTP response version, e.g. "HTTP/1.1",
+/// "HTTP/2", etc.
+pub static META_RES_VERSION: &'static [u8]     = b"response-version";
+
+/// Meta `HeaderName` for the response status code, e.g. "200 OK"
+pub static META_RES_STATUS: &'static [u8]      = b"response-status";
+
+/// Meta `HeaderName` for a list of content or transfer encodings
+/// decoded for the current response body. The value is in HTTP
+/// content-encoding header format, e.g. "chunked, gzip".
+pub static META_RES_DECODED: &'static [u8]     = b"response-decoded";
 
 impl Dialog {
     /// Prepare the response body for reading and generate meta
