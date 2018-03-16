@@ -660,6 +660,7 @@ mod tests {
         assert!(record.req_body.is_empty());
         assert_eq!(record.res_headers.len(), 11);
 
+        assert!(record.res_body.is_ram());
         let mut body_reader = record.res_body.reader();
         let br = body_reader.as_read();
         let mut buf = Vec::with_capacity(2048);
@@ -689,6 +690,7 @@ mod tests {
 
         println!("{:#?}", record);
 
+        assert!(!record.res_body.is_ram());
         let mut body_reader = record.res_body.reader();
         let br = body_reader.as_read();
         let mut buf = Vec::with_capacity(2048);
