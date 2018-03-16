@@ -624,13 +624,7 @@ mod tests {
 
         let mut writer = bfile.writer().unwrap();
 
-        writer.write(&Record {
-            rec_type: RecordType::Dialog,
-            meta: http::HeaderMap::with_capacity(0),
-            req_headers: http::HeaderMap::with_capacity(0),
-            req_body: BodyImage::empty(),
-            res_headers: http::HeaderMap::with_capacity(0),
-            res_body: BodyImage::empty() }).unwrap();
+        writer.write(&Record::default()).unwrap();
 
         let tune = Tunables::new().unwrap();
         let mut reader = bfile.reader().unwrap();
