@@ -780,6 +780,41 @@ mod tests {
     }
 
     #[test]
+    fn test_read_short_record_head() {
+        let tune = Tunables::new().unwrap();
+        let bfile = BarcFile::new("sample/reserved.barc");
+        let mut reader = bfile.reader().unwrap();
+
+        // Seek to bad position
+        reader.seek(1).unwrap();
+
+        if let Err(e) = reader.read(&tune) {
+            println!("{}", e);
+            assert!(e.to_string().contains("Incomplete header"));
+        } else {
+            panic!("Should not succeed!");
+        }
+    }
+
+    #[test]
+    fn test_read_bad_record_head() {
+        let tune = Tunables::new().unwrap();
+        let bfile = BarcFile::new("sample/example.barc");
+        let mut reader = bfile.reader().unwrap();
+
+        // Seek to bad position
+        reader.seek(1).unwrap();
+
+        if let Err(e) = reader.read(&tune) {
+            println!("{}", e);
+            assert!(e.to_string().contains("Invalid header suffix"));
+        } else {
+            panic!("Should not succeed!");
+        }
+    }
+
+
+    #[test]
     fn test_read_204_no_body() {
         let tune = Tunables::new().unwrap();
         let bfile = BarcFile::new("sample/204_no_body.barc");
