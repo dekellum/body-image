@@ -37,13 +37,13 @@ pub type HyRequest = http::Request<HyBody>;
 /// An HTTP request or response body as bytes, which may or may not be
 /// RAM resident.
 ///
-/// A `BodyImage` is always in one of the following buffering strategy
-/// states:
+/// A `BodyImage` is always in one of the following states, as a
+/// buffering strategy:
 ///
 /// `Ram`
-/// : A vector of one or more buffers in Random Access Memory, for
-///   read or write. This state is also used to represent an empty body
-///   (without allocation).
+/// : A vector of one or more byte buffers in Random Access Memory,
+///   for read or write. This state is also used to represent an empty
+///   body (without allocation).
 ///
 /// `FsWrite`
 /// : Body in process of being written to a (temporary) file.
