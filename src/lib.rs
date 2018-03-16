@@ -437,23 +437,23 @@ impl Recorded for Dialog {
 }
 
 /// Meta `HeaderName` for the complete URL used in the request.
-pub static META_URL: &'static [u8]             = b"url";
+pub static META_URL: &[u8]             = b"url";
 
 /// Meta `HeaderName` for the HTTP method used in the request,
 /// e.g. "GET", "POST", etc.
-pub static META_METHOD: &'static [u8]          = b"method";
+pub static META_METHOD: &[u8]          = b"method";
 
 /// Meta `HeaderName` for the HTTP response version, e.g. "HTTP/1.1",
 /// "HTTP/2", etc.
-pub static META_RES_VERSION: &'static [u8]     = b"response-version";
+pub static META_RES_VERSION: &[u8]     = b"response-version";
 
 /// Meta `HeaderName` for the response status code, e.g. "200 OK"
-pub static META_RES_STATUS: &'static [u8]      = b"response-status";
+pub static META_RES_STATUS: &[u8]      = b"response-status";
 
 /// Meta `HeaderName` for a list of content or transfer encodings
 /// decoded for the current response body. The value is in HTTP
 /// content-encoding header format, e.g. "chunked, gzip".
-pub static META_RES_DECODED: &'static [u8]     = b"response-decoded";
+pub static META_RES_DECODED: &[u8]     = b"response-decoded";
 
 impl Dialog {
     /// Prepare the response body for reading and generate meta
