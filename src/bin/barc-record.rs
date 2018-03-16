@@ -1,14 +1,14 @@
 extern crate failure;
 extern crate http;
-extern crate hyper_barc;
+extern crate hyper_bowl;
 
 use std::process;
 
 use failure::Error as FlError;
 
-use hyper_barc::{fetch, RequestRecordable, Tunables};
-use hyper_barc::barc::BarcFile;
-use hyper_barc::compress::decode_body;
+use hyper_bowl::{fetch, RequestRecordable, Tunables};
+use hyper_bowl::barc::BarcFile;
+use hyper_bowl::compress::decode_body;
 
 fn main() {
     let mut args = std::env::args();
