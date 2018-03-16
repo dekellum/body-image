@@ -644,6 +644,58 @@ mod tests {
     }
 
     #[test]
+    fn test_write_read_parallel() {
+        let fname = barc_test_file("parallel.barc").unwrap();
+        let bfile = BarcFile::new(&fname);
+        // Temp writer to ensure file is created
+        {
+            let mut _writer = bfile.writer().unwrap();
+        }
+
+        let res_body_str = "RESPONSE BODY";
+
+        // Estabilish reader.
+        let tune = Tunables::new().unwrap();
+        let mut reader = bfile.reader().unwrap();
+        let record = reader.read(&tune).unwrap();
+        assert!(record.is_none());
+
+        // Write record with new writer
+        let mut writer = bfile.writer().unwrap();
+        let mut res_body = BodyImage::with_chunks_capacity(1);
+        res_body.save(res_body_str.into()).unwrap();
+
+        let offset = writer.write(&Record {
+            res_body, ..Record::default() }).unwrap();
+        assert_eq!(offset, 0);
+        reader.seek(offset).unwrap();
+
+        let record = reader.read(&tune).unwrap().unwrap();
+
+        println!("{:#?}", record);
+
+        assert_eq!(record.rec_type, RecordType::Dialog);
+        assert_eq!(record.meta.len(), 0);
+        assert_eq!(record.req_headers.len(), 0);
+        assert_eq!(record.req_body.len(), 0);
+        assert_eq!(record.res_headers.len(), 0);
+        assert_eq!(record.res_body.len(), res_body_str.len() as u64);
+
+        let record = reader.read(&tune).unwrap();
+        assert!(record.is_none());
+
+        // Write another, empty
+        writer.write(&Record::default()).unwrap();
+
+        let record = reader.read(&tune).unwrap().unwrap();
+        assert_eq!(record.rec_type, RecordType::Dialog);
+        assert_eq!(record.res_body.len(), 0);
+
+        let record = reader.read(&tune).unwrap();
+        assert!(record.is_none());
+    }
+
+    #[test]
     fn test_read_sample() {
         let tune = Tunables::new().unwrap();
         let bfile = BarcFile::new("sample/example.barc");
