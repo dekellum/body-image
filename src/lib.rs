@@ -266,6 +266,10 @@ impl BodyImage {
     }
 }
 
+impl Default for BodyImage {
+    fn default() -> BodyImage { BodyImage::empty() }
+}
+
 impl fmt::Debug for BodyImageInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {

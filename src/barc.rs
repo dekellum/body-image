@@ -69,7 +69,7 @@ struct RecordHead {
 }
 
 /// An owned BARC record.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Record {
     rec_type:         RecordType,
     meta:             http::HeaderMap,
@@ -128,6 +128,11 @@ impl RecordType {
             _ => Err(format_err!("Unknown record type flag [{}]", f))
         }
     }
+}
+
+impl Default for RecordType {
+    /// Defaults to `Dialog`.
+    fn default() -> RecordType { RecordType::Dialog }
 }
 
 /// BARC record compression mode.
