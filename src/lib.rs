@@ -359,20 +359,23 @@ impl<'a> Read for ChunksReader<'a> {
 
 /// Saved extract from an HTTP request.
 #[derive(Debug)]
-pub struct Prolog {
+struct Prolog {
     method:       http::Method,
     url:          http::Uri,
     req_headers:  http::HeaderMap,
     req_body:     BodyImage,
 }
 
-/// An `http::Request` with extracted Prolog.
+/// An `http::Request` and recording.
+#[derive(Debug)]
 pub struct RequestRecord {
     request:      HyRequest,
     prolog:       Prolog,
 }
 
-/// Temporary `http::Response` wrapper, preserving Prolog.
+/// Temporary `http::Response` wrapper, with preserved request
+/// recording.
+#[derive(Debug)]
 struct Monolog {
     prolog:       Prolog,
     response:     http::Response<HyBody>,
@@ -389,33 +392,50 @@ pub struct Dialog {
     res_body:     BodyImage,
 }
 
-/// Access by reference for HTTP request/response recording
+/// Access by reference for HTTP request recording
 /// types.
-pub trait Recorded<'a> {
-    /// Map of "meta" headers for values which are not strictly part
-    /// of the HTTP request or response headers.
-    fn meta(&'a self)        -> &'a http::HeaderMap;
-
+pub trait RequestRecorded {
     /// Map of HTTP request headers.
-    fn req_headers(&'a self) -> &'a http::HeaderMap;
+    fn req_headers(&self) -> &http::HeaderMap;
 
     /// Request body (e.g for HTTP POST, etc.) which may or may not be
     /// RAM resident.
-    fn req_body(&'a self)    -> &'a BodyImage;
-
-    /// Map of HTTP response headers.
-    fn res_headers(&'a self) -> &'a http::HeaderMap;
-
-    /// Response body which may or may not be RAM resident.
-    fn res_body(&'a self)    -> &'a BodyImage;
+    fn req_body(&self)    -> &BodyImage;
 }
 
-impl<'a> Recorded<'a> for Dialog {
-    fn meta(&'a self)        -> &'a http::HeaderMap  { &self.meta }
-    fn req_headers(&'a self) -> &'a http::HeaderMap  { &self.prolog.req_headers }
-    fn req_body(&'a self)    -> &'a BodyImage        { &self.prolog.req_body }
-    fn res_headers(&'a self) -> &'a http::HeaderMap  { &self.res_headers }
-    fn res_body(&'a self)    -> &'a BodyImage        { &self.res_body }
+/// Access by reference for HTTP request/response recording
+/// types.
+pub trait Recorded: RequestRecorded {
+    /// Map of _meta_-headers for values which are not strictly part
+    /// of the HTTP request or response headers.
+    fn meta(&self)        -> &http::HeaderMap;
+
+    /// Map of HTTP response headers.
+    fn res_headers(&self) -> &http::HeaderMap;
+
+    /// Response body which may or may not be RAM resident.
+    fn res_body(&self)    -> &BodyImage;
+}
+
+impl RequestRecord {
+    /// Return the HTTP request.
+    pub fn request(&self) -> &HyRequest            { &self.request }
+}
+
+impl RequestRecorded for RequestRecord {
+    fn req_headers(&self) -> &http::HeaderMap      { &self.prolog.req_headers }
+    fn req_body(&self)    -> &BodyImage            { &self.prolog.req_body }
+}
+
+impl RequestRecorded for Dialog {
+    fn req_headers(&self) -> &http::HeaderMap      { &self.prolog.req_headers }
+    fn req_body(&self)    -> &BodyImage            { &self.prolog.req_body }
+}
+
+impl Recorded for Dialog {
+    fn meta(&self)        -> &http::HeaderMap      { &self.meta }
+    fn res_headers(&self) -> &http::HeaderMap      { &self.res_headers }
+    fn res_body(&self)    -> &BodyImage            { &self.res_body }
 }
 
 static META_URL: &'static [u8]             = b"url";

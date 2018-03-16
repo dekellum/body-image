@@ -17,7 +17,7 @@ use hyper::Chunk;
 use http::header::{HeaderName, HeaderValue};
 use memmap::MmapOptions;
 
-use super::{BodyImage, Dialog, Mapped, Recorded, Tunables};
+use super::{BodyImage, Dialog, Mapped, Recorded, RequestRecorded, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -81,25 +81,28 @@ pub struct Record {
 
 /// Access to BARC record-like objects by reference. Extends
 /// `Recorded`.
-pub trait Rec<'a>: Recorded<'a> {
+pub trait RecordedType: Recorded {
     /// Record type.
-    fn rec_type(&'a self)    -> RecordType;
+    fn rec_type(&self)    -> RecordType;
 }
 
-impl<'a> Recorded<'a> for Record {
-    fn meta(&'a self)        -> &'a http::HeaderMap  { &self.meta }
-    fn req_headers(&'a self) -> &'a http::HeaderMap  { &self.req_headers }
-    fn req_body(&'a self)    -> &'a BodyImage        { &self.req_body }
-    fn res_headers(&'a self) -> &'a http::HeaderMap  { &self.res_headers }
-    fn res_body(&'a self)    -> &'a BodyImage        { &self.res_body }
+impl RequestRecorded for Record {
+    fn req_headers(&self) -> &http::HeaderMap  { &self.req_headers }
+    fn req_body(&self)    -> &BodyImage        { &self.req_body }
 }
 
-impl<'a> Rec<'a> for Record {
-    fn rec_type(&'a self)    -> RecordType           { self.rec_type }
+impl Recorded for Record {
+    fn meta(&self)        -> &http::HeaderMap  { &self.meta }
+    fn res_headers(&self) -> &http::HeaderMap  { &self.res_headers }
+    fn res_body(&self)    -> &BodyImage        { &self.res_body }
 }
 
-impl<'a> Rec<'a> for Dialog {
-    fn rec_type(&'a self)    -> RecordType           { RecordType::Dialog }
+impl RecordedType for Record {
+    fn rec_type(&self)    -> RecordType        { self.rec_type }
+}
+
+impl RecordedType for Dialog {
+    fn rec_type(&self)    -> RecordType        { RecordType::Dialog }
 }
 
 /// BARC record type.
@@ -220,8 +223,8 @@ impl<'a> BarcWriter<'a> {
     /// Write a new record, returning the record's offset from the
     /// start of the BARC file. The writer position is then advanced
     /// to the end of the file, for the next `write`.
-    pub fn write<'b, R>(&mut self, rec: &'b R) -> Result<u64, FlError>
-        where R: Rec<'b>
+    pub fn write<R>(&mut self, rec: &R) -> Result<u64, FlError>
+        where R: RecordedType
     {
         // BarcFile::writer() guarantees Some(fout)
         let fout = &mut *self.guard.as_mut().unwrap();
@@ -812,7 +815,6 @@ mod tests {
             panic!("Should not succeed!");
         }
     }
-
 
     #[test]
     fn test_read_204_no_body() {
