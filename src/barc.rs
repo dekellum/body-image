@@ -618,15 +618,14 @@ mod tests {
         let bfile = BarcFile::new(&fname);
 
         let mut writer = bfile.writer().unwrap();
-        let rec_type = RecordType::Dialog;
-        let meta = http::HeaderMap::with_capacity(0);
-        let req_headers = http::HeaderMap::with_capacity(0);
-        let req_body = BodyImage::empty();
-        let res_headers = http::HeaderMap::with_capacity(0);
-        let res_body = BodyImage::empty();
-        writer.write(&Record { rec_type, meta,
-                               req_headers, req_body,
-                               res_headers, res_body }).unwrap();
+
+        writer.write(&Record {
+            rec_type: RecordType::Dialog,
+            meta: http::HeaderMap::with_capacity(0),
+            req_headers: http::HeaderMap::with_capacity(0),
+            req_body: BodyImage::empty(),
+            res_headers: http::HeaderMap::with_capacity(0),
+            res_body: BodyImage::empty() }).unwrap();
 
         let tune = Tunables::new().unwrap();
         let mut reader = bfile.reader().unwrap();
