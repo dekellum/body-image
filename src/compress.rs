@@ -17,7 +17,7 @@ use super::{BodyImage, Dialog, META_RES_DECODED, Tunables};
 /// into a new `BodyItem`, and update `Dialog` accordingly. The
 /// provided `Tunables` controls decompression buffer sizes and if the
 /// final `BodyItem` will be in `Ram` or `FsRead`.
-pub fn decode_body(dialog: &mut Dialog, tune: &Tunables)
+pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     -> Result<(), FlError>
 {
     let headers = &dialog.res_headers;
