@@ -113,6 +113,8 @@ impl BodyImage {
     /// Create a new instance from a new temporary file, in state
     /// `FsWrite`.
     pub fn with_fs() -> Result<BodyImage, FlError> {
+        // FIXME: Add control for setting dir for the tempfile,
+        // possibly via Tunables.
         let f = tempfile()?;
         Ok(BodyImage {
             state: BodyState::FsWrite(f),
