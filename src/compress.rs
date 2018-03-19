@@ -59,13 +59,13 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables)
                 Encoding::Gzip => {
                     let mut decoder = GzDecoder::new(reader.as_read());
                     let len_est = dialog.res_body.len() *
-                        u64::from(tune.gzip_size_x_est);
+                        u64::from(tune.size_estimate_gzip());
                     read_to_body(&mut decoder, len_est, tune)?
                 }
                 Encoding::Deflate => {
                     let mut decoder = DeflateDecoder::new(reader.as_read());
                     let len_est = dialog.res_body.len() *
-                        u64::from(tune.deflate_size_x_est);
+                        u64::from(tune.size_estimate_deflate());
                     read_to_body(&mut decoder, len_est, tune)?
                 }
                 _ => unreachable!("Not supported: {:?}", comp)
@@ -93,7 +93,7 @@ pub fn decode_body(dialog: &mut Dialog, tune: &Tunables)
 fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
     -> Result<BodyImage, FlError>
 {
-    if len_estimate > tune.max_body_ram {
+    if len_estimate > tune.max_body_ram() {
         let b = BodyImage::with_fs()?;
         return read_to_body_fs(r, b, tune);
     }
@@ -102,7 +102,7 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
 
     let mut size: u64 = 0;
     'eof: loop {
-        let mut buf = BytesMut::with_capacity(tune.decode_buffer_ram);
+        let mut buf = BytesMut::with_capacity(tune.decode_buffer_ram());
         'fill: loop {
             let len = match r.read(unsafe { buf.bytes_mut() }) {
                 Ok(len) => len,
@@ -129,10 +129,10 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
             break 'eof;
         }
         size += len;
-        if size > tune.max_body {
+        if size > tune.max_body() {
             bail!("Decompressed response stream too long: {}+", size);
         }
-        if size > tune.max_body_ram {
+        if size > tune.max_body_ram() {
             body.write_back()?;
             println!("Write (Fs) decoded buf len {}", len);
             body.write_all(&buf)?;
@@ -148,7 +148,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodyImage, tune: &Tunables)
     -> Result<BodyImage, FlError>
 {
     let mut size: u64 = 0;
-    let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs);
+    let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs());
     loop {
         let len = match r.read(unsafe { buf.bytes_mut() }) {
             Ok(len) => len,
@@ -166,7 +166,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodyImage, tune: &Tunables)
         unsafe { buf.advance_mut(len) };
 
         size += len as u64;
-        if size > tune.max_body {
+        if size > tune.max_body() {
             bail!("Decompressed response stream too long: {}+", size);
         }
         println!("Write (Fs) decoded buf len {}", len);

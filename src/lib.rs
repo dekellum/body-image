@@ -497,30 +497,147 @@ impl Dialog {
     }
 }
 
-/// A collection of size limits and performance tuning constants.
-#[derive(Clone, Copy)]
+/// A collection of size limits and performance tuning
+/// constants. Setters are available via the `Tuner` class.
+#[derive(Debug, Clone, Copy)]
 pub struct Tunables {
     max_body_ram:            u64,
     max_body:                u64,
     decode_buffer_ram:       usize,
     decode_buffer_fs:        usize,
-    deflate_size_x_est:      u16,
-    gzip_size_x_est:         u16,
+    size_estimate_deflate:   u16,
+    size_estimate_gzip:      u16,
 }
 
 impl Tunables {
+    /// Construct with default values.
     pub fn new() -> Tunables {
         Tunables {
-            max_body_ram:        96 * 1024,
-            max_body:     48 * 1024 * 1024,
+            max_body_ram:       192 * 1024,
+            max_body:   1024 * 1024 * 1024,
             decode_buffer_ram:    8 * 1024,
             decode_buffer_fs:    64 * 1024,
-            deflate_size_x_est:          4,
-            gzip_size_x_est:             5,
+            size_estimate_deflate:       4,
+            size_estimate_gzip:          5,
         }
     }
 
-    // FIXME: Add builder interface, setters
+    /// Return the maximum body size in bytes allowed in RAM,
+    /// e.g. before writing to a temporary file, or memory mapping
+    /// instead of direct, bulk read. Default: 192 KiB.
+    pub fn max_body_ram(&self) -> u64 {
+        self.max_body_ram
+    }
+
+    /// Return the maximum body size in bytes allowed in any form (RAM
+    /// or file). Default: 1 GiB.
+    pub fn max_body(&self) -> u64 {
+        self.max_body
+    }
+
+    /// Return the buffer size in bytes to use for decoding, with
+    /// output to RAM. Default: 8 KiB.
+    pub fn decode_buffer_ram(&self) -> usize {
+        self.decode_buffer_ram
+    }
+
+    /// Return the buffer size in bytes to use for decoding, with
+    /// output to a file. Default: 64 KiB.
+    pub fn decode_buffer_fs(&self) -> usize {
+        self.decode_buffer_fs
+    }
+
+    /// Return the size estimate, as an integer multiple of the
+    /// encoded buffer size, for the _gzip_ compression algorithm.
+    /// Default: 5.
+    pub fn size_estimate_gzip(&self) -> u16 {
+        self.size_estimate_gzip
+    }
+
+    /// Return the size estimate, as an integer multiple of the
+    /// encoded buffer size, for the _deflate_ compression algorithm.
+    /// Default: 4.
+    pub fn size_estimate_deflate(&self) -> u16 {
+        self.size_estimate_deflate
+    }
+}
+
+impl Default for Tunables {
+    fn default() -> Self { Tunables::new() }
+}
+
+/// A builder for `Tunables`.  Invariants are asserted in the various
+/// setters and `finish`.
+#[derive(Clone, Copy)]
+pub struct Tuner {
+    template: Tunables
+}
+
+impl Tuner {
+
+    /// New `Tuner` with all `Tunables` defaults.
+    pub fn new() -> Tuner {
+        Tuner { template: Tunables::new() }
+    }
+
+    /// Set the maximum body size in bytes allowed in RAM.
+    pub fn set_max_body_ram(&mut self, size: u64) -> &mut Tuner {
+        self.template.max_body_ram = size;
+        self
+    }
+
+    /// Set the maximum body size in bytes allowed in any form (RAM or
+    /// file). This must be larger than `max_body_ram`, as asserted on
+    /// `finish`.
+    pub fn set_max_body(&mut self, size: u64) -> &mut Tuner {
+        self.template.max_body = size;
+        self
+    }
+
+    /// Set the buffer size in bytes to use for decoding, with output
+    /// to RAM.
+    pub fn set_decode_buffer_ram(&mut self, size: usize) -> &mut Tuner {
+        assert!(size > 0, "decode_buffer_ram must be greater than zero");
+        self.template.decode_buffer_ram = size;
+        self
+    }
+
+    /// Set the buffer size in bytes to use for decoding, with output
+    /// to a file.
+    pub fn set_decode_buffer_fs(&mut self, size: usize) -> &mut Tuner {
+        assert!(size > 0, "decode_buffer_fs must be greater than zero");
+        self.template.decode_buffer_fs = size;
+        self
+    }
+
+    /// Set the size estimate, as an integer multiple of the
+    /// encoded buffer size, for the _gzip_ compression algorithm.
+    pub fn set_size_estimate_gzip(&mut self, multiple: u16) -> &mut Tuner {
+        assert!(multiple > 0, "size_estimate_gzip must be >= 1" );
+        self.template.size_estimate_gzip = multiple;
+        self
+    }
+
+    /// Set the size estimate, as an integer multiple of the
+    /// encoded buffer size, for the _deflate_ compression algorithm.
+    pub fn set_size_estimate_deflate(&mut self, multiple: u16) -> &mut Tuner {
+        assert!(multiple > 0, "size_estimate_deflate must be >= 1" );
+        self.template.size_estimate_deflate = multiple;
+        self
+    }
+
+    /// Finish building, asserting any remaining invariants, and
+    /// return a new `Tunables` instance.
+    pub fn finish(&self) -> Tunables {
+        let t = self.template;
+        assert!(t.max_body_ram <= t.max_body,
+                "max_body_ram can't be greater than max_body");
+        t
+    }
+}
+
+impl Default for Tuner {
+    fn default() -> Self { Tuner::new() }
 }
 
 // Run an HTTP request to completion, returning the full `Dialog`
@@ -564,14 +681,14 @@ fn resp_future(monolog: Monolog, tune: Tunables)
 
     // Result<BodyImage> based on CONTENT_LENGTH header.
     let bi = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
-        Some(v) => check_length(v, tune.max_body).and_then(|cl| {
-            if cl > tune.max_body_ram {
+        Some(v) => check_length(v, tune.max_body()).and_then(|cl| {
+            if cl > tune.max_body_ram() {
                 BodyImage::with_fs()
             } else {
                 Ok(BodyImage::with_ram(cl))
             }
         }),
-        None => Ok(BodyImage::with_ram(tune.max_body_ram))
+        None => Ok(BodyImage::with_ram(tune.max_body_ram()))
     };
 
     // Unwrap BodyImage, returning any error as Future
@@ -593,10 +710,10 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         .map_err(FlError::from)
         .fold(dialog, move |mut dialog, chunk| {
             let new_len = dialog.res_body.len() + (chunk.len() as u64);
-            if new_len > tune.max_body {
+            if new_len > tune.max_body() {
                 bail!("Response stream too long: {}+", new_len);
             } else {
-                if dialog.res_body.is_ram() && new_len > tune.max_body_ram {
+                if dialog.res_body.is_ram() && new_len > tune.max_body_ram() {
                     dialog.res_body.write_back()?;
                 }
                 println!("to save chunk (len: {})", chunk.len());
@@ -728,7 +845,9 @@ mod tests {
 
     #[test]
     fn test_large_https() {
-        let tune = Tunables::new();
+        let tune = Tuner::new()
+            .set_max_body_ram(92 * 1024)
+            .finish();
         let req = create_request(
             "https://sqoop.com/blog/2016-03-28-search-in-metropolitan-areas"
         ).unwrap();

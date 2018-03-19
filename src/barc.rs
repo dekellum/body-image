@@ -362,7 +362,7 @@ impl BarcReader {
         let req_headers = read_headers(fin, rhead.req_h)?;
         let mut total: u64 = (rhead.meta + rhead.req_h) as u64;
 
-        let req_body = if rhead.req_b <= tune.max_body_ram {
+        let req_body = if rhead.req_b <= tune.max_body_ram() {
             read_body_ram(fin, rhead.req_b as usize)
         } else {
             let offset = start + (V2_HEAD_SIZE as u64) + total;
@@ -374,7 +374,7 @@ impl BarcReader {
         total += rhead.res_h as u64;
         let body_len = rhead.len - total;
 
-        let res_body = if body_len <= tune.max_body_ram {
+        let res_body = if body_len <= tune.max_body_ram() {
             read_body_ram(fin, body_len as usize)
         } else {
             let offset = start + (V2_HEAD_SIZE as u64) + total;
@@ -563,6 +563,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use http::header::{AGE, REFERER, VIA};
     use super::*;
+    use super::super::Tuner;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, FlError> {
         let tpath = Path::new("target/testmp");
@@ -729,8 +730,10 @@ mod tests {
     #[test]
     fn test_read_sample_mapped() {
         let record = {
-            let mut tune = Tunables::new();
-            tune.max_body_ram = 1024; // < 1270 expected length
+            let mut tune = Tuner::new()
+                .set_max_body_ram(1024) // < 1270 expected length
+                .finish();
+
             let bfile = BarcFile::new("sample/example.barc");
             let mut reader = bfile.reader().unwrap();
             let r = reader.read(&tune).unwrap().unwrap();
