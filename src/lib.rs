@@ -386,8 +386,8 @@ struct Monolog {
 pub struct Dialog {
     meta:         http::HeaderMap,
     prolog:       Prolog,
-    version:      http::version::Version,
-    status:       http::status::StatusCode,
+    version:      http::Version,
+    status:       http::StatusCode,
     res_headers:  http::HeaderMap,
     res_body:     BodyImage,
 }
@@ -443,11 +443,13 @@ pub static META_URL: &[u8]             = b"url";
 /// e.g. "GET", "POST", etc.
 pub static META_METHOD: &[u8]          = b"method";
 
-/// Meta `HeaderName` for the HTTP response version, e.g. "HTTP/1.1",
-/// "HTTP/2", etc.
+/// Meta `HeaderName` for the response version, e.g. "HTTP/1.1",
+/// "HTTP/2.0", etc.
 pub static META_RES_VERSION: &[u8]     = b"response-version";
 
-/// Meta `HeaderName` for the response status code, e.g. "200 OK"
+/// Meta `HeaderName` for the response numeric status code, SPACE, and
+/// then a standardized _reason phrase_, e.g. "200 OK". The later is
+/// intended only for human readers.
 pub static META_RES_STATUS: &[u8]      = b"response-status";
 
 /// Meta `HeaderName` for a list of content or transfer encodings
@@ -473,8 +475,9 @@ impl Dialog {
         hs.append(HeaderName::from_lowercase(META_METHOD).unwrap(),
                   self.prolog.method.to_string().parse()?);
 
-        // FIXME: Rely on debug format of version for now. Should probably
-        // replace this with match and custom representation.
+        // FIXME: This relies on the debug format of version,  e.g. "HTTP/1.1"
+        // which might not be stable, but http::Version doesn't offer an enum
+        // to match on, only constants.
         let v = format!("{:?}", self.version);
         hs.append(HeaderName::from_lowercase(META_RES_VERSION).unwrap(),
                   v.parse()?);
