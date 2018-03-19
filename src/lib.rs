@@ -827,7 +827,19 @@ mod tests {
         println!("Response {:#?}", dl);
 
         assert!(dl.res_body.is_ram());
-        assert_eq!(dl.res_body.len(), 8462);
+        assert!(dl.res_body.len() > 0);
+    }
+
+    #[test]
+    fn test_small_https() {
+        let tune = Tunables::new();
+        let req = create_request("https://example.com").unwrap();
+
+        let dl = fetch(req, &tune).unwrap();
+        println!("Response {:#?}", dl);
+
+        assert!(dl.res_body.is_ram());
+        assert!(dl.res_body.len() > 0);
     }
 
     #[test]
@@ -846,18 +858,17 @@ mod tests {
     }
 
     #[test]
-    fn test_large_https() {
+    fn test_large_http() {
         let tune = Tuner::new()
-            .set_max_body_ram(92 * 1024)
+            .set_max_body_ram(64 * 1024)
             .finish();
         let req = create_request(
-            "https://sqoop.com/blog/2016-03-28-search-in-metropolitan-areas"
+            "http://gravitext.com/images/jakarta_slum.jpg"
         ).unwrap();
-
         let dl = fetch(req, &tune).unwrap();
         println!("Response {:#?}", dl);
 
-        assert!(dl.res_body.len() > 100_000 );
+        assert!(dl.res_body.len() > (64 * 1024));
         assert!(!dl.res_body.is_ram());
     }
 }
