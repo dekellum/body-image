@@ -13,10 +13,10 @@ use self::flate2::read::{DeflateDecoder, GzDecoder};
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
 use super::{BodyImage, Dialog, META_RES_DECODED, Tunables};
 
-/// Decode any gzip or deflate Transfer-Encoding or Content-Encoding
-/// into a new `BodyItem`, and update `Dialog` accordingly. The
-/// provided `Tunables` controls decompression buffer sizes and if the
-/// final `BodyItem` will be in `Ram` or `FsRead`.
+/// Decode any _gzip_ or _deflate_ response Transfer-Encoding or
+/// Content-Encoding into a new response `BodyItem`, updating `Dialog`
+/// accordingly. The provided `Tunables` controls decompression buffer
+/// sizes and if the final `BodyItem` will be in `Ram` or `FsRead`.
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     -> Result<(), FlError>
 {
