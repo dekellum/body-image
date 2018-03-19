@@ -40,7 +40,7 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
         .uri(url)
         .record()?;
 
-    let tune = Tunables::new()?;
+    let tune = Tunables::new();
     let mut dl = fetch(req, &tune)?;
 
     decode_body(&mut dl, &tune)?;

@@ -509,15 +509,15 @@ pub struct Tunables {
 }
 
 impl Tunables {
-    pub fn new() -> Result<Tunables, FlError> {
-        Ok(Tunables {
+    pub fn new() -> Tunables {
+        Tunables {
             max_body_ram:        96 * 1024,
             max_body:     48 * 1024 * 1024,
             decode_buffer_ram:    8 * 1024,
             decode_buffer_fs:    64 * 1024,
             deflate_size_x_est:          4,
             gzip_size_x_est:             5,
-        })
+        }
     }
 
     // FIXME: Add builder interface, setters
@@ -701,7 +701,7 @@ mod tests {
 
     #[test]
     fn test_small_http() {
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let req = create_request("http://gravitext.com").unwrap();
 
         let dl = fetch(req, &tune).unwrap();
@@ -713,7 +713,7 @@ mod tests {
 
     #[test]
     fn test_not_found() {
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let req = create_request("http://gravitext.com/no/existe").unwrap();
 
         let dl = fetch(req, &tune).unwrap();
@@ -728,7 +728,7 @@ mod tests {
 
     #[test]
     fn test_large_https() {
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let req = create_request(
             "https://sqoop.com/blog/2016-03-28-search-in-metropolitan-areas"
         ).unwrap();

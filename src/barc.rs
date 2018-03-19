@@ -603,7 +603,7 @@ mod tests {
                                req_headers, req_body,
                                res_headers, res_body }).unwrap();
 
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap().unwrap();
 
@@ -629,7 +629,7 @@ mod tests {
 
         writer.write(&Record::default()).unwrap();
 
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap().unwrap();
 
@@ -658,7 +658,7 @@ mod tests {
         let res_body_str = "RESPONSE BODY";
 
         // Estabilish reader.
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap();
         assert!(record.is_none());
@@ -700,7 +700,7 @@ mod tests {
 
     #[test]
     fn test_read_sample() {
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let bfile = BarcFile::new("sample/example.barc");
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap().unwrap();
@@ -729,7 +729,7 @@ mod tests {
     #[test]
     fn test_read_sample_mapped() {
         let record = {
-            let mut tune = Tunables::new().unwrap();
+            let mut tune = Tunables::new();
             tune.max_body_ram = 1024; // < 1270 expected length
             let bfile = BarcFile::new("sample/example.barc");
             let mut reader = bfile.reader().unwrap();
@@ -755,7 +755,7 @@ mod tests {
 
     #[test]
     fn test_read_empty_file() {
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let bfile = BarcFile::new("sample/empty.barc");
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap();
@@ -768,7 +768,7 @@ mod tests {
 
     #[test]
     fn test_read_over_reserved() {
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let bfile = BarcFile::new("sample/reserved.barc");
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap();
@@ -784,7 +784,7 @@ mod tests {
 
     #[test]
     fn test_read_short_record_head() {
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let bfile = BarcFile::new("sample/reserved.barc");
         let mut reader = bfile.reader().unwrap();
 
@@ -801,7 +801,7 @@ mod tests {
 
     #[test]
     fn test_read_bad_record_head() {
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let bfile = BarcFile::new("sample/example.barc");
         let mut reader = bfile.reader().unwrap();
 
@@ -818,7 +818,7 @@ mod tests {
 
     #[test]
     fn test_read_204_no_body() {
-        let tune = Tunables::new().unwrap();
+        let tune = Tunables::new();
         let bfile = BarcFile::new("sample/204_no_body.barc");
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap().unwrap();
