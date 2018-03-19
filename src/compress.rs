@@ -1,3 +1,5 @@
+//! Compression and decompression support functions.
+
 extern crate failure;
 extern crate flate2;
 extern crate http;

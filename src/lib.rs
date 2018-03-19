@@ -29,9 +29,10 @@ use memmap::Mmap;
 use tempfile::tempfile;
 use tokio_core::reactor::Core;
 
-/// Alias for `hyper::Body`
+/// Alias for `hyper::Body`.
 pub use hyper::Body as HyBody;
 
+/// The HTTP request (with body) type (as of hyper 0.11.x.)
 pub type HyRequest = http::Request<HyBody>;
 
 /// An HTTP request or response body as bytes, which may or may not be
@@ -641,7 +642,7 @@ impl Default for Tuner {
     fn default() -> Self { Tuner::new() }
 }
 
-// Run an HTTP request to completion, returning the full `Dialog`
+/// Run an HTTP request to completion, returning the full `Dialog`.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
     // FIXME: State of the Core (v Reactor), incl. construction,
     // use from multiple threads is under flux:
