@@ -96,7 +96,7 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
     -> Result<BodyImage, FlError>
 {
     if len_estimate > tune.max_body_ram() {
-        let b = BodyImage::with_fs()?;
+        let b = BodyImage::with_fs(tune.temp_dir())?;
         return read_to_body_fs(r, b, tune);
     }
 
@@ -135,7 +135,7 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
             bail!("Decompressed response stream too long: {}+", size);
         }
         if size > tune.max_body_ram() {
-            body.write_back()?;
+            body.write_back(tune.temp_dir())?;
             println!("Write (Fs) decoded buf len {}", len);
             body.write_all(&buf)?;
             return read_to_body_fs(r, body, tune)

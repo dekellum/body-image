@@ -15,10 +15,12 @@ use failure::Error as FlError;
 // FIXME: Use atleast while prototyping. Could switch to an error enum
 // for clear separation between hyper::Error and application errors.
 
+use std::env;
 use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
@@ -26,7 +28,7 @@ use hyper::{Chunk, Client};
 use hyper::client::compat::CompatFutureResponse;
 use hyper::header::{ContentLength, Header, Raw};
 use memmap::Mmap;
-use tempfile::tempfile;
+use tempfile::tempfile_in;
 use tokio_core::reactor::Core;
 
 /// Alias for `hyper::Body`.
@@ -110,12 +112,12 @@ impl BodyImage {
         }
     }
 
-    /// Create a new instance from a new temporary file, in state
-    /// `FsWrite`.
-    pub fn with_fs() -> Result<BodyImage, FlError> {
-        // FIXME: Add control for setting dir for the tempfile,
-        // possibly via Tunables.
-        let f = tempfile()?;
+    /// Create a new instance in state `FsWrite`, using a new
+    /// temporary file created in dir.
+    pub fn with_fs<P>(dir: P) -> Result<BodyImage, FlError>
+        where P: AsRef<Path>
+    {
+        let f = tempfile_in(dir)?;
         Ok(BodyImage {
             state: BodyState::FsWrite(f),
             len: 0
@@ -183,10 +185,13 @@ impl BodyImage {
     }
 
     /// Convert from `Ram` to `FsWrite`, writing all existing chunks
-    /// to a new temporary file. Panics if in some other state.
-    pub fn write_back(&mut self) -> Result<(), FlError> {
+    /// to a new temporary file, created in dir. Panics if in some
+    /// other state.
+    pub fn write_back<P>(&mut self, dir: P) -> Result<(), FlError>
+        where P: AsRef<Path>
+    {
         self.state = if let BodyState::Ram(ref v) = self.state {
-            let mut f = tempfile()?;
+            let mut f = tempfile_in(dir)?;
             for c in v {
                 f.write_all(c)?;
             }
@@ -511,6 +516,7 @@ pub struct Tunables {
     decode_buffer_fs:        usize,
     size_estimate_deflate:   u16,
     size_estimate_gzip:      u16,
+    temp_dir:                PathBuf,
 }
 
 impl Tunables {
@@ -523,6 +529,7 @@ impl Tunables {
             decode_buffer_fs:    64 * 1024,
             size_estimate_deflate:       4,
             size_estimate_gzip:          5,
+            temp_dir:      env::temp_dir(),
         }
     }
 
@@ -563,6 +570,12 @@ impl Tunables {
     /// Default: 4.
     pub fn size_estimate_deflate(&self) -> u16 {
         self.size_estimate_deflate
+    }
+
+    /// Return the directory path in which to write temporary files.
+    /// Default: `std::env::temp_dir()`
+    pub fn temp_dir(&self) -> &Path {
+        &self.temp_dir
     }
 }
 
@@ -695,7 +708,7 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
     let bi = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
         Some(v) => check_length(v, tune.max_body()).and_then(|cl| {
             if cl > tune.max_body_ram() {
-                BodyImage::with_fs()
+                BodyImage::with_fs(tune.temp_dir())
             } else {
                 Ok(BodyImage::with_ram(cl))
             }
@@ -728,7 +741,7 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
                 bail!("Response stream too long: {}+", new_len);
             } else {
                 if dialog.res_body.is_ram() && new_len > tune.max_body_ram() {
-                    dialog.res_body.write_back()?;
+                    dialog.res_body.write_back(tune.temp_dir())?;
                 }
                 println!("to save chunk (len: {})", chunk.len());
                 dialog.res_body
@@ -872,6 +885,7 @@ mod tests {
     #[test]
     fn test_large_http() {
         let tune = Tuner::new()
+            .set_temp_dir("target")
             .set_max_body_ram(64 * 1024)
             .finish();
         let req = create_request(
