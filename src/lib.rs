@@ -503,7 +503,7 @@ impl Dialog {
 
 /// A collection of size limits and performance tuning
 /// constants. Setters are available via the `Tuner` class.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Tunables {
     max_body_ram:            u64,
     max_body:                u64,
@@ -572,7 +572,7 @@ impl Default for Tunables {
 
 /// A builder for `Tunables`.  Invariants are asserted in the various
 /// setters and `finish`.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Tuner {
     template: Tunables
 }
@@ -630,10 +630,18 @@ impl Tuner {
         self
     }
 
+    /// Set the path in which to write temporary files.
+    pub fn set_temp_dir<P>(&mut self, path: P) -> &mut Tuner
+        where P: AsRef<Path>
+    {
+        self.template.temp_dir = path.as_ref().into();
+        self
+    }
+
     /// Finish building, asserting any remaining invariants, and
     /// return a new `Tunables` instance.
     pub fn finish(&self) -> Tunables {
-        let t = self.template;
+        let t = self.template.clone();
         assert!(t.max_body_ram <= t.max_body,
                 "max_body_ram can't be greater than max_body");
         t
@@ -670,7 +678,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
     let work = fr
         .map(|response| Monolog { prolog, response } )
         .map_err(FlError::from)
-        .and_then(|monolog| resp_future(monolog, *tune))
+        .and_then(|monolog| resp_future(monolog, tune))
         .and_then(|dialog| futres(dialog.prepare()));
 
     // Run until completion
@@ -678,7 +686,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
         .map_err(FlError::from)
 }
 
-fn resp_future(monolog: Monolog, tune: Tunables)
+fn resp_future(monolog: Monolog, tune: &Tunables)
     -> Box<Future<Item=Dialog, Error=FlError> + Send>
 {
     let (resp_parts, body) = monolog.response.into_parts();
@@ -709,6 +717,8 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         res_headers: resp_parts.headers,
         res_body:    bi,
     };
+
+    let tune = tune.clone();
 
     let s = body
         .map_err(FlError::from)
