@@ -92,7 +92,7 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     Ok(())
 }
 
-fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
+pub(crate) fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
     -> Result<BodyImage, FlError>
 {
     if len_estimate > tune.max_body_ram() {

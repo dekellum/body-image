@@ -6,6 +6,7 @@ extern crate httparse;
 extern crate memmap;
 extern crate flate2;
 
+use std::cmp;
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 use std::ops::{AddAssign,ShlAssign};
@@ -22,6 +23,7 @@ use http::header::{HeaderName, HeaderValue};
 use memmap::MmapOptions;
 
 use super::{BodyImage, Dialog, Mapped, Recorded, RequestRecorded, Tunables};
+use super::compress::read_to_body;
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -38,7 +40,7 @@ pub const V2_MAX_RECORD: u64 = 0xfff_fff_fff_fff;
 /// 2<sup>20</sup> (1 MiB) - 1.
 pub const V2_MAX_HBLOCK: usize =        0xff_fff;
 
-/// Maximum request body size, including CRLF terminator:
+/// Maximum request body size, including any CRLF terminator:
 /// 2<sup>40</sup> (1 TiB) - 1.
 pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
 
@@ -323,13 +325,14 @@ impl<'a> BarcWriter<'a> {
         let mut head = {
             let mut wrapper = strategy.wrap(size_est, file)?;
             let compress = wrapper.mode();
+            let with_crlf = compress == Compression::Plain;
             let head = {
                 let fout = wrapper.as_write();
 
                 let meta = write_headers(fout, rec.meta())?;
 
                 let req_h = write_headers(fout, rec.req_headers())?;
-                let req_b = write_body(fout, rec.req_body())?;
+                let req_b = write_body(fout, with_crlf, rec.req_body())?;
 
                 let res_h = write_headers(fout, rec.res_headers())?;
 
@@ -339,7 +342,7 @@ impl<'a> BarcWriter<'a> {
                 assert!((len + rec.res_body().len() + 2) <= V2_MAX_RECORD,
                         "body exceeds size limit");
 
-                let res_b = write_body(fout, rec.res_body())?;
+                let res_b = write_body(fout, with_crlf, rec.res_body())?;
                 len += res_b;
 
                 RecordHead {
@@ -411,11 +414,11 @@ fn write_headers(out: &mut Write, headers: &http::HeaderMap)
     Ok(size)
 }
 
-fn write_body(out: &mut Write, body: &BodyImage)
+fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
     -> Result<u64, FlError>
 {
     let mut size = body.write_to(out)?;
-    if size > 0 {
+    if with_crlf && size > 0 {
         size += write_all_len(out, CRLF)? as u64;
     }
     Ok(size)
@@ -468,7 +471,7 @@ impl BarcReader {
         let mut total: u64 = (rhead.meta + rhead.req_h) as u64;
 
         let req_body = if rhead.req_b <= tune.max_body_ram() {
-            read_body_ram(fin, rhead.req_b as usize)
+            read_body_ram(fin, true, rhead.req_b as usize)
         } else {
             let offset = start + (V2_HEAD_SIZE as u64) + total;
             map_body(fin, offset, rhead.req_b)
@@ -480,7 +483,7 @@ impl BarcReader {
         let body_len = rhead.len - total;
 
         let res_body = if body_len <= tune.max_body_ram() {
-            read_body_ram(fin, body_len as usize)
+            read_body_ram(fin, true, body_len as usize)
         } else {
             let offset = start + (V2_HEAD_SIZE as u64) + total;
             map_body(fin, offset, body_len)
@@ -513,16 +516,15 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     let req_headers = read_headers(fin, rhead.req_h)?;
 
     let req_body = if rhead.req_b <= tune.max_body_ram() {
-        read_body_ram(fin, rhead.req_b as usize)?
+        read_body_ram(fin, false, rhead.req_b as usize)
     } else {
-        panic!("Compressed, mapped body not yet support!")
-    };
+        read_body_fs(fin, rhead.req_b, tune)
+    }?;
 
     let res_headers = read_headers(fin, rhead.res_h)?;
 
-    let res_body = read_body_to_end(fin)?;
-    // FIXME: Track absolute compressed bytes remaining and use that
-    // to pass a body size estimate?
+    let est = fin.get_ref().limit() * u64::from(tune.size_estimate_gzip());
+    let res_body = read_to_body(fin, est, tune)?;
 
     Ok(Record { rec_type: rhead.rec_type,
                 meta, req_headers, req_body, res_headers, res_body })
@@ -647,41 +649,69 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
     }
 }
 
-fn read_body_to_end(r: &mut Read) -> Result<BodyImage, FlError> {
-    let mut buf = Vec::<u8>::new();
-    r.read_to_end(&mut buf)?;
-    // FIXME: Change to using 8KiB chunks and read instead, for efficiency?
-
-    let len = buf.len();
+fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
+    -> Result<BodyImage, FlError>
+{
     if len == 0 {
         return Ok(BodyImage::empty());
     }
 
-    assert!(len > 2);
-    buf.truncate(len - 2);
-    let chunk: Chunk = buf.into();
-    let mut b = BodyImage::with_chunks_capacity(1);
-    b.save(chunk)?;
-    Ok(b)
-}
-
-fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
-    if len == 0 {
-        return Ok(BodyImage::empty());
-    }
-
-    assert!(len > 2);
+    assert!(!with_crlf || len > 2);
 
     let mut buf = BytesMut::with_capacity(len);
     unsafe {
         r.read_exact(&mut buf.bytes_mut()[..len])?;
-        buf.advance_mut(len - 2); // Exclude final CRLF
+        let l = if with_crlf { len - 2 } else { len };
+        buf.advance_mut(l);
     }
 
     let chunk: Chunk = buf.freeze().into();
     let mut b = BodyImage::with_chunks_capacity(1);
     b.save(chunk)?;
     Ok(b)
+}
+
+fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
+    -> Result<BodyImage, FlError>
+{
+    if len == 0 {
+        return Ok(BodyImage::empty());
+    }
+
+    let mut body = BodyImage::with_fs()?;
+    let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs());
+    loop {
+        let rlen = {
+            let b = unsafe { buf.bytes_mut() };
+            let limit = cmp::min(b.len() as u64, len - body.len()) as usize;
+            assert!(limit > 0);
+            match r.read(&mut b[..limit]) {
+                Ok(l) => l,
+                Err(e) => {
+                    if e.kind() == ErrorKind::Interrupted {
+                        continue;
+                    } else {
+                        return Err(e.into());
+                    }
+                }
+            }
+        };
+        if rlen == 0 {
+            break;
+        }
+        unsafe { buf.advance_mut(rlen); }
+        println!("Write (Fs) decoded buf rlen {}", rlen);
+        body.write_all(&buf)?;
+
+        if body.len() < len {
+            buf.clear();
+        }
+        else {
+            assert_eq!(body.len(), len);
+            break;
+        }
+    }
+    Ok(body)
 }
 
 // Return `BodyImage::MemMap` for the body in file, at offset and
