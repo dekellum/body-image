@@ -142,18 +142,16 @@ impl Default for RecordType {
 /// BARC record compression mode.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Compression {
-    /// Used internally.
-    Unknown,
-
-    /// No compression was added on write of the record.
+    /// Not compressed.
     Plain,
+
+    /// Compressed with gzip.
     Gzip,
 }
 
 impl Compression {
     fn flag(self) -> char {
         match self {
-            Compression::Unknown => 'U',
             Compression::Plain   => 'P',
             Compression::Gzip    => 'G',
         }
@@ -161,7 +159,6 @@ impl Compression {
 
     fn try_from(f: u8) -> Result<Self, FlError> {
         match f {
-            b'U' => Ok(Compression::Unknown),
             b'P' => Ok(Compression::Plain),
             b'G' => Ok(Compression::Gzip),
             _ => Err(format_err!("Unknown compression flag [{}]", f))
@@ -174,7 +171,7 @@ const CRLF: &[u8] = b"\r\n";
 const V2_RESERVE_HEAD: RecordHead = RecordHead {
     len: 0,
     rec_type: RecordType::Reserved,
-    compress: Compression::Unknown,
+    compress: Compression::Plain,
     meta: 0,
     req_h: 0,
     req_b: 0,
@@ -186,6 +183,7 @@ pub trait WriteStrategy {
         -> Result<WriteWrapper<'a>, FlError>;
 }
 
+// FIXME: Relocate
 use self::flate2::Compression as GzCompression;
 use self::flate2::write::GzEncoder;
 
