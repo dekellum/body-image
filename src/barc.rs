@@ -316,8 +316,7 @@ fn write_body(out: &mut Write, body: &BodyImage)
     Ok(size)
 }
 
-fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError>
-{
+fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError> {
     out.write_all(bs)?;
     Ok(bs.len())
 }
@@ -477,7 +476,7 @@ fn read_headers(r: &mut Read, len: usize)
         return Ok(http::HeaderMap::with_capacity(0));
     }
 
-    assert!( len > 2 );
+    assert!(len > 2);
 
     let mut buf = BytesMut::with_capacity(len);
     unsafe {
@@ -519,7 +518,7 @@ fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
         return Ok(BodyImage::empty());
     }
 
-    assert!( len > 2 );
+    assert!(len > 2);
 
     let mut buf = BytesMut::with_capacity(len);
     unsafe {
@@ -539,7 +538,7 @@ fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
 fn map_body(file: &mut File, offset: u64, len: u64)
     -> Result<BodyImage, FlError>
 {
-    assert!( len > 2 );
+    assert!(len > 2);
 
     // Seek past the body, as if read.
     let end = file.seek(SeekFrom::Current(len as i64))?;

@@ -120,7 +120,7 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
                 break 'fill; // can't break 'eof, because may have len already
             }
             println!("Decoded inner buf len {}", len);
-            unsafe { buf.advance_mut(len) };
+            unsafe { buf.advance_mut(len); }
 
             if buf.remaining_mut() < 1024 {
                 break 'fill;
@@ -153,7 +153,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodyImage, tune: &Tunables)
     let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs());
     loop {
         let len = match r.read(unsafe { buf.bytes_mut() }) {
-            Ok(len) => len,
+            Ok(l) => l,
             Err(e) => {
                 if e.kind() == ErrorKind::Interrupted {
                     continue;
@@ -165,7 +165,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodyImage, tune: &Tunables)
         if len == 0 {
             break;
         }
-        unsafe { buf.advance_mut(len) };
+        unsafe { buf.advance_mut(len); }
 
         size += len as u64;
         if size > tune.max_body() {
