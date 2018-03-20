@@ -4,6 +4,7 @@ extern crate bytes;
 extern crate http;
 extern crate httparse;
 extern crate memmap;
+extern crate flate2;
 
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
@@ -140,7 +141,7 @@ impl Default for RecordType {
 
 /// BARC record compression mode.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Compression {
+pub enum Compression {
     /// Used internally.
     Unknown,
 
@@ -179,6 +180,87 @@ const V2_RESERVE_HEAD: RecordHead = RecordHead {
     req_b: 0,
     res_h: 0
 };
+
+pub trait WriteStrategy {
+    fn wrap<'a>(&self, body_len: u64, file: &'a File)
+        -> Result<WriteWrapper<'a>, FlError>;
+}
+
+use self::flate2::Compression as GzCompression;
+use self::flate2::write::GzEncoder;
+
+pub struct GzipWriteStrategy {
+    min_len: u64,
+    compression_level: u32,
+}
+
+impl Default for GzipWriteStrategy {
+    fn default() -> Self {
+        Self { min_len: 8 * 1024,
+               compression_level: 6 }
+    }
+}
+
+impl WriteStrategy for GzipWriteStrategy {
+    fn wrap<'a>(&self, body_len: u64, file: &'a File)
+        -> Result<WriteWrapper<'a>, FlError>
+    {
+        if body_len >= self.min_len {
+            Ok(WriteWrapper::Gzip(
+                GzEncoder::new(file, GzCompression::new(self.compression_level))
+            ))
+        } else {
+            Ok(WriteWrapper::Plain(file))
+        }
+    }
+}
+
+pub struct PlainWriteStrategy {}
+
+impl Default for PlainWriteStrategy {
+    fn default() -> Self { Self {} }
+}
+
+impl WriteStrategy for PlainWriteStrategy {
+    fn wrap<'a>(&self, _body_len: u64, file: &'a File)
+        -> Result<WriteWrapper<'a>, FlError>
+    {
+        Ok(WriteWrapper::Plain(file))
+    }
+}
+
+pub enum WriteWrapper<'a> {
+    Plain(&'a File),
+    Gzip(GzEncoder<&'a File>)
+}
+
+impl<'a> WriteWrapper<'a> {
+    /// Return the Compression flag varient in use
+    pub fn mode(&self) -> Compression {
+        match *self {
+            WriteWrapper::Plain(_) => Compression::Plain,
+            WriteWrapper::Gzip(_) => Compression::Gzip
+        }
+    }
+
+    /// Return a Write reference for self
+    pub fn as_write(&mut self) -> &mut Write {
+        match *self {
+            WriteWrapper::Plain(ref mut f) => f,
+            WriteWrapper::Gzip(ref mut gze) => gze
+        }
+    }
+
+    pub fn finish(self) -> Result<(), FlError> {
+        match self {
+            WriteWrapper::Plain(_) => Ok(()),
+            WriteWrapper::Gzip(gze) => {
+                gze.finish()?.flush()?;
+                Ok(())
+            }
+        }
+    }
+}
 
 impl BarcFile {
     /// Return new instance for the specified path, which may be an
@@ -228,47 +310,68 @@ impl<'a> BarcWriter<'a> {
     /// Write a new record, returning the record's offset from the
     /// start of the BARC file. The writer position is then advanced
     /// to the end of the file, for the next `write`.
-    pub fn write<R>(&mut self, rec: &R) -> Result<u64, FlError>
+    pub fn write<R>(&mut self, rec: &R, strategy: &WriteStrategy)
+        -> Result<u64, FlError>
         where R: RecordedType
     {
-        // BarcFile::writer() guarantees Some(fout)
-        let fout = &mut *self.guard.as_mut().unwrap();
+        // BarcFile::writer() guarantees Some(File)
+        let file = &mut *self.guard.as_mut().unwrap();
 
         // Write initial head as reserved place holder
-        let start = fout.seek(SeekFrom::End(0))?;
-        write_record_head(fout, &V2_RESERVE_HEAD)?;
-        fout.flush()?;
+        let start = file.seek(SeekFrom::End(0))?;
+        write_record_head(file, &V2_RESERVE_HEAD)?;
+        file.flush()?;
 
-        let meta = write_headers(fout, rec.meta())?;
+        let size_est = rec.req_body().len() + rec.res_body().len();
+        let mut head = {
+            let mut wrapper = strategy.wrap(size_est, file)?;
+            let compress = wrapper.mode();
+            let head = {
+                let fout = wrapper.as_write();
 
-        let req_h = write_headers(fout, rec.req_headers())?;
-        let req_b = write_body(fout, rec.req_body())?;
+                let meta = write_headers(fout, rec.meta())?;
 
-        let res_h = write_headers(fout, rec.res_headers())?;
+                let req_h = write_headers(fout, rec.req_headers())?;
+                let req_b = write_body(fout, rec.req_body())?;
 
-        // Compute total thus far, excluding the fixed head length
-        let mut len: u64 = (meta + req_h + res_h) as u64 + req_b;
+                let res_h = write_headers(fout, rec.res_headers())?;
 
-        assert!((len + rec.res_body().len() + 2) <= V2_MAX_RECORD,
-                "body exceeds size limit");
-        let res_b = write_body(fout, rec.res_body())?;
+                // Compute total thus far, excluding the fixed head length
+                let mut len: u64 = (meta + req_h + res_h) as u64 + req_b;
 
-        len += res_b; // New total
+                assert!((len + rec.res_body().len() + 2) <= V2_MAX_RECORD,
+                        "body exceeds size limit");
+
+                let res_b = write_body(fout, rec.res_body())?;
+                len += res_b;
+
+                RecordHead {
+                    len, // adjusted below
+                    rec_type: rec.rec_type(),
+                    compress,
+                    meta,
+                    req_h,
+                    req_b,
+                    res_h }
+            };
+
+            wrapper.finish()?;
+            head
+        };
+
+        // Use new file offset to indicate total length
+        let end = file.seek(SeekFrom::Current(0))?;
+        head.len = end - start - (V2_HEAD_SIZE as u64);
+        // FIXME: Assert lengths are equal in case of plain?
+        // FIXME: Add warning if orig head.len is less than (compressed) head.len
 
         // Seek back and write final record head, with known sizes
-        fout.seek(SeekFrom::Start(start))?;
-        write_record_head( fout, &RecordHead {
-            len,
-            rec_type: rec.rec_type(),
-            compress: Compression::Plain, // FIXME: compression support
-            meta,
-            req_h,
-            req_b,
-            res_h })?;
+        file.seek(SeekFrom::Start(start))?;
+        write_record_head(file, &head)?;
 
         // Seek to end and flush
-        fout.seek(SeekFrom::End(0))?;
-        fout.flush()?;
+        file.seek(SeekFrom::End(0))?;
+        file.flush()?;
 
         Ok(start)
     }
@@ -583,34 +686,50 @@ mod tests {
     #[test]
     fn test_write_read_small() {
         let fname = barc_test_file("small.barc").unwrap();
-        let bfile = BarcFile::new(&fname);
+        let strategy = PlainWriteStrategy::default();
+        write_read_small(&fname, &strategy).unwrap();
+    }
+
+    #[test]
+    fn test_write_read_small_gzip() {
+        let fname = barc_test_file("small_gzip.barc").unwrap();
+        let mut strategy = GzipWriteStrategy::default();
+        strategy.min_len = 0;
+        write_read_small(&fname, &strategy).unwrap();
+    }
+
+    fn write_read_small(fname: &PathBuf, strategy: &WriteStrategy)
+        -> Result<(), FlError>
+    {
+        let bfile = BarcFile::new(fname);
 
         let req_body_str = "REQUEST BODY";
         let res_body_str = "RESPONSE BODY";
 
         let rec_type = RecordType::Dialog;
         let mut meta = http::HeaderMap::new();
-        meta.insert(AGE, "0".parse().unwrap());
+        meta.insert(AGE, "0".parse()?);
 
         let mut req_headers = http::HeaderMap::new();
-        req_headers.insert(REFERER, "http:://other.com".parse().unwrap());
+        req_headers.insert(REFERER, "http:://other.com".parse()?);
         let mut req_body = BodyImage::with_chunks_capacity(1);
-        req_body.save(req_body_str.into()).unwrap();
+        req_body.save(req_body_str.into())?;
 
         let mut res_headers = http::HeaderMap::new();
-        res_headers.insert(VIA, "test".parse().unwrap());
+        res_headers.insert(VIA, "test".parse()?);
         let mut res_body = BodyImage::with_chunks_capacity(1);
-        res_body.save(res_body_str.into()).unwrap();
+        res_body.save(res_body_str.into())?;
 
-        let mut writer = bfile.writer().unwrap();
+        let mut writer = bfile.writer()?;
         assert!(fname.exists()); // on writer creation
         writer.write(&Record { rec_type, meta,
                                req_headers, req_body,
-                               res_headers, res_body }).unwrap();
+                               res_headers, res_body },
+                     strategy)?;
 
         let tune = Tunables::new();
-        let mut reader = bfile.reader().unwrap();
-        let record = reader.read(&tune).unwrap().unwrap();
+        let mut reader = bfile.reader()?;
+        let record = reader.read(&tune)?.unwrap();
 
         println!("{:#?}", record);
 
@@ -621,22 +740,38 @@ mod tests {
         assert_eq!(record.res_headers.len(), 1);
         assert_eq!(record.res_body.len(), res_body_str.len() as u64);
 
-        let record = reader.read(&tune).unwrap();
+        let record = reader.read(&tune)?;
         assert!(record.is_none());
+        Ok(())
     }
 
     #[test]
     fn test_write_read_empty_record() {
         let fname = barc_test_file("empty_record.barc").unwrap();
-        let bfile = BarcFile::new(&fname);
+        let strategy = PlainWriteStrategy::default();
+        write_read_empty_record(&fname, &strategy).unwrap();;
+    }
 
-        let mut writer = bfile.writer().unwrap();
+    #[test]
+    fn test_write_read_empty_record_gzip() {
+        let fname = barc_test_file("empty_record_gzip.barc").unwrap();
+        let mut strategy = GzipWriteStrategy::default();
+        strategy.min_len = 0;
+        write_read_empty_record(&fname, &strategy).unwrap();
+    }
 
-        writer.write(&Record::default()).unwrap();
+    fn write_read_empty_record(fname: &PathBuf, strategy: &WriteStrategy)
+        -> Result<(), FlError>
+    {
+        let bfile = BarcFile::new(fname);
+
+        let mut writer = bfile.writer()?;
+
+        writer.write(&Record::default(), strategy)?;
 
         let tune = Tunables::new();
-        let mut reader = bfile.reader().unwrap();
-        let record = reader.read(&tune).unwrap().unwrap();
+        let mut reader = bfile.reader()?;
+        let record = reader.read(&tune)?.unwrap();
 
         println!("{:#?}", record);
 
@@ -647,8 +782,9 @@ mod tests {
         assert_eq!(record.res_headers.len(), 0);
         assert_eq!(record.res_body.len(), 0);
 
-        let record = reader.read(&tune).unwrap();
+        let record = reader.read(&tune)?;
         assert!(record.is_none());
+        Ok(())
     }
 
     #[test]
@@ -674,7 +810,8 @@ mod tests {
         res_body.save(res_body_str.into()).unwrap();
 
         let offset = writer.write(&Record {
-            res_body, ..Record::default() }).unwrap();
+            res_body, ..Record::default() },
+            &PlainWriteStrategy::default()).unwrap();
         assert_eq!(offset, 0);
         reader.seek(offset).unwrap();
 
@@ -693,7 +830,8 @@ mod tests {
         assert!(record.is_none());
 
         // Write another, empty
-        writer.write(&Record::default()).unwrap();
+        writer.write(&Record::default(),
+                     &PlainWriteStrategy::default()).unwrap();
 
         let record = reader.read(&tune).unwrap().unwrap();
         assert_eq!(record.rec_type, RecordType::Dialog);
