@@ -14,6 +14,9 @@ use std::path::Path;
 
 use self::bytes::{BytesMut, BufMut};
 use failure::Error as FlError;
+use self::flate2::Compression as GzCompression;
+use self::flate2::write::GzEncoder;
+use self::flate2::read::GzDecoder;
 use hyper::Chunk;
 use http::header::{HeaderName, HeaderValue};
 use memmap::MmapOptions;
@@ -182,10 +185,6 @@ pub trait WriteStrategy {
     fn wrap<'a>(&self, body_len: u64, file: &'a File)
         -> Result<WriteWrapper<'a>, FlError>;
 }
-
-// FIXME: Relocate
-use self::flate2::Compression as GzCompression;
-use self::flate2::write::GzEncoder;
 
 pub struct GzipWriteStrategy {
     min_len: u64,
@@ -459,7 +458,8 @@ impl BarcReader {
         }
 
         if rhead.compress != Compression::Plain {
-            bail!("FIXME: Compressed records not yet supported");
+            let rec = read_compressed(fin, &rhead, tune)?;
+            return Ok(Some(rec))
         }
 
         let meta = read_headers(fin, rhead.meta)?;
@@ -498,6 +498,34 @@ impl BarcReader {
         self.file.seek(SeekFrom::Start(offset))?;
         Ok(())
     }
+}
+
+fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
+    -> Result<Record, FlError>
+{
+    assert!(rhead.compress == Compression::Gzip);
+
+    // Decoder over limited `Take` of compressed record len
+    let fin = &mut GzDecoder::new(file.take(rhead.len));
+
+    let meta = read_headers(fin, rhead.meta)?;
+
+    let req_headers = read_headers(fin, rhead.req_h)?;
+
+    let req_body = if rhead.req_b <= tune.max_body_ram() {
+        read_body_ram(fin, rhead.req_b as usize)?
+    } else {
+        panic!("Compressed, mapped body not yet support!")
+    };
+
+    let res_headers = read_headers(fin, rhead.res_h)?;
+
+    let res_body = read_body_to_end(fin)?;
+    // FIXME: Track absolute compressed bytes remaining and use that
+    // to pass a body size estimate?
+
+    Ok(Record { rec_type: rhead.rec_type,
+                meta, req_headers, req_body, res_headers, res_body })
 }
 
 // Return RecordHead or None if EOF
@@ -617,6 +645,24 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
         }
         Err(e) => Err(FlError::from(e))
     }
+}
+
+fn read_body_to_end(r: &mut Read) -> Result<BodyImage, FlError> {
+    let mut buf = Vec::<u8>::new();
+    r.read_to_end(&mut buf)?;
+    // FIXME: Change to using 8KiB chunks and read instead, for efficiency?
+
+    let len = buf.len();
+    if len == 0 {
+        return Ok(BodyImage::empty());
+    }
+
+    assert!(len > 2);
+    buf.truncate(len - 2);
+    let chunk: Chunk = buf.into();
+    let mut b = BodyImage::with_chunks_capacity(1);
+    b.save(chunk)?;
+    Ok(b)
 }
 
 fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
