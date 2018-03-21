@@ -873,6 +873,67 @@ mod tests {
         assert!(record.is_none());
         Ok(())
     }
+    #[test]
+    fn test_write_read_large() {
+        let fname = barc_test_file("large.barc").unwrap();
+        let strategy = PlainWriteStrategy::default();
+        write_read_large(&fname, &strategy).unwrap();;
+    }
+
+    #[test]
+    fn test_write_read_large_gzip() {
+        let fname = barc_test_file("large_gzip.barc").unwrap();
+        let strategy = GzipWriteStrategy::default();
+        write_read_large(&fname, &strategy).unwrap();
+    }
+
+    fn write_read_large(fname: &PathBuf, strategy: &WriteStrategy)
+        -> Result<(), FlError>
+    {
+        let bfile = BarcFile::new(fname);
+
+        let mut writer = bfile.writer()?;
+
+        let lorem_ipsum =
+           "Lorem ipsum dolor sit amet, consectetur adipiscing elit, \
+            sed do eiusmod tempor incididunt ut labore et dolore magna \
+            aliqua. Ut enim ad minim veniam, quis nostrud exercitation \
+            ullamco laboris nisi ut aliquip ex ea commodo \
+            consequat. Duis aute irure dolor in reprehenderit in \
+            voluptate velit esse cillum dolore eu fugiat nulla \
+            pariatur. Excepteur sint occaecat cupidatat non proident, \
+            sunt in culpa qui officia deserunt mollit anim id est \
+            laborum. ";
+
+        let mut req_body = BodyImage::with_chunks_capacity(500);
+        for _ in 0..500 {
+            req_body.save(lorem_ipsum.into())?;
+        }
+
+        let mut res_body = BodyImage::with_chunks_capacity(1_000);
+        for _ in 0..1_000 {
+            res_body.save(lorem_ipsum.into())?;
+        }
+
+        writer.write(&Record { req_body, res_body, ..Record::default()}, strategy)?;
+
+        let tune = Tunables::new();
+        let mut reader = bfile.reader()?;
+        let record = reader.read(&tune)?.unwrap();
+
+        println!("{:#?}", record);
+
+        assert_eq!(record.rec_type, RecordType::Dialog);
+        assert_eq!(record.meta.len(), 0);
+        assert_eq!(record.req_headers.len(), 0);
+        assert_eq!(record.req_body.len(), (lorem_ipsum.len() * 500) as u64);
+        assert_eq!(record.res_headers.len(), 0);
+        assert_eq!(record.res_body.len(), (lorem_ipsum.len() * 1_000) as u64);
+
+        let record = reader.read(&tune)?;
+        assert!(record.is_none());
+        Ok(())
+    }
 
     #[test]
     fn test_write_read_parallel() {
