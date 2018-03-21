@@ -361,9 +361,14 @@ impl<'a> BarcWriter<'a> {
 
         // Use new file offset to indicate total length
         let end = file.seek(SeekFrom::Current(0))?;
+        let orig_len = head.len;
         head.len = end - start - (V2_HEAD_SIZE as u64);
-        // FIXME: Assert lengths are equal in case of plain?
-        // FIXME: Add warning if orig head.len is less than (compressed) head.len
+        if head.compress == Compression::Plain {
+            assert_eq!(orig_len, head.len);
+        } else if orig_len < head.len {
+            println!("WARN: Compression grew record from {} to {} bytes",
+                     orig_len, head.len);
+        }
 
         // Seek back and write final record head, with known sizes
         file.seek(SeekFrom::Start(start))?;
@@ -516,15 +521,20 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     let req_headers = read_headers(fin, rhead.req_h)?;
 
     let req_body = if rhead.req_b <= tune.max_body_ram() {
-        read_body_ram(fin, false, rhead.req_b as usize)
+        read_body_ram(fin, false, rhead.req_b as usize)?
     } else {
-        read_body_fs(fin, rhead.req_b, tune)
-    }?;
+        read_body_fs(fin, rhead.req_b, tune)?.prepare()?
+    };
 
     let res_headers = read_headers(fin, rhead.res_h)?;
 
-    let est = fin.get_ref().limit() * u64::from(tune.size_estimate_gzip());
-    let res_body = read_to_body(fin, est, tune)?;
+    // When compressed, we don't actually know the final size of the
+    // response body. Estimate and use compress::read_to_body, which
+    // may return `Ram` or `FsWrite` states, so also prepare it.
+    let est = fin.get_ref().limit() * u64::from(tune.size_estimate_gzip())
+              + 4_096;
+    println!( "Estimated body: {}", est);
+    let res_body = read_to_body(fin, est, tune)?.prepare()?;
 
     Ok(Record { rec_type: rhead.rec_type,
                 meta, req_headers, req_body, res_headers, res_body })
@@ -649,6 +659,7 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
     }
 }
 
+// Read into `BodyImage` of state `Ram` as a single-chunk.
 fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
     -> Result<BodyImage, FlError>
 {
@@ -671,6 +682,8 @@ fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
     Ok(b)
 }
 
+// Read into `BodyImage` state `FsWrite`. Assumes no CRLF terminator
+// (only used for compressed records).
 fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
     -> Result<BodyImage, FlError>
 {
@@ -714,9 +727,9 @@ fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
     Ok(body)
 }
 
-// Return `BodyImage::MemMap` for the body in file, at offset and
-// length. Assumes (and asserts that) current is positioned at
-// offset, and seeks file past the body len.
+// Return `BodyImage::MemMap` for an uncompressed body in file, at
+// offset and length. Assumes (and asserts that) current is positioned
+// at offset, and seeks file past the body len.
 fn map_body(file: &mut File, offset: u64, len: u64)
     -> Result<BodyImage, FlError>
 {
@@ -956,7 +969,6 @@ mod tests {
 
             let next = reader.read(&tune).unwrap();
             assert!(next.is_none());
-
             r
         };
 
