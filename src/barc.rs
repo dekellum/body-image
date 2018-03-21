@@ -165,6 +165,8 @@ impl Compression {
     }
 }
 
+const CRLF: &[u8] = b"\r\n";
+
 const V2_RESERVE_HEAD: RecordHead = RecordHead {
     len: 0,
     rec_type: RecordType::Reserved,
@@ -297,10 +299,10 @@ fn write_headers(out: &mut Write, headers: &http::HeaderMap)
         size += write_all_len(out, key.as_ref())?;
         size += write_all_len(out, b": ")?;
         size += write_all_len(out, value.as_bytes())?;
-        size += write_all_len(out, b"\r\n")?;
+        size += write_all_len(out, CRLF)?;
     }
     if size > 0 {
-        size += write_all_len(out, b"\r\n")?;
+        size += write_all_len(out, CRLF)?;
     }
     assert!(size <= V2_MAX_HBLOCK);
     Ok(size)
@@ -311,7 +313,7 @@ fn write_body(out: &mut Write, body: &BodyImage)
 {
     let mut size = body.write_to(out)?;
     if size > 0 {
-        size += write_all_len(out, b"\r\n")? as u64;
+        size += write_all_len(out, CRLF)? as u64;
     }
     Ok(size)
 }
