@@ -184,27 +184,49 @@ const V2_RESERVE_HEAD: RecordHead = RecordHead {
 };
 
 pub trait WriteStrategy {
-    fn wrap<'a>(&self, body_len: u64, file: &'a File)
+    fn wrap<'a>(&self, est_len: u64, file: &'a File)
         -> Result<WriteWrapper<'a>, FlError>;
+    // FIXME: Add headers for the associated body, allowing strategies
+    // to check Content-Type, etc.
 }
 
+/// Compression with gzip write strategy. Will not compress if a
+/// mininum length is not reached.
+#[derive(Clone, Copy, Debug)]
 pub struct GzipWriteStrategy {
     min_len: u64,
     compression_level: u32,
 }
 
+impl GzipWriteStrategy {
+    /// Set minimum length in bytes for when to use compression.
+    /// Default: 4 KiB.
+    pub fn set_min_len(mut self, size: u64) -> Self {
+        self.min_len = size;
+        self
+    }
+
+    /// Set the compression level to use, typically on a scale of 0-9
+    /// where 0 is _no compression_ and 9 is highest (and slowest)
+    /// compression. Default: 6.
+    pub fn set_compression_level(mut self, level: u32) -> Self {
+        self.compression_level = level;
+        self
+    }
+}
+
 impl Default for GzipWriteStrategy {
     fn default() -> Self {
-        Self { min_len: 8 * 1024,
+        Self { min_len: 4 * 1024,
                compression_level: 6 }
     }
 }
 
 impl WriteStrategy for GzipWriteStrategy {
-    fn wrap<'a>(&self, body_len: u64, file: &'a File)
+    fn wrap<'a>(&self, est_len: u64, file: &'a File)
         -> Result<WriteWrapper<'a>, FlError>
     {
-        if body_len >= self.min_len {
+        if est_len >= self.min_len {
             Ok(WriteWrapper::Gzip(
                 GzEncoder::new(file, GzCompression::new(self.compression_level))
             ))
@@ -214,6 +236,8 @@ impl WriteStrategy for GzipWriteStrategy {
     }
 }
 
+/// No compression write strategy.
+#[derive(Clone, Copy, Debug)]
 pub struct PlainWriteStrategy {}
 
 impl Default for PlainWriteStrategy {
@@ -221,7 +245,7 @@ impl Default for PlainWriteStrategy {
 }
 
 impl WriteStrategy for PlainWriteStrategy {
-    fn wrap<'a>(&self, _body_len: u64, file: &'a File)
+    fn wrap<'a>(&self, _est_len: u64, file: &'a File)
         -> Result<WriteWrapper<'a>, FlError>
     {
         Ok(WriteWrapper::Plain(file))
@@ -321,9 +345,9 @@ impl<'a> BarcWriter<'a> {
         write_record_head(file, &V2_RESERVE_HEAD)?;
         file.flush()?;
 
-        let size_est = rec.req_body().len() + rec.res_body().len();
+        let est_len = rec.req_body().len() + rec.res_body().len();
         let mut head = {
-            let mut wrapper = strategy.wrap(size_est, file)?;
+            let mut wrapper = strategy.wrap(est_len, file)?;
             let compress = wrapper.mode();
             let with_crlf = compress == Compression::Plain;
             let head = {
@@ -780,8 +804,7 @@ mod tests {
     #[test]
     fn test_write_read_small_gzip() {
         let fname = barc_test_file("small_gzip.barc").unwrap();
-        let mut strategy = GzipWriteStrategy::default();
-        strategy.min_len = 0;
+        let strategy = GzipWriteStrategy::default().set_min_len(0);
         write_read_small(&fname, &strategy).unwrap();
     }
 
@@ -842,8 +865,7 @@ mod tests {
     #[test]
     fn test_write_read_empty_record_gzip() {
         let fname = barc_test_file("empty_record_gzip.barc").unwrap();
-        let mut strategy = GzipWriteStrategy::default();
-        strategy.min_len = 0;
+        let strategy = GzipWriteStrategy::default().set_min_len(0);
         write_read_empty_record(&fname, &strategy).unwrap();
     }
 
@@ -884,6 +906,13 @@ mod tests {
     fn test_write_read_large_gzip() {
         let fname = barc_test_file("large_gzip.barc").unwrap();
         let strategy = GzipWriteStrategy::default();
+        write_read_large(&fname, &strategy).unwrap();
+    }
+
+    #[test]
+    fn test_write_read_large_gzip_0() {
+        let fname = barc_test_file("large_gzip_0.barc").unwrap();
+        let strategy = GzipWriteStrategy::default().set_compression_level(0);
         write_read_large(&fname, &strategy).unwrap();
     }
 
