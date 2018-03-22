@@ -672,6 +672,7 @@ fn parse_hex<T>(buf: &[u8]) -> Result<T, FlError>
     Ok(v)
 }
 
+// Reader header block of len bytes to HeaderMap.
 fn read_headers(r: &mut Read, with_crlf: bool, len: usize)
     -> Result<http::HeaderMap, FlError>
 {
@@ -696,12 +697,14 @@ fn read_headers(r: &mut Read, with_crlf: bool, len: usize)
     parse_headers(&buf[..])
 }
 
+// Parse header byte slice to HeaderMap.
 fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
     let mut headbuf = [httparse::EMPTY_HEADER; 128];
-    // FIXME: parse_headers API will return TooManyHeaders if headbuf
-    // isn't large enough. Hyper 0.11.15 allocates 100, so 128 is room
-    // for "even more" (sarcasm). Might be better to just replace this
-    // with our own parser, as the grammar isn't particularly complex.
+
+    // FIXME: httparse will return TooManyHeaders if headbuf isn't
+    // large enough. Hyper 0.11.15 allocates 100, so 128 is room for
+    // _even more_ (sigh). Might be better to just replace this with
+    // our own parser, as the grammar isn't particularly complex.
 
     match httparse::parse_headers(buf, &mut headbuf) {
         Ok(httparse::Status::Complete((size, heads))) => {
