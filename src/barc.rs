@@ -586,13 +586,9 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     let res_headers = read_headers(fin, NO_CRLF, rhead.res_h)?;
 
     // When compressed, we don't actually know the final size of the
-    // response body. Estimate using remaining unread compressed
-    // length, and use compress::read_to_body. This may return `Ram`
-    // or `FsWrite` states, so also prepare it for read.
-    let est = fin.get_ref().limit() * u64::from(tune.size_estimate_gzip())
-              + 4_096; // pad some, since GzDecoder pre-reads/buffers
-    println!( "Estimated res body: {}", est);
-    let res_body = read_to_body(fin, est, tune)?.prepare()?;
+    // response body, so start small and use read_to_body. This may
+    // return `Ram` or `FsWrite` states, so also prepare it for read.
+    let res_body = read_to_body(fin, 4096, tune)?.prepare()?;
 
     Ok(Record { rec_type, meta, req_headers, req_body, res_headers, res_body })
 }
