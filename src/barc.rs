@@ -971,13 +971,16 @@ mod tests {
             sunt in culpa qui officia deserunt mollit anim id est \
             laborum. ";
 
-        let mut req_body = BodyImage::with_chunks_capacity(500);
-        for _ in 0..500 {
+        let req_reps =   500;
+        let res_reps = 1_000;
+
+        let mut req_body = BodyImage::with_chunks_capacity(req_reps);
+        for _ in 0..req_reps {
             req_body.save(lorem_ipsum.into())?;
         }
 
-        let mut res_body = BodyImage::with_chunks_capacity(1_000);
-        for _ in 0..1_000 {
+        let mut res_body = BodyImage::with_chunks_capacity(res_reps);
+        for _ in 0..res_reps {
             res_body.save(lorem_ipsum.into())?;
         }
 
@@ -992,9 +995,11 @@ mod tests {
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 0);
         assert_eq!(record.req_headers.len(), 0);
-        assert_eq!(record.req_body.len(), (lorem_ipsum.len() * 500) as u64);
+        assert_eq!(record.req_body.len(),
+                   (lorem_ipsum.len() * req_reps) as u64);
         assert_eq!(record.res_headers.len(), 0);
-        assert_eq!(record.res_body.len(), (lorem_ipsum.len() * 1_000) as u64);
+        assert_eq!(record.res_body.len(),
+                   (lorem_ipsum.len() * res_reps) as u64);
 
         let record = reader.read(&tune)?;
         assert!(record.is_none());
