@@ -183,15 +183,16 @@ const V2_RESERVE_HEAD: RecordHead = RecordHead {
     res_h: 0
 };
 
+/// Strategies for BARC record compression on write.
 pub trait WriteStrategy {
-    fn wrap<'a>(&self, est_len: u64, file: &'a File)
+    /// Return a `WriteWrapper` for `File` by evaluating the
+    /// `RecordedType` for compression worthiness.
+    fn wrap<'a>(&self, rec: &'a RecordedType, file: &'a File)
         -> Result<WriteWrapper<'a>, FlError>;
-    // FIXME: Add headers for the associated body, allowing strategies
-    // to check Content-Type, etc.
 }
 
-/// Compression with gzip write strategy. Will not compress if a
-/// mininum length is not reached.
+/// Strategy for for gzip compression. Will not compress if a mininum
+/// length estimate is not reached.
 #[derive(Clone, Copy, Debug)]
 pub struct GzipWriteStrategy {
     min_len: u64,
@@ -223,9 +224,11 @@ impl Default for GzipWriteStrategy {
 }
 
 impl WriteStrategy for GzipWriteStrategy {
-    fn wrap<'a>(&self, est_len: u64, file: &'a File)
+    fn wrap<'a>(&self, rec: &'a RecordedType, file: &'a File)
         -> Result<WriteWrapper<'a>, FlError>
     {
+        // FIXME: Only considers req/res body lengths
+        let est_len = rec.req_body().len() + rec.res_body().len();
         if est_len >= self.min_len {
             Ok(WriteWrapper::Gzip(
                 GzEncoder::new(file, GzCompression::new(self.compression_level))
@@ -236,7 +239,7 @@ impl WriteStrategy for GzipWriteStrategy {
     }
 }
 
-/// No compression write strategy.
+/// Strategy of no (aka `Plain`) compression.
 #[derive(Clone, Copy, Debug)]
 pub struct PlainWriteStrategy {}
 
@@ -245,20 +248,24 @@ impl Default for PlainWriteStrategy {
 }
 
 impl WriteStrategy for PlainWriteStrategy {
-    fn wrap<'a>(&self, _est_len: u64, file: &'a File)
+    /// Return a `WriteWrapper` for `File`. This implementation always
+    /// returns a `Plain` wrapper.
+    fn wrap<'a>(&self, _rec: &'a RecordedType, file: &'a File)
         -> Result<WriteWrapper<'a>, FlError>
     {
         Ok(WriteWrapper::Plain(file))
     }
 }
 
+/// Wrapper holding a potentially encoding `Write` reference for the
+/// underlying BARC `File` reference.
 pub enum WriteWrapper<'a> {
     Plain(&'a File),
     Gzip(GzEncoder<&'a File>)
 }
 
 impl<'a> WriteWrapper<'a> {
-    /// Return the Compression flag variant in use
+    /// Return the `Compression` flag variant in use.
     pub fn mode(&self) -> Compression {
         match *self {
             WriteWrapper::Plain(_) => Compression::Plain,
@@ -266,7 +273,7 @@ impl<'a> WriteWrapper<'a> {
         }
     }
 
-    /// Return a Write reference for self
+    /// Return a `Write` reference for self.
     pub fn as_write(&mut self) -> &mut Write {
         match *self {
             WriteWrapper::Plain(ref mut f) => f,
@@ -274,9 +281,13 @@ impl<'a> WriteWrapper<'a> {
         }
     }
 
+    /// Consume the wrapper, finishing any encoding and flushing the
+    /// completed write.
     pub fn finish(self) -> Result<(), FlError> {
         match self {
-            WriteWrapper::Plain(_) => {},
+            WriteWrapper::Plain(mut f) => {
+                f.flush()?;
+            }
             WriteWrapper::Gzip(gze) => {
                 gze.finish()?.flush()?;
             }
@@ -345,9 +356,8 @@ impl<'a> BarcWriter<'a> {
         write_record_head(file, &V2_RESERVE_HEAD)?;
         file.flush()?;
 
-        let est_len = rec.req_body().len() + rec.res_body().len();
         let mut head = {
-            let mut wrapper = strategy.wrap(est_len, file)?;
+            let mut wrapper = strategy.wrap(rec, file)?;
             let compress = wrapper.mode();
             let with_crlf = compress == Compression::Plain;
             let head = {
