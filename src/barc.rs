@@ -32,11 +32,11 @@ pub const V2_HEAD_SIZE: usize = 54;
 /// Maximum total record length, excluding the record head:
 /// 2<sup>48</sup> (256 TiB) - 1.
 /// Note: this exceeds the file or partition size limits of many
-/// filesystems.
+/// file-systems.
 pub const V2_MAX_RECORD: u64 = 0xfff_fff_fff_fff;
 
 /// Maximum header (meta, request, response) block size, including
-/// CRLF terminator:
+/// any CRLF terminator:
 /// 2<sup>20</sup> (1 MiB) - 1.
 pub const V2_MAX_HBLOCK: usize =        0xff_fff;
 
@@ -123,6 +123,7 @@ pub enum RecordType {
 }
 
 impl RecordType {
+    /// Return (char) flag for variant.
     fn flag(self) -> char {
         match self {
             RecordType::Reserved => 'R',
@@ -130,6 +131,7 @@ impl RecordType {
         }
     }
 
+    /// Return variant for (byte) flag, or fail.
     fn try_from(f: u8) -> Result<Self, FlError> {
         match f {
             b'R' => Ok(RecordType::Reserved),
@@ -155,6 +157,7 @@ pub enum Compression {
 }
 
 impl Compression {
+    /// Return (char) flag for variant.
     fn flag(self) -> char {
         match self {
             Compression::Plain   => 'P',
@@ -162,6 +165,7 @@ impl Compression {
         }
     }
 
+    /// Return variant for (byte) flag, or fail.
     fn try_from(f: u8) -> Result<Self, FlError> {
         match f {
             b'P' => Ok(Compression::Plain),
@@ -171,18 +175,6 @@ impl Compression {
     }
 }
 
-const CRLF: &[u8] = b"\r\n";
-
-const V2_RESERVE_HEAD: RecordHead = RecordHead {
-    len: 0,
-    rec_type: RecordType::Reserved,
-    compress: Compression::Plain,
-    meta: 0,
-    req_h: 0,
-    req_b: 0,
-    res_h: 0
-};
-
 /// Strategies for BARC record compression on write.
 pub trait WriteStrategy {
     /// Return a `WriteWrapper` for `File` by evaluating the
@@ -191,7 +183,7 @@ pub trait WriteStrategy {
         -> Result<WriteWrapper<'a>, FlError>;
 }
 
-/// Strategy for for gzip compression. Will not compress if a mininum
+/// Strategy for gzip compression. Will not compress if a minimum
 /// length estimate is not reached.
 #[derive(Clone, Copy, Debug)]
 pub struct GzipWriteStrategy {
@@ -227,7 +219,7 @@ impl WriteStrategy for GzipWriteStrategy {
     fn wrap<'a>(&self, rec: &'a RecordedType, file: &'a File)
         -> Result<WriteWrapper<'a>, FlError>
     {
-        // FIXME: Only considers req/res body lengths
+        // FIXME: This only considers req/res body lengths
         let est_len = rec.req_body().len() + rec.res_body().len();
         if est_len >= self.min_len {
             Ok(WriteWrapper::Gzip(
@@ -296,6 +288,21 @@ impl<'a> WriteWrapper<'a> {
     }
 }
 
+const CRLF: &[u8] = b"\r\n";
+
+const WITH_CRLF: bool = true;
+const NO_CRLF:   bool = false;
+
+const V2_RESERVE_HEAD: RecordHead = RecordHead {
+    len: 0,
+    rec_type: RecordType::Reserved,
+    compress: Compression::Plain,
+    meta: 0,
+    req_h: 0,
+    req_b: 0,
+    res_h: 0
+};
+
 impl BarcFile {
     /// Return new instance for the specified path, which may be an
     /// existing file, or one to be created when `writer` is opened.
@@ -355,55 +362,23 @@ impl<'a> BarcWriter<'a> {
         write_record_head(file, &V2_RESERVE_HEAD)?;
         file.flush()?;
 
-        let mut head = {
-            let mut wrapper = strategy.wrap(rec, file)?;
-            let compress = wrapper.mode();
-            let with_crlf = compress == Compression::Plain;
-            let head = {
-                let fout = wrapper.as_write();
-
-                let meta = write_headers(fout, with_crlf, rec.meta())?;
-
-                let req_h = write_headers(fout, with_crlf, rec.req_headers())?;
-                let req_b = write_body(fout, with_crlf, rec.req_body())?;
-
-                let res_h = write_headers(fout, with_crlf, rec.res_headers())?;
-
-                // Compute total thus far, excluding the fixed head length
-                let mut len: u64 = (meta + req_h + res_h) as u64 + req_b;
-
-                assert!((len + rec.res_body().len() + 2) <= V2_MAX_RECORD,
-                        "body exceeds size limit");
-
-                let res_b = write_body(fout, with_crlf, rec.res_body())?;
-                len += res_b;
-
-                RecordHead {
-                    len, // adjusted below
-                    rec_type: rec.rec_type(),
-                    compress,
-                    meta,
-                    req_h,
-                    req_b,
-                    res_h }
-            };
-
-            wrapper.finish()?;
-            head
-        };
+        // Write the record per strategy
+        let mut head = write_record(file, rec, strategy)?;
 
         // Use new file offset to indicate total length
         let end = file.seek(SeekFrom::Current(0))?;
         let orig_len = head.len;
+        assert!( end >= (start + (V2_HEAD_SIZE as u64)));
         head.len = end - start - (V2_HEAD_SIZE as u64);
         if head.compress == Compression::Plain {
             assert_eq!(orig_len, head.len);
         } else if orig_len < head.len {
-            println!("WARN: Compression grew record from {} to {} bytes",
+            println!("WARN: Compression *increased* record size from \
+                      {} to {} bytes",
                      orig_len, head.len);
         }
 
-        // Seek back and write final record head, with known sizes
+        // Seek back and write final record head, with known size
         file.seek(SeekFrom::Start(start))?;
         write_record_head(file, &head)?;
 
@@ -415,6 +390,48 @@ impl<'a> BarcWriter<'a> {
     }
 }
 
+// Write the record, returning a preliminary `RecordHead` with
+// observed (not compressed) lengths.
+fn write_record(file: &mut File, rec: &RecordedType, strategy: &WriteStrategy)
+    -> Result<RecordHead, FlError>
+{
+    let mut wrapper = strategy.wrap(rec, file)?;
+    let compress = wrapper.mode();
+    let with_crlf = compress == Compression::Plain;
+    let head = {
+        let fout = wrapper.as_write();
+
+        let meta = write_headers(fout, with_crlf, rec.meta())?;
+
+        let req_h = write_headers(fout, with_crlf, rec.req_headers())?;
+        let req_b = write_body(fout, with_crlf, rec.req_body())?;
+
+        let res_h = write_headers(fout, with_crlf, rec.res_headers())?;
+
+        // Compute total thus far, excluding the fixed head length
+        let mut len: u64 = (meta + req_h + res_h) as u64 + req_b;
+
+        assert!((len + rec.res_body().len() + 2) <= V2_MAX_RECORD,
+                "body exceeds size limit");
+
+        let res_b = write_body(fout, with_crlf, rec.res_body())?;
+        len += res_b;
+
+        RecordHead {
+            len, // uncompressed length
+            rec_type: rec.rec_type(),
+            compress,
+            meta,
+            req_h,
+            req_b,
+            res_h }
+    };
+
+    wrapper.finish()?;
+    Ok(head)
+}
+
+// Write record head to out, asserting the various length constraints.
 fn write_record_head(out: &mut Write, head: &RecordHead)
     -> Result<(), FlError>
 {
@@ -435,6 +452,7 @@ fn write_record_head(out: &mut Write, head: &RecordHead)
     Ok(())
 }
 
+// Write header block to out, returning the length written.
 fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
     -> Result<usize, FlError>
 {
@@ -452,6 +470,7 @@ fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
     Ok(size)
 }
 
+// Write a body to out, returning the length written.
 fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
     -> Result<u64, FlError>
 {
@@ -462,13 +481,11 @@ fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
     Ok(size)
 }
 
+// Like `write_all`, but return the length of the provided byte slice.
 fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError> {
     out.write_all(bs)?;
     Ok(bs.len())
 }
-
-const WITH_CRLF: bool = true;
-const NO_CRLF:   bool = false;
 
 impl BarcReader {
 
@@ -544,6 +561,8 @@ impl BarcReader {
     }
 }
 
+// Read and return a compressed `Record`. This is specialized for
+// NO_CRLF and since bodies can't be directly mapped from the file.
 fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     -> Result<Record, FlError>
 {
@@ -551,6 +570,8 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
 
     // Decoder over limited `Take` of compressed record len
     let fin = &mut GzDecoder::new(file.take(rhead.len));
+
+    let rec_type = rhead.rec_type;
 
     let meta = read_headers(fin, NO_CRLF, rhead.meta)?;
 
@@ -565,15 +586,15 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     let res_headers = read_headers(fin, NO_CRLF, rhead.res_h)?;
 
     // When compressed, we don't actually know the final size of the
-    // response body. Estimate and use compress::read_to_body, which
-    // may return `Ram` or `FsWrite` states, so also prepare it.
+    // response body. Estimate using remaining unread compressed
+    // length, and use compress::read_to_body. This may return `Ram`
+    // or `FsWrite` states, so also prepare it for read.
     let est = fin.get_ref().limit() * u64::from(tune.size_estimate_gzip())
-              + 4_096;
-    println!( "Estimated body: {}", est);
+              + 4_096; // pad some, since GzDecoder pre-reads/buffers
+    println!( "Estimated res body: {}", est);
     let res_body = read_to_body(fin, est, tune)?.prepare()?;
 
-    Ok(Record { rec_type: rhead.rec_type,
-                meta, req_headers, req_body, res_headers, res_body })
+    Ok(Record { rec_type, meta, req_headers, req_body, res_headers, res_body })
 }
 
 // Return RecordHead or None if EOF
@@ -680,7 +701,7 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
     // FIXME: parse_headers API will return TooManyHeaders if headbuf
     // isn't large enough. Hyper 0.11.15 allocates 100, so 128 is room
     // for "even more" (sarcasm). Might be better to just replace this
-    // with our own parser, as the grammer isn't particularly complex.
+    // with our own parser, as the grammar isn't particularly complex.
 
     match httparse::parse_headers(buf, &mut headbuf) {
         Ok(httparse::Status::Complete((size, heads))) => {
@@ -991,7 +1012,7 @@ mod tests {
 
         let res_body_str = "RESPONSE BODY";
 
-        // Estabilish reader.
+        // Establish reader.
         let tune = Tunables::new();
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap();
