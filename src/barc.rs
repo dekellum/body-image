@@ -344,9 +344,8 @@ impl<'a> BarcWriter<'a> {
     /// Write a new record, returning the record's offset from the
     /// start of the BARC file. The writer position is then advanced
     /// to the end of the file, for the next `write`.
-    pub fn write<R>(&mut self, rec: &R, strategy: &WriteStrategy)
+    pub fn write(&mut self, rec: &RecordedType, strategy: &WriteStrategy)
         -> Result<u64, FlError>
-        where R: RecordedType
     {
         // BarcFile::writer() guarantees Some(File)
         let file = &mut *self.guard.as_mut().unwrap();
