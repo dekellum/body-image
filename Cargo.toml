@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["David Kellum <dek-oss@gravitext.com>"]
 
 [dependencies]
+brotli     = ">=1.2.0, <2"
 bytes      = ">=0.4.6, <2"
 failure    = ">=0.1.0, <2"
 flate2     = ">=1.0.1, <2"
