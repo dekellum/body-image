@@ -258,7 +258,7 @@ pub enum WriteWrapper<'a> {
 }
 
 impl<'a> WriteWrapper<'a> {
-    /// Return the Compression flag varient in use
+    /// Return the Compression flag variant in use
     pub fn mode(&self) -> Compression {
         match *self {
             WriteWrapper::Plain(_) => Compression::Plain,
@@ -276,12 +276,12 @@ impl<'a> WriteWrapper<'a> {
 
     pub fn finish(self) -> Result<(), FlError> {
         match self {
-            WriteWrapper::Plain(_) => Ok(()),
+            WriteWrapper::Plain(_) => {},
             WriteWrapper::Gzip(gze) => {
                 gze.finish()?.flush()?;
-                Ok(())
             }
         }
+        Ok(())
     }
 }
 
