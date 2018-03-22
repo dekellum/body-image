@@ -353,12 +353,12 @@ impl<'a> BarcWriter<'a> {
             let head = {
                 let fout = wrapper.as_write();
 
-                let meta = write_headers(fout, rec.meta())?;
+                let meta = write_headers(fout, with_crlf, rec.meta())?;
 
-                let req_h = write_headers(fout, rec.req_headers())?;
+                let req_h = write_headers(fout, with_crlf, rec.req_headers())?;
                 let req_b = write_body(fout, with_crlf, rec.req_body())?;
 
-                let res_h = write_headers(fout, rec.res_headers())?;
+                let res_h = write_headers(fout, with_crlf, rec.res_headers())?;
 
                 // Compute total thus far, excluding the fixed head length
                 let mut len: u64 = (meta + req_h + res_h) as u64 + req_b;
@@ -426,7 +426,7 @@ fn write_record_head(out: &mut Write, head: &RecordHead)
     Ok(())
 }
 
-fn write_headers(out: &mut Write, headers: &http::HeaderMap)
+fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
     -> Result<usize, FlError>
 {
     let mut size = 0;
@@ -436,7 +436,7 @@ fn write_headers(out: &mut Write, headers: &http::HeaderMap)
         size += write_all_len(out, value.as_bytes())?;
         size += write_all_len(out, CRLF)?;
     }
-    if size > 0 {
+    if with_crlf && size > 0 {
         size += write_all_len(out, CRLF)?;
     }
     assert!(size <= V2_MAX_HBLOCK);
@@ -457,6 +457,9 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError> {
     out.write_all(bs)?;
     Ok(bs.len())
 }
+
+const WITH_CRLF: bool = true;
+const NO_CRLF:   bool = false;
 
 impl BarcReader {
 
@@ -494,25 +497,25 @@ impl BarcReader {
             return Ok(Some(rec))
         }
 
-        let meta = read_headers(fin, rhead.meta)?;
+        let meta = read_headers(fin, WITH_CRLF, rhead.meta)?;
 
-        let req_headers = read_headers(fin, rhead.req_h)?;
+        let req_headers = read_headers(fin, WITH_CRLF, rhead.req_h)?;
         let mut total: u64 = (rhead.meta + rhead.req_h) as u64;
 
         let req_body = if rhead.req_b <= tune.max_body_ram() {
-            read_body_ram(fin, true, rhead.req_b as usize)
+            read_body_ram(fin, WITH_CRLF, rhead.req_b as usize)
         } else {
             let offset = start + (V2_HEAD_SIZE as u64) + total;
             map_body(fin, offset, rhead.req_b)
         }?;
 
-        let res_headers = read_headers(fin, rhead.res_h)?;
+        let res_headers = read_headers(fin, WITH_CRLF, rhead.res_h)?;
         total += rhead.req_b;
         total += rhead.res_h as u64;
         let body_len = rhead.len - total;
 
         let res_body = if body_len <= tune.max_body_ram() {
-            read_body_ram(fin, true, body_len as usize)
+            read_body_ram(fin, WITH_CRLF, body_len as usize)
         } else {
             let offset = start + (V2_HEAD_SIZE as u64) + total;
             map_body(fin, offset, body_len)
@@ -540,17 +543,17 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     // Decoder over limited `Take` of compressed record len
     let fin = &mut GzDecoder::new(file.take(rhead.len));
 
-    let meta = read_headers(fin, rhead.meta)?;
+    let meta = read_headers(fin, NO_CRLF, rhead.meta)?;
 
-    let req_headers = read_headers(fin, rhead.req_h)?;
+    let req_headers = read_headers(fin, NO_CRLF, rhead.req_h)?;
 
     let req_body = if rhead.req_b <= tune.max_body_ram() {
-        read_body_ram(fin, false, rhead.req_b as usize)?
+        read_body_ram(fin, NO_CRLF, rhead.req_b as usize)?
     } else {
         read_body_fs(fin, rhead.req_b, tune)?.prepare()?
     };
 
-    let res_headers = read_headers(fin, rhead.res_h)?;
+    let res_headers = read_headers(fin, NO_CRLF, rhead.res_h)?;
 
     // When compressed, we don't actually know the final size of the
     // response body. Estimate and use compress::read_to_body, which
@@ -639,7 +642,7 @@ fn parse_hex<T>(buf: &[u8]) -> Result<T, FlError>
     Ok(v)
 }
 
-fn read_headers(r: &mut Read, len: usize)
+fn read_headers(r: &mut Read, with_crlf: bool, len: usize)
     -> Result<http::HeaderMap, FlError>
 {
     if len == 0 {
@@ -648,14 +651,18 @@ fn read_headers(r: &mut Read, len: usize)
 
     assert!(len > 2);
 
-    let mut buf = BytesMut::with_capacity(len);
+    let tlen = if with_crlf { len } else { len + 2 };
+    let mut buf = BytesMut::with_capacity(tlen);
     unsafe {
         r.read_exact(&mut buf.bytes_mut()[..len])?;
         buf.advance_mut(len);
     }
 
-    // Don't exclude trailing CRLF, as its used to signal end of
-    // headers (avoids Partial)
+    // Add CRLF for parsing if its not already present
+    // (e.g. Compression::Plain padding)
+    if !with_crlf {
+        buf.put_slice(CRLF)
+    }
     parse_headers(&buf[..])
 }
 
