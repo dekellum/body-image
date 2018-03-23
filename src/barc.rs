@@ -1,5 +1,6 @@
 //! Basic Archive (BARC) file format reader and writer.
 
+#[cfg(feature = "brotli")]
 extern crate brotli;
 extern crate bytes;
 extern crate http;
@@ -245,14 +246,6 @@ impl Default for PlainWriteStrategy {
     fn default() -> Self { Self {} }
 }
 
-/// Strategy for Brotli compression. Will not compress if a minimum
-/// length estimate is not reached.
-#[derive(Clone, Copy, Debug)]
-pub struct BrotliWriteStrategy {
-    min_len: u64,
-    compression_level: u32,
-}
-
 impl WriteStrategy for PlainWriteStrategy {
     /// Return a `WriteWrapper` for `File`. This implementation always
     /// returns a `Plain` wrapper.
@@ -263,6 +256,16 @@ impl WriteStrategy for PlainWriteStrategy {
     }
 }
 
+/// Strategy for Brotli compression. Will not compress if a minimum
+/// length estimate is not reached.
+#[cfg(feature = "brotli")]
+#[derive(Clone, Copy, Debug)]
+pub struct BrotliWriteStrategy {
+    min_len: u64,
+    compression_level: u32,
+}
+
+#[cfg(feature = "brotli")]
 impl BrotliWriteStrategy {
     /// Set minimum length in bytes for when to use compression.
     /// Default: 4 KiB.
@@ -280,6 +283,7 @@ impl BrotliWriteStrategy {
     }
 }
 
+#[cfg(feature = "brotli")]
 impl Default for BrotliWriteStrategy {
     fn default() -> Self {
         Self { min_len: 4 * 1024,
@@ -287,6 +291,7 @@ impl Default for BrotliWriteStrategy {
     }
 }
 
+#[cfg(feature = "brotli")]
 impl WriteStrategy for BrotliWriteStrategy {
     fn wrap<'a>(&self, rec: &'a RecordedType, file: &'a File)
         -> Result<WriteWrapper<'a>, FlError>
@@ -312,6 +317,7 @@ impl WriteStrategy for BrotliWriteStrategy {
 pub enum WriteWrapper<'a> {
     Plain(&'a File),
     Gzip(GzEncoder<&'a File>),
+    #[cfg(feature = "brotli")]
     Brotli(brotli::CompressorWriter<&'a File>)
 }
 
@@ -321,6 +327,7 @@ impl<'a> WriteWrapper<'a> {
         match *self {
             WriteWrapper::Plain(_) => Compression::Plain,
             WriteWrapper::Gzip(_) => Compression::Gzip,
+            #[cfg(feature = "brotli")]
             WriteWrapper::Brotli(_) => Compression::Brotli,
         }
     }
@@ -330,6 +337,7 @@ impl<'a> WriteWrapper<'a> {
         match *self {
             WriteWrapper::Plain(ref mut f) => f,
             WriteWrapper::Gzip(ref mut gze) => gze,
+            #[cfg(feature = "brotli")]
             WriteWrapper::Brotli(ref mut bcw) => bcw,
         }
     }
@@ -344,6 +352,7 @@ impl<'a> WriteWrapper<'a> {
             WriteWrapper::Gzip(gze) => {
                 gze.finish()?.flush()?;
             }
+            #[cfg(feature = "brotli")]
             WriteWrapper::Brotli(mut bcw) => {
                 bcw.flush()?;
             }
@@ -629,23 +638,25 @@ impl BarcReader {
 /// of a BARC file.
 enum ReadWrapper<'a> {
     Gzip(GzDecoder<Take<&'a mut File>>),
+    #[cfg(feature = "brotli")]
     Brotli(brotli::Decompressor<Take<&'a mut File>>),
 }
 
 impl<'a> ReadWrapper<'a> {
-    fn new(comp: Compression, r: Take<&'a mut File>, buf_size: usize)
+    fn new(comp: Compression, r: Take<&'a mut File>, _buf_size: usize)
         -> ReadWrapper
     {
         match comp {
-            Compression::Plain => panic!("Unsupported ReadWrapper for Plain"),
             Compression::Gzip => {
                 ReadWrapper::Gzip(GzDecoder::new(r))
             }
+            #[cfg(feature = "brotli")]
             Compression::Brotli => {
                 ReadWrapper::Brotli(
-                    brotli::Decompressor::new(r, buf_size)
+                    brotli::Decompressor::new(r, _buf_size)
                 )
             }
+            _ => panic!("ReadWrapper doesn't support {:?}", comp)
         }
     }
 
@@ -653,6 +664,7 @@ impl<'a> ReadWrapper<'a> {
     fn as_read(&mut self) -> &mut Read {
         match *self {
             ReadWrapper::Gzip(ref mut gze) => gze,
+            #[cfg(feature = "brotli")]
             ReadWrapper::Brotli(ref mut bcw) => bcw,
         }
     }
@@ -944,6 +956,7 @@ mod tests {
         write_read_small(&fname, &strategy).unwrap();
     }
 
+    #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_small_brotli() {
         let fname = barc_test_file("small_brotli.barc").unwrap();
@@ -1012,6 +1025,7 @@ mod tests {
         write_read_empty_record(&fname, &strategy).unwrap();
     }
 
+    #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_empty_record_brotli() {
         let fname = barc_test_file("empty_record_brotli.barc").unwrap();
@@ -1067,6 +1081,7 @@ mod tests {
         write_read_large(&fname, &strategy).unwrap();
     }
 
+    #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_large_brotli() {
         let fname = barc_test_file("large_brotli.barc").unwrap();
@@ -1074,6 +1089,7 @@ mod tests {
         write_read_large(&fname, &strategy).unwrap();
     }
 
+    #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_large_brotli_0() {
         let fname = barc_test_file("large_brotli_0.barc").unwrap();
