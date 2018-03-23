@@ -834,7 +834,7 @@ mod tests {
     #[test]
     fn test_small_https() {
         let tune = Tunables::new();
-        let req = create_request("https://example.com").unwrap();
+        let req = create_request("https://www.usa.gov").unwrap();
 
         let dl = fetch(req, &tune).unwrap();
         println!("Response {:#?}", dl);
