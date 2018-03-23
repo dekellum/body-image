@@ -167,8 +167,11 @@ impl BodySink {
     /// Write all bytes of slice by reference to self, which must be in state
     /// `FsWrite`. This can be an optimization over `save` which requires an
     /// owned Chunk. Panics if in some other state.
-    pub fn write_all(&mut self, buf: &[u8]) -> Result<(), FlError> {
+    pub fn write_all<T>(&mut self, buf: T) -> Result<(), FlError>
+        where T: AsRef<[u8]>
+    {
         if let BodySinkState::FsWrite(ref mut f) = self.state {
+            let buf = buf.as_ref();
             f.write_all(buf)?;
             self.len += buf.len() as u64;
             Ok(())
