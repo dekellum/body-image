@@ -12,7 +12,7 @@ pub mod compress;
 
 /// Alias for failure crate `failure::Error`
 use failure::Error as FlError;
-// FIXME: Use atleast while prototyping. Could switch to an error enum
+// FIXME: Use at least while prototyping. Could switch to an error enum
 // for clear separation between hyper::Error and application errors.
 
 use std::fmt;
