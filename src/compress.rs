@@ -11,7 +11,7 @@ use failure::Error as FlError;
 use self::bytes::{BytesMut, BufMut};
 use self::flate2::read::{DeflateDecoder, GzDecoder};
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
-use super::{BodyImage, Dialog, META_RES_DECODED, Tunables};
+use super::{BodyImage, BodySink, Dialog, META_RES_DECODED, Tunables};
 
 /// Decode any _gzip_ or _deflate_ response Transfer-Encoding or
 /// Content-Encoding into a new response `BodyItem`, updating `Dialog`
@@ -54,7 +54,7 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     }
 
     if let Some(ref comp) = compress {
-        let new_body = {
+        dialog.res_body = {
             println!("Body to {:?} decode: {:?}", comp, dialog.res_body);
             let mut reader = dialog.res_body.reader();
             match *comp {
@@ -73,7 +73,6 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                 _ => unreachable!("Not supported: {:?}", comp)
             }
         };
-        dialog.res_body = new_body.prepare()?;
         println!("Body update: {:?}", dialog.res_body);
     }
 
@@ -96,11 +95,11 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
     -> Result<BodyImage, FlError>
 {
     if len_estimate > tune.max_body_ram() {
-        let b = BodyImage::with_fs()?;
+        let b = BodySink::with_fs()?;
         return read_to_body_fs(r, b, tune);
     }
 
-    let mut body = BodyImage::with_ram(len_estimate);
+    let mut body = BodySink::with_ram(len_estimate);
 
     let mut size: u64 = 0;
     'eof: loop {
@@ -143,10 +142,11 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
         println!("Saved (Ram) decoded buf len {}", len);
         body.save(buf.freeze().into())?;
     }
+    let body = body.prepare()?;
     Ok(body)
 }
 
-fn read_to_body_fs(r: &mut Read, mut body: BodyImage, tune: &Tunables)
+fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
     -> Result<BodyImage, FlError>
 {
     let mut size: u64 = 0;
@@ -175,5 +175,6 @@ fn read_to_body_fs(r: &mut Read, mut body: BodyImage, tune: &Tunables)
         body.write_all(&buf)?;
         buf.clear();
     }
+    let body = body.prepare()?;
     Ok(body)
 }

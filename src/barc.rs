@@ -17,7 +17,8 @@ use hyper::Chunk;
 use http::header::{HeaderName, HeaderValue};
 use memmap::MmapOptions;
 
-use super::{BodyImage, Dialog, Mapped, Recorded, RequestRecorded, Tunables};
+use super::{BodyImage, BodySink, Dialog, Mapped, Recorded, RequestRecorded,
+            Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -529,8 +530,9 @@ fn read_body_ram(r: &mut Read, len: usize) -> Result<BodyImage, FlError> {
     }
 
     let chunk: Chunk = buf.freeze().into();
-    let mut b = BodyImage::with_chunks_capacity(1);
+    let mut b = BodySink::with_chunks_capacity(1);
     b.save(chunk)?;
+    let b = b.prepare()?;
     Ok(b)
 }
 
