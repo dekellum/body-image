@@ -20,6 +20,7 @@ use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::mem;
 use bytes::Bytes;
 use futures::{Future, Stream};
 use futures::future::err as futerr;
@@ -296,17 +297,31 @@ impl BodyImage {
         Ok(self)
     }
 
-    /// Consumes self state `FsRead` and returns `MemMap` by memory
-    /// mapping the file.  Panics if self is in some other state.
-    pub fn map(mut self) -> Result<Self, FlError> {
-        if let BodyImageState::FsRead(file) = self.state {
+    /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
+    /// other states.
+    pub fn mem_map(&mut self) -> Result<&mut Self, FlError> {
+        if let BodyImageState::FsRead(_) = self.state {
             assert!(self.len > 0);
-            let map = unsafe { Mmap::map(&file)? };
-            self.state = BodyImageState::MemMap(Mapped { map, _file: file });
-            Ok(self)
-        } else {
-            panic!("Invalid state for map(): {:?}", self);
+            // We need to swap in a temporary Empty state in order to move the
+            // file, given the mapping can fail.
+            if let BodyImageState::FsRead(file) = mem::replace(
+                &mut self.state,
+                BodyImageState::Ram(Vec::with_capacity(0)))
+            {
+                match unsafe { Mmap::map(&file) } {
+                    Ok(map) => {
+                        self.state = BodyImageState::MemMap(
+                            Mapped { map, _file: file }
+                        );
+                    }
+                    Err(e) => {
+                        self.state = BodyImageState::FsRead(file);
+                        return Err(FlError::from(e));
+                    }
+                }
+            }
         }
+        Ok(self)
     }
 
     /// Return a new `BodyReader` over self. Panics if in state
@@ -582,15 +597,13 @@ impl InDialog {
 }
 
 impl Dialog {
-    /// If the response body is `FsRead`, convert it to `MemMap` via
-    /// `BodyImage::map`, else no-op.
-    pub fn map_if_fs(mut self) -> Result<Self, FlError> {
-        if let BodyImageState::FsRead(_) = self.res_body.state {
-            self.res_body = self.res_body.map()?;
-        }
-        Ok(self)
+    /// If the request or response body are in state `FsRead`, convert to
+    /// `MemMap` via `BodyImage::map`.
+    pub fn mem_map_bodies(&mut self) -> Result<(), FlError> {
+        self.prolog.req_body.mem_map()?;
+        self.res_body.mem_map()?;
+        Ok(())
     }
-    //FIXME: Move this to BodyImage?
 }
 
 /// A collection of size limits and performance tuning
