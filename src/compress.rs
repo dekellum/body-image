@@ -140,7 +140,7 @@ fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
             return read_to_body_fs(r, body, tune)
         }
         println!("Saved (Ram) decoded buf len {}", len);
-        body.save(buf.freeze().into())?;
+        body.save(buf.freeze())?;
     }
     let body = body.prepare()?;
     Ok(body)

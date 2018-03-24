@@ -151,8 +151,12 @@ impl BodySink {
         self.len
     }
 
-    /// Save `Chunk` by appending to `Ram` or writing to `FsWrite` file.
-    pub fn save(&mut self, chunk: Chunk) -> Result<(), FlError> {
+    /// Save bytes by appending to `Ram` or writing to `FsWrite` file. When in
+    /// state `Ram` this may be more efficient than `write_all`.
+    pub fn save<T>(&mut self, chunk: T) -> Result<(), FlError>
+        where T: Into<Chunk>
+    {
+        let chunk = chunk.into();
         let len = chunk.len() as u64;
         match self.state {
             BodySinkState::Ram(ref mut v) => {
