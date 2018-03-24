@@ -6,6 +6,7 @@ extern crate hyper_tls;
 extern crate memmap;
 extern crate tempfile;
 extern crate tokio_core;
+extern crate bytes;
 
 pub mod barc;
 pub mod compress;
@@ -19,6 +20,7 @@ use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use bytes::Bytes;
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
@@ -164,21 +166,22 @@ impl BodySink {
         Ok(())
     }
 
-    /// Write all bytes of slice by reference to self, which must be in state
-    /// `FsWrite`. This can be an optimization over `save` which requires an
-    /// owned Chunk. Panics if in some other state.
+    /// Write all bytes to self.  When in state `FsWrite` this is copy free
+    /// and more optimal than `save`.
     pub fn write_all<T>(&mut self, buf: T) -> Result<(), FlError>
         where T: AsRef<[u8]>
     {
-        if let BodySinkState::FsWrite(ref mut f) = self.state {
-            let buf = buf.as_ref();
-            f.write_all(buf)?;
-            self.len += buf.len() as u64;
-            Ok(())
+        let buf = buf.as_ref();
+        match self.state {
+            BodySinkState::Ram(ref mut v) => {
+                v.push(Bytes::from(buf).into());
+            }
+            BodySinkState::FsWrite(ref mut f) => {
+                f.write_all(buf)?;
+            }
         }
-        else {
-            panic!("Invalid state for write_all(): {:?}", self);
-        }
+        self.len += buf.len() as u64;
+        Ok(())
     }
 
     /// If `Ram`, convert to `FsWrite`, No-op if already `FsWrite`.
@@ -279,7 +282,7 @@ impl BodyImage {
 
     /// Prepare for re-reading. If `FsRead` seeks to beginning of file. No-op
     /// for other states.
-    pub fn prepare(mut self) -> Result<Self, FlError> {
+    pub fn prepare(&mut self) -> Result<&mut Self, FlError> {
         match self.state {
             BodyImageState::FsRead(ref mut f) => {
                 f.seek(SeekFrom::Start(0))?;
