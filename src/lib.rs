@@ -62,12 +62,12 @@ pub type HyRequest = http::Request<HyBody>;
 ///
 #[derive(Debug)]
 pub struct BodyImage {
-    state: BodyImageState,
+    state: ImageState,
     len: u64
 }
 
 // Internal state enum for BodyImage
-enum BodyImageState {
+enum ImageState {
     Ram(Vec<Chunk>),
     FsRead(File),
     MemMap(Mapped),
@@ -75,11 +75,11 @@ enum BodyImageState {
 
 #[derive(Debug)]
 pub struct BodySink {
-    state: BodySinkState,
+    state: SinkState,
     len: u64
 }
 
-enum BodySinkState {
+enum SinkState {
     Ram(Vec<Chunk>),
     FsWrite(File),
 }
@@ -118,7 +118,7 @@ impl BodySink {
     /// specified capacity expressed as number chunks.
     pub fn with_chunks_capacity(capacity: usize) -> BodySink {
         BodySink {
-            state: BodySinkState::Ram(Vec::with_capacity(capacity)),
+            state: SinkState::Ram(Vec::with_capacity(capacity)),
             len: 0
         }
     }
@@ -129,7 +129,7 @@ impl BodySink {
         // possibly via Tunables.
         let f = tempfile()?;
         Ok(BodySink {
-            state: BodySinkState::FsWrite(f),
+            state: SinkState::FsWrite(f),
             len: 0
         })
     }
@@ -137,7 +137,7 @@ impl BodySink {
     /// Return true if in state `Ram`.
     pub fn is_ram(&self) -> bool {
         match self.state {
-            BodySinkState::Ram(_) => true,
+            SinkState::Ram(_) => true,
             _ => false
         }
     }
@@ -160,10 +160,10 @@ impl BodySink {
         let chunk = chunk.into();
         let len = chunk.len() as u64;
         match self.state {
-            BodySinkState::Ram(ref mut v) => {
+            SinkState::Ram(ref mut v) => {
                 v.push(chunk);
             }
-            BodySinkState::FsWrite(ref mut f) => {
+            SinkState::FsWrite(ref mut f) => {
                 f.write_all(&chunk)?;
             }
         }
@@ -178,10 +178,10 @@ impl BodySink {
     {
         let buf = buf.as_ref();
         match self.state {
-            BodySinkState::Ram(ref mut v) => {
+            SinkState::Ram(ref mut v) => {
                 v.push(Bytes::from(buf).into());
             }
-            BodySinkState::FsWrite(ref mut f) => {
+            SinkState::FsWrite(ref mut f) => {
                 f.write_all(buf)?;
             }
         }
@@ -192,14 +192,14 @@ impl BodySink {
     /// If `Ram`, convert to `FsWrite`, No-op if already `FsWrite`.
     pub fn write_back(&mut self) -> Result<(), FlError> {
         self.state = match self.state {
-            BodySinkState::Ram(ref v) => {
+            SinkState::Ram(ref v) => {
                 let mut f = tempfile()?;
                 for c in v {
                     f.write_all(c)?;
                 }
-                BodySinkState::FsWrite(f)
+                SinkState::FsWrite(f)
             }
-            BodySinkState::FsWrite(_) => return Ok(())
+            SinkState::FsWrite(_) => return Ok(())
         };
         Ok(())
     }
@@ -207,17 +207,17 @@ impl BodySink {
     /// Consumes self, converts and returns as BodyImage ready for read.
     pub fn prepare(self) -> Result<BodyImage, FlError> {
         match self.state {
-            BodySinkState::Ram(v) => {
+            SinkState::Ram(v) => {
                 Ok(BodyImage {
-                    state: BodyImageState::Ram(v),
+                    state: ImageState::Ram(v),
                     len: self.len
                 })
             }
-            BodySinkState::FsWrite(mut f) => {
+            SinkState::FsWrite(mut f) => {
                 f.flush()?;
                 f.seek(SeekFrom::Start(0))?;
                 Ok(BodyImage {
-                    state: BodyImageState::FsRead(f),
+                    state: ImageState::FsRead(f),
                     len: self.len
                 })
             }
@@ -229,17 +229,17 @@ impl Default for BodySink {
     fn default() -> BodySink { BodySink::empty() }
 }
 
-impl fmt::Debug for BodySinkState {
+impl fmt::Debug for SinkState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            BodySinkState::Ram(ref v) => {
+            SinkState::Ram(ref v) => {
                 // Avoids showing all chunks as u8 lists
                 f.debug_struct("Ram(Vec<Chunk>)")
                     .field("capacity", &v.capacity())
                     .field("len", &v.len())
                     .finish()
             }
-            BodySinkState::FsWrite(ref file) => {
+            SinkState::FsWrite(ref file) => {
                 f.debug_tuple("FsWrite")
                     .field(file)
                     .finish()
@@ -253,7 +253,7 @@ impl BodyImage {
     /// `Ram` with a zero-capacity vector.
     pub fn empty() -> BodyImage {
         BodyImage {
-            state: BodyImageState::Ram(Vec::with_capacity(0)),
+            state: ImageState::Ram(Vec::with_capacity(0)),
             len: 0
         }
     }
@@ -262,7 +262,7 @@ impl BodyImage {
     fn with_map(mapped: Mapped) -> BodyImage {
         let len = mapped.map.len() as u64;
         BodyImage {
-            state: BodyImageState::MemMap(mapped),
+            state: ImageState::MemMap(mapped),
             len
         }
     }
@@ -279,7 +279,7 @@ impl BodyImage {
     /// Return true if in state `Ram`.
     pub fn is_ram(&self) -> bool {
         match self.state {
-            BodyImageState::Ram(_) => true,
+            ImageState::Ram(_) => true,
             _ => false
         }
     }
@@ -298,7 +298,7 @@ impl BodyImage {
     /// for other states.
     pub fn prepare(&mut self) -> Result<&mut Self, FlError> {
         match self.state {
-            BodyImageState::FsRead(ref mut f) => {
+            ImageState::FsRead(ref mut f) => {
                 f.seek(SeekFrom::Start(0))?;
             }
             _ => {}
@@ -309,22 +309,22 @@ impl BodyImage {
     /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
     /// other states.
     pub fn mem_map(&mut self) -> Result<&mut Self, FlError> {
-        if let BodyImageState::FsRead(_) = self.state {
+        if let ImageState::FsRead(_) = self.state {
             assert!(self.len > 0);
             // We need to swap in a temporary Empty state in order to move the
             // file, given the mapping can fail.
-            if let BodyImageState::FsRead(file) = mem::replace(
+            if let ImageState::FsRead(file) = mem::replace(
                 &mut self.state,
-                BodyImageState::Ram(Vec::with_capacity(0)))
+                ImageState::Ram(Vec::with_capacity(0)))
             {
                 match unsafe { Mmap::map(&file) } {
                     Ok(map) => {
-                        self.state = BodyImageState::MemMap(
+                        self.state = ImageState::MemMap(
                             Mapped { map, _file: file }
                         );
                     }
                     Err(e) => {
-                        self.state = BodyImageState::FsRead(file);
+                        self.state = ImageState::FsRead(file);
                         return Err(FlError::from(e));
                     }
                 }
@@ -333,15 +333,14 @@ impl BodyImage {
         Ok(self)
     }
 
-    /// Return a new `BodyReader` over self. Panics if in state
-    /// `FsWrite`. Avoid this by using `prepare` first.
+    /// Return a new `BodyReader` over self.
     pub fn reader(&self) -> BodyReader {
         match self.state {
-            BodyImageState::Ram(ref v) =>
+            ImageState::Ram(ref v) =>
                 BodyReader::FromRam(ChunksReader::new(v)),
-            BodyImageState::FsRead(ref f) =>
+            ImageState::FsRead(ref f) =>
                 BodyReader::FromFs(f),
-            BodyImageState::MemMap(ref m) =>
+            ImageState::MemMap(ref m) =>
                 BodyReader::FromMemMap(Cursor::new(&m.map)),
         }
     }
@@ -351,7 +350,7 @@ impl BodyImage {
     /// write without mutating, using or changing the file position.
     pub fn write_to(&self, out: &mut Write) -> Result<u64, FlError> {
         match self.state {
-            BodyImageState::Ram(ref v) => {
+            ImageState::Ram(ref v) => {
                 let mut size: u64 = 0;
                 for c in v {
                     let b = &c;
@@ -360,12 +359,12 @@ impl BodyImage {
                 }
                 Ok(size)
             }
-            BodyImageState::MemMap(ref m) => {
+            ImageState::MemMap(ref m) => {
                 let map = &m.map;
                 out.write_all(map)?;
                 Ok(map.len() as u64)
             }
-            BodyImageState::FsRead(ref f) => {
+            ImageState::FsRead(ref f) => {
                 let tmap = unsafe { Mmap::map(&f) }?;
                 let map = &tmap;
                 out.write_all(map)?;
@@ -379,22 +378,22 @@ impl Default for BodyImage {
     fn default() -> BodyImage { BodyImage::empty() }
 }
 
-impl fmt::Debug for BodyImageState {
+impl fmt::Debug for ImageState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            BodyImageState::Ram(ref v) => {
+            ImageState::Ram(ref v) => {
                 // Avoids showing all chunks as u8 lists
                 f.debug_struct("Ram(Vec<Chunk>)")
                     .field("capacity", &v.capacity())
                     .field("len", &v.len())
                     .finish()
             }
-            BodyImageState::FsRead(ref file) => {
+            ImageState::FsRead(ref file) => {
                 f.debug_tuple("FsRead")
                     .field(file)
                     .finish()
             }
-            BodyImageState::MemMap(ref m) => {
+            ImageState::MemMap(ref m) => {
                 f.debug_tuple("MemMap")
                     .field(m)
                     .finish()
