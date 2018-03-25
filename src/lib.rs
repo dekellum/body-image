@@ -38,27 +38,22 @@ pub use hyper::Body as HyBody;
 /// The HTTP request (with body) type (as of hyper 0.11.x.)
 pub type HyRequest = http::Request<HyBody>;
 
-/// An HTTP request or response body as bytes, which may or may not be
-/// RAM resident.
+/// A logical buffer of bytes, which may or may not be RAM resident.
 ///
-/// A `BodyImage` is always in one of the following states, as a
-/// buffering strategy:
+/// A `BodyImage` is always in one of the following states, as a buffering
+/// strategy:
 ///
 /// `Ram`
-/// : A vector of one or more byte buffers in Random Access Memory,
-///   for read or write. This state is also used to represent an empty
-///   body (without allocation).
-///
-/// `FsWrite`
-/// : Body in process of being written to a (temporary) file.
+/// : A vector of one or more byte buffers in Random Access Memory. This state
+///   is also used to represent an empty body (without allocation).
 ///
 /// `FsRead`
-/// : Body in a (temporary) file, ready for position based, single
-///   access, sequential read.
+/// : Body in a (temporary) file, ready for position based, single access,
+///   sequential read.
 ///
 /// `MemMap`
-/// : Body in a memory mapped file, ready for efficient and
-///   potentially concurrent and repeated reading.
+/// : Body in a memory mapped file, ready for efficient and potentially
+///   concurrent and random access reading.
 ///
 #[derive(Debug)]
 pub struct BodyImage {
@@ -73,6 +68,19 @@ enum ImageState {
     MemMap(Mapped),
 }
 
+/// A logical buffer of bytes, which may or may not be RAM resident, in the
+/// process of being written. This is the write-side corollary to `BodyImage`.
+///
+/// A `BodySink` is always in one of the following states, as a buffering
+/// strategy:
+///
+/// `Ram`
+/// : A vector of one or more byte buffers in Random Access Memory. This state
+///   is also used to represent an empty body (without allocation).
+///
+/// `FsWrite`
+/// : Body being written to a (temporary) file.
+///
 #[derive(Debug)]
 pub struct BodySink {
     state: SinkState,
@@ -189,7 +197,8 @@ impl BodySink {
         Ok(())
     }
 
-    /// If `Ram`, convert to `FsWrite`, No-op if already `FsWrite`.
+    /// If `Ram`, convert to `FsWrite` by writing all bytes in RAM to a
+    /// temporary file.  No-op if already `FsWrite`.
     pub fn write_back(&mut self) -> Result<(), FlError> {
         self.state = match self.state {
             SinkState::Ram(ref v) => {
@@ -204,7 +213,7 @@ impl BodySink {
         Ok(())
     }
 
-    /// Consumes self, converts and returns as BodyImage ready for read.
+    /// Consumes self, converts and returns as `BodyImage` ready for read.
     pub fn prepare(self) -> Result<BodyImage, FlError> {
         match self.state {
             SinkState::Ram(v) => {
@@ -486,7 +495,7 @@ struct Monolog {
 
 /// An HTTP request with response in progress of being received.
 #[derive(Debug)]
-pub struct InDialog {
+struct InDialog {
     prolog:       Prolog,
     version:      http::Version,
     status:       http::StatusCode,

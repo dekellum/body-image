@@ -490,10 +490,10 @@ fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError> {
 
 impl BarcReader {
 
-    /// Read and return the next Record or None if EOF. The provided
-    /// Tunables `max_body_ram` controls, depending on record sizes,
-    /// whether the request and response bodies are read directly
-    /// intro RAM or returned as memory mapped regions.
+    /// Read and return the next Record or None if EOF. The provided Tunables
+    /// `max_body_ram` controls, depending on record sizes and compression,
+    /// whether the request and response bodies are read directly into RAM,
+    /// mapped or buffered in a file.
     pub fn read(&mut self, tune: &Tunables)
         -> Result<Option<Record>, FlError>
     {
