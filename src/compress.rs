@@ -1,17 +1,13 @@
 //! Compression and decompression support functions.
 
-extern crate failure;
 extern crate flate2;
-extern crate http;
-extern crate hyper;
-extern crate bytes;
 
-use std::io::{ErrorKind, Read};
-use failure::Error as FlError;
-use self::bytes::{BytesMut, BufMut};
+use super::failure::Error as FlError;
 use self::flate2::read::{DeflateDecoder, GzDecoder};
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
-use super::{BodyImage, BodySink, Dialog, META_RES_DECODED, Tunables};
+use super::http;
+use super::{Dialog, META_RES_DECODED,
+            read_to_body, Tunables};
 
 /// Decode any _gzip_ or _deflate_ response Transfer-Encoding or
 /// Content-Encoding into a new response `BodyItem`, updating `Dialog`
@@ -89,92 +85,4 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                            ds.join(", ").parse()?);
     }
     Ok(())
-}
-
-pub(crate) fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
-    -> Result<BodyImage, FlError>
-{
-    if len_estimate > tune.max_body_ram() {
-        let b = BodySink::with_fs()?;
-        return read_to_body_fs(r, b, tune);
-    }
-
-    let mut body = BodySink::with_ram(len_estimate);
-
-    let mut size: u64 = 0;
-    'eof: loop {
-        let mut buf = BytesMut::with_capacity(tune.decode_buffer_ram());
-        'fill: loop {
-            let len = match r.read(unsafe { buf.bytes_mut() }) {
-                Ok(len) => len,
-                Err(e) => {
-                    if e.kind() == ErrorKind::Interrupted {
-                        continue;
-                    } else {
-                        return Err(e.into());
-                    }
-                }
-            };
-            if len == 0 {
-                break 'fill; // can't break 'eof, because may have len already
-            }
-            println!("Decoded inner buf len {}", len);
-            unsafe { buf.advance_mut(len); }
-
-            if buf.remaining_mut() < 1024 {
-                break 'fill;
-            }
-        }
-        let len = buf.len() as u64;
-        if len == 0 {
-            break 'eof;
-        }
-        size += len;
-        if size > tune.max_body() {
-            bail!("Decompressed response stream too long: {}+", size);
-        }
-        if size > tune.max_body_ram() {
-            body.write_back()?;
-            println!("Write (Fs) decoded buf len {}", len);
-            body.write_all(&buf)?;
-            return read_to_body_fs(r, body, tune)
-        }
-        println!("Saved (Ram) decoded buf len {}", len);
-        body.save(buf.freeze())?;
-    }
-    let body = body.prepare()?;
-    Ok(body)
-}
-
-fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
-    -> Result<BodyImage, FlError>
-{
-    let mut size: u64 = 0;
-    let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs());
-    loop {
-        let len = match r.read(unsafe { buf.bytes_mut() }) {
-            Ok(l) => l,
-            Err(e) => {
-                if e.kind() == ErrorKind::Interrupted {
-                    continue;
-                } else {
-                    return Err(e.into());
-                }
-            }
-        };
-        if len == 0 {
-            break;
-        }
-        unsafe { buf.advance_mut(len); }
-
-        size += len as u64;
-        if size > tune.max_body() {
-            bail!("Decompressed response stream too long: {}+", size);
-        }
-        println!("Write (Fs) decoded buf len {}", len);
-        body.write_all(&buf)?;
-        buf.clear();
-    }
-    let body = body.prepare()?;
-    Ok(body)
 }

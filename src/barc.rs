@@ -1,9 +1,6 @@
 //! Basic Archive (BARC) file format reader and writer.
 
-extern crate bytes;
-extern crate http;
 extern crate httparse;
-extern crate memmap;
 extern crate flate2;
 
 use std::cmp;
@@ -13,18 +10,17 @@ use std::ops::{AddAssign,ShlAssign};
 use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 
-use self::bytes::{BytesMut, BufMut};
+use super::bytes::{BytesMut, BufMut};
 use failure::Error as FlError;
 use self::flate2::Compression as GzCompression;
 use self::flate2::write::GzEncoder;
 use self::flate2::read::GzDecoder;
-use hyper::Chunk;
-use http::header::{HeaderName, HeaderValue};
-use memmap::MmapOptions;
+use super::http;
+use super::http::header::{HeaderName, HeaderValue};
+use super::memmap::MmapOptions;
 
-use super::{BodyImage, BodySink, Dialog, Mapped, Recorded, RequestRecorded,
-            Tunables};
-use super::compress::read_to_body;
+use super::{BodyImage, BodySink, Dialog, Mapped, read_to_body,
+            Recorded, RequestRecorded, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -586,10 +582,9 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
 
     let res_headers = read_headers(fin, NO_CRLF, rhead.res_h)?;
 
-    // When compressed, we don't actually know the final size of the
-    // response body. Estimate using remaining unread compressed
-    // length, and use compress::read_to_body. This may return `Ram`
-    // or `FsWrite` states, so also prepare it for read.
+    // When compressed, we don't actually know the final size of the response
+    // body. Estimate using remaining unread compressed length, and use
+    // `read_to_body`.
     let est = fin.get_ref().limit() * u64::from(tune.size_estimate_gzip())
               + 4_096; // pad some, since GzDecoder pre-reads/buffers
     println!( "Estimated res body: {}", est);
@@ -741,8 +736,7 @@ fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
         buf.advance_mut(l);
     }
 
-    let chunk: Chunk = buf.freeze().into();
-    Ok(BodyImage::from_slice(chunk))
+    Ok(BodyImage::from_slice(buf.freeze()))
 }
 
 // Read into `BodyImage` state `FsWrite`. Assumes no CRLF terminator

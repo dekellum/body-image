@@ -19,9 +19,9 @@ use failure::Error as FlError;
 use std::fmt;
 use std::fs::File;
 use std::io;
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut, BufMut};
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
@@ -381,6 +381,99 @@ impl BodyImage {
             }
         }
     }
+
+}
+
+/// Given a `Read` object, a length estimate in bytes (which may be wrong, or
+/// use 0 when unknown), and `Tunables` read and prepare a new `BodyImage`.
+/// Depending on `Tunables` an the estimate, the most appropriate buffering
+/// strategy is used.
+pub fn read_to_body(r: &mut Read, len_estimate: u64, tune: &Tunables)
+    -> Result<BodyImage, FlError>
+{
+    if len_estimate > tune.max_body_ram() {
+        let b = BodySink::with_fs()?;
+        return read_to_body_fs(r, b, tune);
+    }
+
+    let mut body = BodySink::with_ram(len_estimate);
+
+    let mut size: u64 = 0;
+    'eof: loop {
+        let mut buf = BytesMut::with_capacity(tune.decode_buffer_ram());
+        'fill: loop {
+            let len = match r.read(unsafe { buf.bytes_mut() }) {
+                Ok(len) => len,
+                Err(e) => {
+                    if e.kind() == ErrorKind::Interrupted {
+                        continue;
+                    } else {
+                        return Err(e.into());
+                    }
+                }
+            };
+            if len == 0 {
+                break 'fill; // can't break 'eof, because may have len already
+            }
+            println!("Decoded inner buf len {}", len);
+            unsafe { buf.advance_mut(len); }
+
+            if buf.remaining_mut() < 1024 {
+                break 'fill;
+            }
+        }
+        let len = buf.len() as u64;
+        if len == 0 {
+            break 'eof;
+        }
+        size += len;
+        if size > tune.max_body() {
+            bail!("Decompressed response stream too long: {}+", size);
+        }
+        if size > tune.max_body_ram() {
+            body.write_back()?;
+            println!("Write (Fs) decoded buf len {}", len);
+            body.write_all(&buf)?;
+            return read_to_body_fs(r, body, tune)
+        }
+        println!("Saved (Ram) decoded buf len {}", len);
+        body.save(buf.freeze())?;
+    }
+    let body = body.prepare()?;
+    Ok(body)
+}
+
+fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
+    -> Result<BodyImage, FlError>
+{
+    let mut size: u64 = 0;
+    let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs());
+    loop {
+        let len = match r.read(unsafe { buf.bytes_mut() }) {
+            Ok(l) => l,
+            Err(e) => {
+                if e.kind() == ErrorKind::Interrupted {
+                    continue;
+                } else {
+                    return Err(e.into());
+                }
+            }
+        };
+        if len == 0 {
+            break;
+        }
+        unsafe { buf.advance_mut(len); }
+
+        size += len as u64;
+        if size > tune.max_body() {
+            bail!("Decompressed response stream too long: {}+", size);
+        }
+        println!("Write (Fs) decoded buf len {}", len);
+        body.write_all(&buf)?;
+        buf.clear();
+    }
+    let body = body.prepare()?;
+    Ok(body)
 }
 
 impl Default for BodyImage {
