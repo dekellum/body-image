@@ -44,7 +44,6 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
     let mut dl = fetch(req, &tune)?;
 
     decode_res_body(&mut dl, &tune)?;
-    dl.res_map()?;
 
     let bfile = BarcFile::new(barc_path);
     let mut bw = bfile.writer()?;

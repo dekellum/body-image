@@ -337,9 +337,9 @@ impl BodyImage {
         }
     }
 
-    /// Specialized and efficient `Write::write_all` for states `Ram`
-    /// and `MemMap` which can be read without mutating. Panics if in
-    /// some other state.
+    /// Specialized and efficient `Write::write_all` for `Ram` or `MemMap`. If
+    /// in state `FsRead` a temporary memory map will be made in order to
+    /// write without mutating, using or changing the file position.
     pub fn write_to(&self, out: &mut Write) -> Result<u64, FlError> {
         match self.state {
             BodyImageState::Ram(ref v) => {
@@ -356,10 +356,12 @@ impl BodyImage {
                 out.write_all(map)?;
                 Ok(map.len() as u64)
             }
-            _ => {
-                panic!("Invalid state for write_to(): {:?}", self);
+            BodyImageState::FsRead(ref f) => {
+                let tmap = unsafe { Mmap::map(&f) }?;
+                let map = &tmap;
+                out.write_all(map)?;
+                Ok(map.len() as u64)
             }
-
         }
     }
 }
@@ -597,12 +599,18 @@ impl InDialog {
 }
 
 impl Dialog {
-    /// If the request or response body are in state `FsRead`, convert to
-    /// `MemMap` via `BodyImage::map`.
-    pub fn mem_map_bodies(&mut self) -> Result<(), FlError> {
-        self.prolog.req_body.mem_map()?;
-        self.res_body.mem_map()?;
-        Ok(())
+    /// If the request body is in state `FsRead`, convert to `MemMap` via
+    /// `BodyImage::mem_map` and return reference to the body.
+    pub fn mem_map_req_body(&mut self) -> Result<&BodyImage, FlError> {
+        let b = self.prolog.req_body.mem_map()?;
+        Ok(b)
+    }
+
+    /// If the response body is in state `FsRead`, convert to `MemMap` via
+    /// `BodyImage::mem_map` and return reference to the body.
+    pub fn mem_map_res_body(&mut self) -> Result<&BodyImage, FlError> {
+        let b = self.res_body.mem_map()?;
+        Ok(b)
     }
 }
 
