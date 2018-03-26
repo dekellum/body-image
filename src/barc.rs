@@ -719,7 +719,7 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
     }
 }
 
-// Read into `BodyImage` of state `Ram` as a single-chunk.
+// Read into `BodyImage` of state `Ram` as a single buffer.
 fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
     -> Result<BodyImage, FlError>
 {
@@ -969,13 +969,13 @@ mod tests {
         let req_reps =   500;
         let res_reps = 1_000;
 
-        let mut req_body = BodySink::with_chunks_capacity(req_reps);
+        let mut req_body = BodySink::with_ram_buffers(req_reps);
         for _ in 0..req_reps {
             req_body.save(lorem_ipsum)?;
         }
         let req_body = req_body.prepare()?;
 
-        let mut res_body = BodySink::with_chunks_capacity(res_reps);
+        let mut res_body = BodySink::with_ram_buffers(res_reps);
         for _ in 0..res_reps {
             res_body.save(lorem_ipsum)?;
         }

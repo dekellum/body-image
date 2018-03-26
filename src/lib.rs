@@ -25,7 +25,7 @@ use bytes::{Bytes, BytesMut, BufMut};
 use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
-use hyper::{Chunk, Client};
+use hyper::Client;
 use hyper::client::compat::CompatFutureResponse;
 use hyper::header::{ContentLength, Header, Raw};
 use memmap::Mmap;
@@ -44,8 +44,9 @@ pub type HyRequest = http::Request<HyBody>;
 /// strategy:
 ///
 /// `Ram`
-/// : A vector of one or more byte buffers in Random Access Memory. This state
-///   is also used to represent an empty body (without allocation).
+/// : A vector of zero to many discontinuous byte buffers in Random Access
+///   Memory. This state is also used to represent an empty body (without
+///   allocation).
 ///
 /// `FsRead`
 /// : Body in a (temporary) file, ready for position based, single access,
@@ -63,7 +64,7 @@ pub struct BodyImage {
 
 // Internal state enum for BodyImage
 enum ImageState {
-    Ram(Vec<Chunk>),
+    Ram(Vec<Bytes>),
     FsRead(File),
     MemMap(Mapped),
 }
@@ -75,8 +76,9 @@ enum ImageState {
 /// strategy:
 ///
 /// `Ram`
-/// : A vector of one or more byte buffers in Random Access Memory. This state
-///   is also used to represent an empty body (without allocation).
+/// : A vector of zero to many discontinuous byte buffers in Random Access
+///   Memory. This state is also used to represent an empty body (without
+///   allocation).
 ///
 /// `FsWrite`
 /// : Body being written to a (temporary) file.
@@ -88,7 +90,7 @@ pub struct BodySink {
 }
 
 enum SinkState {
-    Ram(Vec<Chunk>),
+    Ram(Vec<Bytes>),
     FsWrite(File),
 }
 
@@ -106,25 +108,25 @@ impl BodySink {
     /// Create new empty instance, which does not pre-allocate. The state is
     /// `Ram` with a zero-capacity vector.
     pub fn empty() -> BodySink {
-        BodySink::with_chunks_capacity(0)
+        BodySink::with_ram_buffers(0)
     }
 
-    /// Create a new `Ram` instance by pre-allocating a vector of chunks based
-    /// on the given size estimate in bytes. With a size_estimate of 0, this
-    /// is the same as `empty`.
+    /// Create a new `Ram` instance by pre-allocating a vector of bufffers
+    /// based on the given size estimate in bytes, assuming 8 KiB
+    /// buffers. With a size_estimate of 0, this is the same as `empty`.
     pub fn with_ram(size_estimate: u64) -> BodySink {
         if size_estimate == 0 {
             BodySink::empty()
         } else {
-            // Estimate capacity based on observed 8 KiB chunks
-            let chunks = (size_estimate / 0x2000 + 1) as usize;
-            BodySink::with_chunks_capacity(chunks)
+            // Estimate buffers based an 8 KiB buffer size + 1.
+            let cap = (size_estimate / 0x2000 + 1) as usize;
+            BodySink::with_ram_buffers(cap)
         }
     }
 
     /// Create a new `Ram` instance by pre-allocating a vector of the
-    /// specified capacity expressed as number chunks.
-    pub fn with_chunks_capacity(capacity: usize) -> BodySink {
+    /// specified capacity.
+    pub fn with_ram_buffers(capacity: usize) -> BodySink {
         BodySink {
             state: SinkState::Ram(Vec::with_capacity(capacity)),
             len: 0
@@ -162,17 +164,17 @@ impl BodySink {
 
     /// Save bytes by appending to `Ram` or writing to `FsWrite` file. When in
     /// state `Ram` this may be more efficient than `write_all`.
-    pub fn save<T>(&mut self, chunk: T) -> Result<(), FlError>
-        where T: Into<Chunk>
+    pub fn save<T>(&mut self, buf: T) -> Result<(), FlError>
+        where T: Into<Bytes>
     {
-        let chunk = chunk.into();
-        let len = chunk.len() as u64;
+        let buf = buf.into();
+        let len = buf.len() as u64;
         match self.state {
             SinkState::Ram(ref mut v) => {
-                v.push(chunk);
+                v.push(buf);
             }
             SinkState::FsWrite(ref mut f) => {
-                f.write_all(&chunk)?;
+                f.write_all(&buf)?;
             }
         }
         self.len += len;
@@ -187,7 +189,7 @@ impl BodySink {
         let buf = buf.as_ref();
         match self.state {
             SinkState::Ram(ref mut v) => {
-                v.push(Bytes::from(buf).into());
+                v.push(buf.into());
             }
             SinkState::FsWrite(ref mut f) => {
                 f.write_all(buf)?;
@@ -242,8 +244,8 @@ impl fmt::Debug for SinkState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             SinkState::Ram(ref v) => {
-                // Avoids showing all chunks as u8 lists
-                f.debug_struct("Ram(Vec<Chunk>)")
+                // Avoids showing all buffers as u8 lists
+                f.debug_struct("Ram(Vec<Bytes>)")
                     .field("capacity", &v.capacity())
                     .field("len", &v.len())
                     .finish()
@@ -276,11 +278,11 @@ impl BodyImage {
         }
     }
 
-    /// Create new instance from an existing byte slice type.
+    /// Create new instance from an single byte slice.
     pub fn from_slice<T>(bytes: T) -> BodyImage
-        where T: Into<Chunk>
+        where T: Into<Bytes>
     {
-        let mut bs = BodySink::with_chunks_capacity(1);
+        let mut bs = BodySink::with_ram_buffers(1);
         bs.save(bytes).expect("safe for Ram");
         bs.prepare().expect("safe for Ram")
     }
@@ -346,7 +348,7 @@ impl BodyImage {
     pub fn reader(&self) -> BodyReader {
         match self.state {
             ImageState::Ram(ref v) =>
-                BodyReader::FromRam(ChunksReader::new(v)),
+                BodyReader::FromRam(GatheringReader::new(v)),
             ImageState::FsRead(ref f) =>
                 BodyReader::FromFs(f),
             ImageState::MemMap(ref m) =>
@@ -442,9 +444,13 @@ impl BodyImage {
     }
 }
 
+// Read all bytes from r, consume and write to a `BodySink` in state
+// `FsWrite`, returning a final prepared `BodyImage`.
 fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
     -> Result<BodyImage, FlError>
 {
+    assert!(!body.is_ram());
+
     let mut size: u64 = 0;
     let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs());
     loop {
@@ -483,8 +489,8 @@ impl fmt::Debug for ImageState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ImageState::Ram(ref v) => {
-                // Avoids showing all chunks as u8 lists
-                f.debug_struct("Ram(Vec<Chunk>)")
+                // Avoids showing all buffers as u8 lists
+                f.debug_struct("Ram(Vec<Bytes>)")
                     .field("capacity", &v.capacity())
                     .field("len", &v.len())
                     .finish()
@@ -505,7 +511,7 @@ impl fmt::Debug for ImageState {
 
 /// Provides a `Read` reference for a `BodyImage` in various states.
 pub enum BodyReader<'a> {
-    FromRam(ChunksReader<'a>),
+    FromRam(GatheringReader<'a>),
     FromFs(&'a File),
     FromMemMap(Cursor<&'a [u8]>),
 }
@@ -521,20 +527,21 @@ impl<'a> BodyReader<'a> {
     }
 }
 
-/// A specialized chaining reader for `BodyImage` in state `Ram`.
-pub struct ChunksReader<'a> {
+/// A specialized reader for `BodyImage` in `Ram`, presenting a continuous
+/// (gathered) `Read` interface over 0 to N non-contiguous byte buffers.
+pub struct GatheringReader<'a> {
     current: Cursor<&'a [u8]>,
-    remainder: &'a [Chunk]
+    remainder: &'a [Bytes]
 }
 
-impl<'a> ChunksReader<'a> {
-    pub fn new(chunks: &'a [Chunk]) -> Self {
-        match chunks.split_first() {
-            Some((c, remainder)) => {
-                ChunksReader { current: Cursor::new(c), remainder }
+impl<'a> GatheringReader<'a> {
+    pub fn new(buffers: &'a [Bytes]) -> Self {
+        match buffers.split_first() {
+            Some((b, remainder)) => {
+                GatheringReader { current: Cursor::new(b), remainder }
             }
             None => {
-                ChunksReader { current: Cursor::new(&[]), remainder: &[] }
+                GatheringReader { current: Cursor::new(&[]), remainder: &[] }
             }
         }
     }
@@ -551,7 +558,7 @@ impl<'a> ChunksReader<'a> {
     }
 }
 
-impl<'a> Read for ChunksReader<'a> {
+impl<'a> Read for GatheringReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let n = self.current.read(buf)?;
         if n == 0 && !buf.is_empty() && self.pop() {
@@ -962,21 +969,21 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
 /// Extension trait for `http::request::Builder`, to enable recording
 /// key portions of the request for the final `Dialog`.
 ///
-/// In particular any request body (e.g. POST, PUT) needs to be cloned
-/// in advance of finishing the request, because `hyper::Body` isn't
-/// `Clone`.
+/// In particular any request body (e.g. POST, PUT) needs to be cloned in
+/// advance of finishing the request, though this is inexpensive via
+/// `Bytes::clone`.
 ///
-/// _Limitation_: Currently only a contiguous RAM buffer (implementing
-/// `Into<Chunk>`and `Clone`) is supported as the request body.
+/// _Limitation_: Currently only a single contiguous RAM buffer
+/// (implementing `Into<Bytes>`) is supported as the request body.
 pub trait RequestRecordable {
-    // Short-hand for completing the builder with an empty body, as is
-    // the case with many HTTP request methods (e.g. GET).
+    /// Short-hand for completing the builder with an empty body, as is
+    /// the case with many HTTP request methods (e.g. GET).
     fn record(&mut self) -> Result<RequestRecord, FlError>;
 
-    // Complete the builder with any request body that can be
-    // converted to a single `hyper::Chunk`
-    fn record_body<C>(&mut self, body: C) -> Result<RequestRecord, FlError>
-        where C: Into<Chunk> + Clone;
+    /// Complete the builder with any request body that can be converted to a
+    /// `Bytes` buffer.
+    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, FlError>
+        where B: Into<Bytes>;
 }
 
 impl RequestRecordable for http::request::Builder {
@@ -993,20 +1000,20 @@ impl RequestRecordable for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body } })
     }
 
-    fn record_body<C>(&mut self, body: C) -> Result<RequestRecord, FlError>
-        where C: Into<Chunk> + Clone
+    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, FlError>
+        where B: Into<Bytes>
     {
-        let chunk_copy: Chunk = body.clone().into();
-        let chunk: Chunk = body.into();
-        let request = self.body(chunk.into())?;
+        let buf: Bytes = body.into();
+        let buf_copy: Bytes = buf.clone();
+        let request = self.body(buf.into())?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
         let req_headers = request.headers().clone();
 
-        let req_body = if chunk_copy.is_empty() {
+        let req_body = if buf_copy.is_empty() {
             BodyImage::empty()
         } else {
-            BodyImage::from_slice(chunk_copy)
+            BodyImage::from_slice(buf_copy)
         };
 
         Ok(RequestRecord {
