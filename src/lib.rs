@@ -308,11 +308,8 @@ impl BodyImage {
     /// Prepare for re-reading. If `FsRead` seeks to beginning of file. No-op
     /// for other states.
     pub fn prepare(&mut self) -> Result<&mut Self, FlError> {
-        match self.state {
-            ImageState::FsRead(ref mut f) => {
-                f.seek(SeekFrom::Start(0))?;
-            }
-            _ => {}
+        if let ImageState::FsRead(ref mut f) = self.state {
+            f.seek(SeekFrom::Start(0))?;
         }
         Ok(self)
     }
@@ -436,7 +433,7 @@ impl BodyImage {
                 Ok(map.len() as u64)
             }
             ImageState::FsRead(ref f) => {
-                let tmap = unsafe { Mmap::map(&f) }?;
+                let tmap = unsafe { Mmap::map(f) }?;
                 let map = &tmap;
                 out.write_all(map)?;
                 Ok(map.len() as u64)
