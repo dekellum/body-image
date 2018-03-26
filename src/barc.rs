@@ -295,13 +295,13 @@ impl WriteStrategy for BrotliWriteStrategy {
         // FIXME: This only considers req/res body lengths
         let est_len = rec.req_body().len() + rec.res_body().len();
         if est_len >= self.min_len {
-            Ok(WriteWrapper::Brotli(
+            Ok(WriteWrapper::Brotli(Box::new(
                 brotli::CompressorWriter::new(
                     file,
                     4096, //FIXME: tune?
                     self.compression_level,
                     21)
-            ))
+            )))
         } else {
             Ok(WriteWrapper::Plain(file))
         }
@@ -314,7 +314,7 @@ pub enum WriteWrapper<'a> {
     Plain(&'a File),
     Gzip(GzEncoder<&'a File>),
     #[cfg(feature = "brotli")]
-    Brotli(brotli::CompressorWriter<&'a File>)
+    Brotli(Box<brotli::CompressorWriter<&'a File>>)
 }
 
 impl<'a> WriteWrapper<'a> {
@@ -633,9 +633,9 @@ impl BarcReader {
 /// Wrapper holding a decoder (`Read`) on a `Take` limited to a record
 /// of a BARC file.
 enum ReadWrapper<'a> {
-    Gzip(GzDecoder<Take<&'a mut File>>),
+    Gzip(Box<GzDecoder<Take<&'a mut File>>>),
     #[cfg(feature = "brotli")]
-    Brotli(brotli::Decompressor<Take<&'a mut File>>),
+    Brotli(Box<brotli::Decompressor<Take<&'a mut File>>>),
 }
 
 impl<'a> ReadWrapper<'a> {
@@ -644,13 +644,13 @@ impl<'a> ReadWrapper<'a> {
     {
         match comp {
             Compression::Gzip => {
-                ReadWrapper::Gzip(GzDecoder::new(r))
+                ReadWrapper::Gzip(Box::new(GzDecoder::new(r)))
             }
             #[cfg(feature = "brotli")]
             Compression::Brotli => {
-                ReadWrapper::Brotli(
+                ReadWrapper::Brotli(Box::new(
                     brotli::Decompressor::new(r, _buf_size)
-                )
+                ))
             }
             _ => panic!("ReadWrapper doesn't support {:?}", comp)
         }
