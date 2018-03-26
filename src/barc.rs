@@ -19,7 +19,7 @@ use super::http;
 use super::http::header::{HeaderName, HeaderValue};
 use super::memmap::MmapOptions;
 
-use super::{BodyImage, BodySink, Dialog, Mapped, read_to_body,
+use super::{BodyImage, BodySink, Dialog, Mapped,
             Recorded, RequestRecorded, Tunables};
 
 /// Fixed record head size including CRLF terminator:
@@ -588,7 +588,7 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     let est = fin.get_ref().limit() * u64::from(tune.size_estimate_gzip())
               + 4_096; // pad some, since GzDecoder pre-reads/buffers
     println!( "Estimated res body: {}", est);
-    let res_body = read_to_body(fin, est, tune)?;
+    let res_body = BodyImage::read_from(fin, est, tune)?;
 
     Ok(Record { rec_type, meta, req_headers, req_body, res_headers, res_body })
 }

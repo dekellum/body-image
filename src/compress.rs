@@ -6,8 +6,7 @@ use super::failure::Error as FlError;
 use self::flate2::read::{DeflateDecoder, GzDecoder};
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
 use super::http;
-use super::{Dialog, META_RES_DECODED,
-            read_to_body, Tunables};
+use super::{BodyImage, Dialog, META_RES_DECODED, Tunables};
 
 /// Decode any _gzip_ or _deflate_ response Transfer-Encoding or
 /// Content-Encoding into a new response `BodyItem`, updating `Dialog`
@@ -58,13 +57,13 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                     let mut decoder = GzDecoder::new(reader.as_read());
                     let len_est = dialog.res_body.len() *
                         u64::from(tune.size_estimate_gzip());
-                    read_to_body(&mut decoder, len_est, tune)?
+                    BodyImage::read_from(&mut decoder, len_est, tune)?
                 }
                 Encoding::Deflate => {
                     let mut decoder = DeflateDecoder::new(reader.as_read());
                     let len_est = dialog.res_body.len() *
                         u64::from(tune.size_estimate_deflate());
-                    read_to_body(&mut decoder, len_est, tune)?
+                    BodyImage::read_from(&mut decoder, len_est, tune)?
                 }
                 _ => unreachable!("Not supported: {:?}", comp)
             }
