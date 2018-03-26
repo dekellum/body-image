@@ -2,6 +2,8 @@
 
 use failure::Error as FlError;
 
+#[cfg(feature = "brotli")]
+use brotli;
 use flate2::read::{DeflateDecoder, GzDecoder};
 
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
@@ -38,6 +40,11 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                         compress = Some(av.clone());
                         break 'headers;
                     }
+                    #[cfg(feature = "brotli")]
+                    Encoding::Brotli => {
+                        compress = Some(Encoding::Brotli);
+                        break 'headers;
+                    }
                     Encoding::Identity => (),
                     _ => {
                         println!("Unsupported Encoding for decode: {:?}", av);
@@ -63,6 +70,15 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                     let mut decoder = DeflateDecoder::new(reader.as_read());
                     let len_est = dialog.res_body.len() *
                         u64::from(tune.size_estimate_deflate());
+                    BodyImage::read_from(&mut decoder, len_est, tune)?
+                }
+                #[cfg(feature = "brotli")]
+                Encoding::Brotli => {
+                    let mut decoder = brotli::Decompressor::new(
+                        reader.as_read(),
+                        tune.decode_buffer_ram());
+                    let len_est = dialog.res_body.len() *
+                        u64::from(tune.size_estimate_gzip());
                     BodyImage::read_from(&mut decoder, len_est, tune)?
                 }
                 _ => unreachable!("Not supported: {:?}", comp)
