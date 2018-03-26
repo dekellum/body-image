@@ -30,12 +30,6 @@ use bytes::{Bytes, BytesMut, BufMut};
 use memmap::Mmap;
 use tempfile::tempfile;
 
-/// Alias for `hyper::Body`.
-pub use hyper::Body as HyBody;
-
-/// The HTTP request (with body) type (as of hyper 0.11.x.)
-pub type HyRequest = http::Request<HyBody>;
-
 /// A logical buffer of bytes, which may or may not be RAM resident.
 ///
 /// A `BodyImage` is always in one of the following states, as a buffering
@@ -573,21 +567,6 @@ struct Prolog {
     req_body:     BodyImage,
 }
 
-/// An `http::Request` and recording.
-#[derive(Debug)]
-pub struct RequestRecord {
-    request:      HyRequest,
-    prolog:       Prolog,
-}
-
-/// Temporary `http::Response` wrapper, with preserved request
-/// recording.
-#[derive(Debug)]
-struct Monolog {
-    prolog:       Prolog,
-    response:     http::Response<HyBody>,
-}
-
 /// An HTTP request with response in progress of being received.
 #[derive(Debug)]
 struct InDialog {
@@ -630,16 +609,6 @@ pub trait Recorded: RequestRecorded {
 
     /// Response body which may or may not be RAM resident.
     fn res_body(&self)    -> &BodyImage;
-}
-
-impl RequestRecord {
-    /// Return the HTTP request.
-    pub fn request(&self) -> &HyRequest            { &self.request }
-}
-
-impl RequestRecorded for RequestRecord {
-    fn req_headers(&self) -> &http::HeaderMap      { &self.prolog.req_headers }
-    fn req_body(&self)    -> &BodyImage            { &self.prolog.req_body }
 }
 
 impl RequestRecorded for Dialog {

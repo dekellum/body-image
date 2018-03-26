@@ -10,16 +10,20 @@ use futures::{Future, Stream};
 use futures::future::err as futerr;
 use futures::future::result as futres;
 use http;
+use hyper;
 use hyper::Client;
 use hyper::client::compat::CompatFutureResponse;
 use hyper::header::{ContentEncoding, ContentLength, Encoding, Header, Raw};
 use hyper_tls;
 use tokio_core::reactor::Core;
 
-use {BodyImage, BodySink, HyBody,
-     Prolog, Monolog, InDialog, Dialog,
-     META_RES_DECODED, RequestRecord,
+use {BodyImage, BodySink,
+     Prolog, InDialog, Dialog,
+     META_RES_DECODED, RequestRecorded,
      Tunables};
+
+/// The HTTP request (with body) type (as of hyper 0.11.x.)
+type HyRequest = http::Request<hyper::Body>;
 
 /// Run an HTTP request to completion, returning the full `Dialog`.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
@@ -208,6 +212,31 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
     Ok(l)
 }
 
+/// An `http::Request` and recording.
+#[derive(Debug)]
+pub struct RequestRecord {
+    request:      HyRequest,
+    prolog:       Prolog,
+}
+
+impl RequestRecord {
+    /// Return the HTTP request.
+    pub fn request(&self) -> &HyRequest            { &self.request }
+}
+
+impl RequestRecorded for RequestRecord {
+    fn req_headers(&self) -> &http::HeaderMap      { &self.prolog.req_headers }
+    fn req_body(&self)    -> &BodyImage            { &self.prolog.req_body }
+}
+
+/// Temporary `http::Response` wrapper, with preserved request
+/// recording.
+#[derive(Debug)]
+struct Monolog {
+    prolog:       Prolog,
+    response:     http::Response<hyper::Body>,
+}
+
 /// Extension trait for `http::request::Builder`, to enable recording
 /// key portions of the request for the final `Dialog`.
 ///
@@ -230,7 +259,7 @@ pub trait RequestRecordable {
 
 impl RequestRecordable for http::request::Builder {
     fn record(&mut self) -> Result<RequestRecord, FlError> {
-        let request = self.body(HyBody::empty())?;
+        let request = self.body(hyper::Body::empty())?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
         let req_headers = request.headers().clone();
