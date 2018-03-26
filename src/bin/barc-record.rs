@@ -6,9 +6,9 @@ use std::process;
 
 use failure::Error as FlError;
 
-use hyper_bowl::{fetch, RequestRecordable, Tunables};
+use hyper_bowl::Tunables;
 use hyper_bowl::barc::{BarcFile, PlainWriteStrategy};
-use hyper_bowl::compress::decode_res_body;
+use hyper_bowl::client::{decode_res_body, fetch, RequestRecordable};
 
 fn main() {
     let mut args = std::env::args();
