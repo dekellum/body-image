@@ -1,12 +1,17 @@
+extern crate bytes;
 #[macro_use] extern crate failure;
 extern crate futures;
 extern crate http;
+extern crate httparse;
 extern crate hyper;
 extern crate hyper_tls;
 extern crate memmap;
 extern crate tempfile;
 extern crate tokio_core;
-extern crate bytes;
+
+#[cfg(feature = "brotli")]
+extern crate brotli;
+extern crate flate2;
 
 pub mod barc;
 pub mod compress;

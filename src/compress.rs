@@ -1,12 +1,12 @@
 //! Compression and decompression support functions.
 
-extern crate flate2;
+use failure::Error as FlError;
 
-use super::failure::Error as FlError;
-use self::flate2::read::{DeflateDecoder, GzDecoder};
+use flate2::read::{DeflateDecoder, GzDecoder};
+
 use hyper::header::{ContentEncoding, Encoding, Header, Raw};
-use super::http;
-use super::{BodyImage, Dialog, META_RES_DECODED, Tunables};
+use http;
+use {BodyImage, Dialog, META_RES_DECODED, Tunables};
 
 /// Decode any _gzip_ or _deflate_ response Transfer-Encoding or
 /// Content-Encoding into a new response `BodyItem`, updating `Dialog`

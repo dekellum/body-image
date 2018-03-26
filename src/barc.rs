@@ -1,10 +1,5 @@
 //! Basic Archive (BARC) file format reader and writer.
 
-#[cfg(feature = "brotli")]
-extern crate brotli;
-extern crate httparse;
-extern crate flate2;
-
 use std::cmp;
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Take, Write};
@@ -12,17 +7,21 @@ use std::ops::{AddAssign,ShlAssign};
 use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 
-use super::bytes::{BytesMut, BufMut};
+use bytes::{BytesMut, BufMut};
 use failure::Error as FlError;
-use self::flate2::Compression as GzCompression;
-use self::flate2::write::GzEncoder;
-use self::flate2::read::GzDecoder;
-use super::http;
-use super::http::header::{HeaderName, HeaderValue};
-use super::memmap::MmapOptions;
+use flate2::Compression as GzCompression;
+use flate2::write::GzEncoder;
+use flate2::read::GzDecoder;
+use http;
+use httparse;
+use http::header::{HeaderName, HeaderValue};
+use memmap::MmapOptions;
 
-use super::{BodyImage, BodySink, Dialog, Mapped,
-            Recorded, RequestRecorded, Tunables};
+#[cfg(feature = "brotli")]
+use brotli;
+
+use {BodyImage, BodySink, Dialog, Mapped, Recorded, RequestRecorded,
+     Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
