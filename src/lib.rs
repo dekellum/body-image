@@ -385,7 +385,8 @@ impl BodyImage {
                     }
                 };
                 if len == 0 {
-                    break 'fill; // can't break 'eof, because may have len already
+                    break 'fill; // not 'eof as may have bytes in buf
+
                 }
                 println!("Decoded inner buf len {}", len);
                 unsafe { buf.advance_mut(len); }
