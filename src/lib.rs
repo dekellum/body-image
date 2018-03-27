@@ -798,8 +798,8 @@ impl Tuner {
     }
 
     /// Set the maximum body size in bytes allowed in any form (RAM or
-    /// file). This must be larger than `max_body_ram`, as asserted on
-    /// `finish`.
+    /// file). This must be at least as large as `max_body_ram`, as
+    /// asserted on `finish`.
     pub fn set_max_body(&mut self, size: u64) -> &mut Tuner {
         self.template.max_body = size;
         self
