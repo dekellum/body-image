@@ -267,6 +267,15 @@ impl BodyImage {
         }
     }
 
+    /// Create new instance from an existing byte slice type.
+    pub fn from_slice<T>(bytes: T) -> BodyImage
+        where T: Into<Chunk>
+    {
+        let mut bs = BodySink::with_chunks_capacity(1);
+        bs.save(bytes).expect("safe for Ram");
+        bs.prepare().expect("safe for Ram")
+    }
+
     /// Return true if in state `Ram`.
     pub fn is_ram(&self) -> bool {
         match self.state {
@@ -897,9 +906,7 @@ impl RequestRecordable for http::request::Builder {
         let req_body = if chunk_copy.is_empty() {
             BodyImage::empty()
         } else {
-            let mut b = BodySink::with_chunks_capacity(1);
-            b.save(chunk_copy)?;
-            b.prepare()?
+            BodyImage::from_slice(chunk_copy)
         };
 
         Ok(RequestRecord {
