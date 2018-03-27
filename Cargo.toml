@@ -21,7 +21,8 @@ tokio-core = ">=0.1.12, <2"
 
 [features]
 default = ["brotli"]
-barc-record = ["fern", "hyper", "hyper-tls"]
+client = ["hyper", "hyper-tls"]
+barc-record = ["fern", "client"]
 
 [lib]
 doctest = false
