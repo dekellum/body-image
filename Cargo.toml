@@ -13,6 +13,7 @@ http       = ">=0.1.4, <2"
 httparse   = ">=1.2.4, <2"
 hyper      = { version = ">=0.11.15, <2", features = ["compat"] }
 hyper-tls  = ">=0.1.2, <2"
+log        = ">=0.4.1, <2"
 memmap     = ">=0.6.2, <2"
 tempfile   = ">=2.2.0, <3"
 tokio-core = ">=0.1.12, <2"

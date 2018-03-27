@@ -97,7 +97,8 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                     }
                     Encoding::Identity => (),
                     _ => {
-                        println!("Unsupported Encoding for decode: {:?}", av);
+                        warn!("decode_res_body: Unsupported encoding: {:?}",
+                              av);
                         break 'headers;
                     }
                 }
@@ -107,7 +108,7 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
 
     if let Some(ref comp) = compress {
         dialog.res_body = {
-            println!("Body to {:?} decode: {:?}", comp, dialog.res_body);
+            debug!("Body to {:?} decode: {:?}", comp, dialog.res_body);
             let mut reader = dialog.res_body.reader();
             match *comp {
                 Encoding::Gzip => {
@@ -134,7 +135,7 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                 _ => unreachable!("Not supported: {:?}", comp)
             }
         };
-        println!("Body update: {:?}", dialog.res_body);
+        debug!("Body update: {:?}", dialog.res_body);
     }
 
     if chunked || compress.is_some() {
@@ -194,7 +195,7 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
                 if idialog.res_body.is_ram() && new_len > tune.max_body_ram() {
                     idialog.res_body.write_back(tune.temp_dir())?;
                 }
-                println!("to save chunk (len: {})", chunk.len());
+                debug!("to save chunk (len: {})", chunk.len());
                 idialog.res_body
                     .save(chunk)
                     .and(Ok(idialog))

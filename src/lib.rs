@@ -5,6 +5,7 @@ extern crate http;
 extern crate httparse;
 extern crate hyper;
 extern crate hyper_tls;
+#[macro_use] extern crate log;
 extern crate memmap;
 extern crate tempfile;
 extern crate tokio_core;
@@ -382,7 +383,7 @@ impl BodyImage {
                     break 'fill; // not 'eof as may have bytes in buf
 
                 }
-                println!("Decoded inner buf len {}", len);
+                debug!("Decoded inner buf len {}", len);
                 unsafe { buf.advance_mut(len); }
 
                 if buf.remaining_mut() < 1024 {
@@ -399,11 +400,11 @@ impl BodyImage {
             }
             if size > tune.max_body_ram() {
                 body.write_back(tune.temp_dir())?;
-                println!("Write (Fs) decoded buf len {}", len);
+                debug!("Write (Fs) decoded buf len {}", len);
                 body.write_all(&buf)?;
                 return read_to_body_fs(r, body, tune)
             }
-            println!("Saved (Ram) decoded buf len {}", len);
+            debug!("Saved (Ram) decoded buf len {}", len);
             body.save(buf.freeze())?;
         }
         let body = body.prepare()?;
@@ -468,7 +469,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
         if size > tune.max_body() {
             bail!("Decompressed response stream too long: {}+", size);
         }
-        println!("Write (Fs) decoded buf len {}", len);
+        debug!("Write (Fs) decoded buf len {}", len);
         body.write_all(&buf)?;
         buf.clear();
     }
