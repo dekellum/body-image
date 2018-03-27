@@ -573,16 +573,6 @@ struct Prolog {
     req_body:     BodyImage,
 }
 
-/// An HTTP request with response in progress of being received.
-#[derive(Debug)]
-struct InDialog {
-    prolog:       Prolog,
-    version:      http::Version,
-    status:       http::StatusCode,
-    res_headers:  http::HeaderMap,
-    res_body:     BodySink,
-}
-
 /// An HTTP request and response recording.
 #[derive(Debug)]
 pub struct Dialog {
@@ -649,41 +639,6 @@ pub static META_RES_STATUS: &[u8]      = b"response-status";
 /// content-encoding header format, e.g. "chunked, gzip".
 pub static META_RES_DECODED: &[u8]     = b"response-decoded";
 
-impl InDialog {
-    /// Prepare the response body for reading and generate meta
-    /// headers.
-    fn prepare(self) -> Result<Dialog, FlError> {
-        Ok(Dialog {
-            meta:        self.derive_meta()?,
-            prolog:      self.prolog,
-            version:     self.version,
-            status:      self.status,
-            res_headers: self.res_headers,
-            res_body:    self.res_body.prepare()?,
-        })
-    }
-
-    fn derive_meta(&self) -> Result<http::HeaderMap, FlError> {
-        let mut hs = http::HeaderMap::with_capacity(6);
-        use http::header::HeaderName;
-
-        hs.append(HeaderName::from_lowercase(META_URL).unwrap(),
-                  self.prolog.url.to_string().parse()?);
-        hs.append(HeaderName::from_lowercase(META_METHOD).unwrap(),
-                  self.prolog.method.to_string().parse()?);
-
-        // FIXME: This relies on the debug format of version,  e.g. "HTTP/1.1"
-        // which might not be stable, but http::Version doesn't offer an enum
-        // to match on, only constants.
-        let v = format!("{:?}", self.version);
-        hs.append(HeaderName::from_lowercase(META_RES_VERSION).unwrap(),
-                  v.parse()?);
-
-        hs.append(HeaderName::from_lowercase(META_RES_STATUS).unwrap(),
-                  self.status.to_string().parse()?);
-        Ok(hs)
-    }
-}
 
 impl Dialog {
     /// If the request body is in state `FsRead`, convert to `MemMap` via

@@ -18,9 +18,9 @@ use hyper_tls;
 use tokio_core::reactor::Core;
 
 use {BodyImage, BodySink,
-     Prolog, InDialog, Dialog,
-     META_RES_DECODED, RequestRecorded,
-     Tunables};
+     Prolog, Dialog, RequestRecorded, Tunables,
+     META_URL, META_METHOD, META_RES_DECODED,
+     META_RES_VERSION, META_RES_STATUS};
 
 /// The HTTP request (with body) type (as of hyper 0.11.x.)
 type HyRequest = http::Request<hyper::Body>;
@@ -237,6 +237,52 @@ impl RequestRecorded for RequestRecord {
 struct Monolog {
     prolog:       Prolog,
     response:     http::Response<hyper::Body>,
+}
+
+/// An HTTP request with response in progress of being received.
+#[derive(Debug)]
+struct InDialog {
+    prolog:       Prolog,
+    version:      http::Version,
+    status:       http::StatusCode,
+    res_headers:  http::HeaderMap,
+    res_body:     BodySink,
+}
+
+impl InDialog {
+    /// Prepare the response body for reading and generate meta
+    /// headers.
+    fn prepare(self) -> Result<Dialog, FlError> {
+        Ok(Dialog {
+            meta:        self.derive_meta()?,
+            prolog:      self.prolog,
+            version:     self.version,
+            status:      self.status,
+            res_headers: self.res_headers,
+            res_body:    self.res_body.prepare()?,
+        })
+    }
+
+    fn derive_meta(&self) -> Result<http::HeaderMap, FlError> {
+        let mut hs = http::HeaderMap::with_capacity(6);
+        use http::header::HeaderName;
+
+        hs.append(HeaderName::from_lowercase(META_URL).unwrap(),
+                  self.prolog.url.to_string().parse()?);
+        hs.append(HeaderName::from_lowercase(META_METHOD).unwrap(),
+                  self.prolog.method.to_string().parse()?);
+
+        // FIXME: This relies on the debug format of version,  e.g. "HTTP/1.1"
+        // which might not be stable, but http::Version doesn't offer an enum
+        // to match on, only constants.
+        let v = format!("{:?}", self.version);
+        hs.append(HeaderName::from_lowercase(META_RES_VERSION).unwrap(),
+                  v.parse()?);
+
+        hs.append(HeaderName::from_lowercase(META_RES_STATUS).unwrap(),
+                  self.status.to_string().parse()?);
+        Ok(hs)
+    }
 }
 
 /// Extension trait for `http::request::Builder`, to enable recording
