@@ -640,19 +640,20 @@ enum DecodeWrapper<'a> {
 
 impl<'a> DecodeWrapper<'a> {
     fn new(comp: Compression, r: Take<&'a mut File>, _buf_size: usize)
-        -> DecodeWrapper
+        -> Result<DecodeWrapper, FlError>
     {
         match comp {
             Compression::Gzip => {
-                DecodeWrapper::Gzip(Box::new(GzDecoder::new(r)))
+                Ok(DecodeWrapper::Gzip(Box::new(GzDecoder::new(r))))
             }
             #[cfg(feature = "brotli")]
             Compression::Brotli => {
-                DecodeWrapper::Brotli(Box::new(
+                Ok(DecodeWrapper::Brotli(Box::new(
                     brotli::Decompressor::new(r, _buf_size)
-                ))
+                )))
             }
-            _ => panic!("DecodeWrapper doesn't support {:?}", comp)
+            _ => bail!("DecodeWrapper: no support for {:?}; \
+                        enable the feature?", comp)
         }
     }
 
@@ -675,7 +676,7 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     let mut wrapper = DecodeWrapper::new(
         rhead.compress,
         file.take(rhead.len),
-        tune.decode_buffer_ram());
+        tune.decode_buffer_ram())?;
 
     let fin = wrapper.as_read();
 
