@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["David Kellum <dek-oss@gravitext.com>"]
 
 [dependencies]
+brotli     = { version = ">=1.2.0, <2", optional = true }
 bytes      = ">=0.4.6, <2"
 failure    = ">=0.1.0, <2"
 flate2     = ">=1.0.1, <2"
@@ -15,3 +16,4 @@ hyper-tls  = ">=0.1.2, <2"
 memmap     = ">=0.6.2, <2"
 tempfile   = ">=2.2.0, <3"
 tokio-core = ">=0.1.12, <2"
+

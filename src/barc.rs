@@ -1,11 +1,13 @@
 //! Basic Archive (BARC) file format reader and writer.
 
+#[cfg(feature = "brotli")]
+extern crate brotli;
 extern crate httparse;
 extern crate flate2;
 
 use std::cmp;
 use std::fs::{File, OpenOptions};
-use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Take, Write};
 use std::ops::{AddAssign,ShlAssign};
 use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
@@ -151,6 +153,9 @@ pub enum Compression {
 
     /// Compressed with gzip.
     Gzip,
+
+    /// Compressed with brotli.
+    Brotli,
 }
 
 impl Compression {
@@ -159,6 +164,7 @@ impl Compression {
         match self {
             Compression::Plain   => 'P',
             Compression::Gzip    => 'G',
+            Compression::Brotli  => 'B',
         }
     }
 
@@ -167,6 +173,7 @@ impl Compression {
         match f {
             b'P' => Ok(Compression::Plain),
             b'G' => Ok(Compression::Gzip),
+            b'B' => Ok(Compression::Brotli),
             _ => Err(format_err!("Unknown compression flag [{}]", f))
         }
     }
@@ -246,11 +253,69 @@ impl WriteStrategy for PlainWriteStrategy {
     }
 }
 
+/// Strategy for Brotli compression. Will not compress if a minimum
+/// length estimate is not reached.
+#[cfg(feature = "brotli")]
+#[derive(Clone, Copy, Debug)]
+pub struct BrotliWriteStrategy {
+    min_len: u64,
+    compression_level: u32,
+}
+
+#[cfg(feature = "brotli")]
+impl BrotliWriteStrategy {
+    /// Set minimum length in bytes for when to use compression.
+    /// Default: 4 KiB.
+    pub fn set_min_len(mut self, size: u64) -> Self {
+        self.min_len = size;
+        self
+    }
+
+    /// Set the compression level to use, typically on a scale of 0-9
+    /// where 0 is _no compression_ and 9 is highest (and slowest)
+    /// compression. Default: 6.
+    pub fn set_compression_level(mut self, level: u32) -> Self {
+        self.compression_level = level;
+        self
+    }
+}
+
+#[cfg(feature = "brotli")]
+impl Default for BrotliWriteStrategy {
+    fn default() -> Self {
+        Self { min_len: 4 * 1024,
+               compression_level: 6 }
+    }
+}
+
+#[cfg(feature = "brotli")]
+impl WriteStrategy for BrotliWriteStrategy {
+    fn wrap<'a>(&self, rec: &'a RecordedType, file: &'a File)
+        -> Result<WriteWrapper<'a>, FlError>
+    {
+        // FIXME: This only considers req/res body lengths
+        let est_len = rec.req_body().len() + rec.res_body().len();
+        if est_len >= self.min_len {
+            Ok(WriteWrapper::Brotli(
+                brotli::CompressorWriter::new(
+                    file,
+                    4096, //FIXME: tune?
+                    self.compression_level,
+                    21)
+            ))
+        } else {
+            Ok(WriteWrapper::Plain(file))
+        }
+    }
+}
+
 /// Wrapper holding a potentially encoding `Write` reference for the
 /// underlying BARC `File` reference.
 pub enum WriteWrapper<'a> {
     Plain(&'a File),
-    Gzip(GzEncoder<&'a File>)
+    Gzip(GzEncoder<&'a File>),
+    #[cfg(feature = "brotli")]
+    Brotli(brotli::CompressorWriter<&'a File>)
 }
 
 impl<'a> WriteWrapper<'a> {
@@ -258,7 +323,9 @@ impl<'a> WriteWrapper<'a> {
     pub fn mode(&self) -> Compression {
         match *self {
             WriteWrapper::Plain(_) => Compression::Plain,
-            WriteWrapper::Gzip(_) => Compression::Gzip
+            WriteWrapper::Gzip(_) => Compression::Gzip,
+            #[cfg(feature = "brotli")]
+            WriteWrapper::Brotli(_) => Compression::Brotli,
         }
     }
 
@@ -266,7 +333,9 @@ impl<'a> WriteWrapper<'a> {
     pub fn as_write(&mut self) -> &mut Write {
         match *self {
             WriteWrapper::Plain(ref mut f) => f,
-            WriteWrapper::Gzip(ref mut gze) => gze
+            WriteWrapper::Gzip(ref mut gze) => gze,
+            #[cfg(feature = "brotli")]
+            WriteWrapper::Brotli(ref mut bcw) => bcw,
         }
     }
 
@@ -279,6 +348,10 @@ impl<'a> WriteWrapper<'a> {
             }
             WriteWrapper::Gzip(gze) => {
                 gze.finish()?.flush()?;
+            }
+            #[cfg(feature = "brotli")]
+            WriteWrapper::Brotli(mut bcw) => {
+                bcw.flush()?;
             }
         }
         Ok(())
@@ -558,15 +631,54 @@ impl BarcReader {
     }
 }
 
+/// Wrapper holding a decoder (`Read`) on a `Take` limited to a record
+/// of a BARC file.
+enum ReadWrapper<'a> {
+    Gzip(GzDecoder<Take<&'a mut File>>),
+    #[cfg(feature = "brotli")]
+    Brotli(brotli::Decompressor<Take<&'a mut File>>),
+}
+
+impl<'a> ReadWrapper<'a> {
+    fn new(comp: Compression, r: Take<&'a mut File>, _buf_size: usize)
+        -> ReadWrapper
+    {
+        match comp {
+            Compression::Gzip => {
+                ReadWrapper::Gzip(GzDecoder::new(r))
+            }
+            #[cfg(feature = "brotli")]
+            Compression::Brotli => {
+                ReadWrapper::Brotli(
+                    brotli::Decompressor::new(r, _buf_size)
+                )
+            }
+            _ => panic!("ReadWrapper doesn't support {:?}", comp)
+        }
+    }
+
+    /// Return a `Read` reference for self.
+    fn as_read(&mut self) -> &mut Read {
+        match *self {
+            ReadWrapper::Gzip(ref mut gze) => gze,
+            #[cfg(feature = "brotli")]
+            ReadWrapper::Brotli(ref mut bcw) => bcw,
+        }
+    }
+}
+
 // Read and return a compressed `Record`. This is specialized for
 // NO_CRLF and since bodies can't be directly mapped from the file.
 fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     -> Result<Record, FlError>
 {
-    assert!(rhead.compress == Compression::Gzip);
-
     // Decoder over limited `Take` of compressed record len
-    let fin = &mut GzDecoder::new(file.take(rhead.len));
+    let mut wrapper = ReadWrapper::new(
+        rhead.compress,
+        file.take(rhead.len),
+        tune.decode_buffer_ram());
+
+    let fin = wrapper.as_read();
 
     let rec_type = rhead.rec_type;
 
@@ -582,13 +694,10 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
 
     let res_headers = read_headers(fin, NO_CRLF, rhead.res_h)?;
 
-    // When compressed, we don't actually know the final size of the response
-    // body. Estimate using remaining unread compressed length, and use
-    // `read_to_body`.
-    let est = fin.get_ref().limit() * u64::from(tune.size_estimate_gzip())
-              + 4_096; // pad some, since GzDecoder pre-reads/buffers
-    println!( "Estimated res body: {}", est);
-    let res_body = BodyImage::read_from(fin, est, tune)?;
+    // When compressed, we don't actually know the final size of the
+    // response body, so start small and use read_to_body. This may
+    // return `Ram` or `FsWrite` states.
+    let res_body = BodyImage::read_from(fin, 4096, tune)?;
 
     Ok(Record { rec_type, meta, req_headers, req_body, res_headers, res_body })
 }
@@ -842,6 +951,14 @@ mod tests {
         write_read_small(&fname, &strategy).unwrap();
     }
 
+    #[cfg(feature = "brotli")]
+    #[test]
+    fn test_write_read_small_brotli() {
+        let fname = barc_test_file("small_brotli.barc").unwrap();
+        let strategy = BrotliWriteStrategy::default().set_min_len(0);
+        write_read_small(&fname, &strategy).unwrap();
+    }
+
     fn write_read_small(fname: &PathBuf, strategy: &WriteStrategy)
         -> Result<(), FlError>
     {
@@ -901,6 +1018,14 @@ mod tests {
         write_read_empty_record(&fname, &strategy).unwrap();
     }
 
+    #[cfg(feature = "brotli")]
+    #[test]
+    fn test_write_read_empty_record_brotli() {
+        let fname = barc_test_file("empty_record_brotli.barc").unwrap();
+        let strategy = BrotliWriteStrategy::default().set_min_len(0);
+        write_read_empty_record(&fname, &strategy).unwrap();
+    }
+
     fn write_read_empty_record(fname: &PathBuf, strategy: &WriteStrategy)
         -> Result<(), FlError>
     {
@@ -927,6 +1052,7 @@ mod tests {
         assert!(record.is_none());
         Ok(())
     }
+
     #[test]
     fn test_write_read_large() {
         let fname = barc_test_file("large.barc").unwrap();
@@ -945,6 +1071,22 @@ mod tests {
     fn test_write_read_large_gzip_0() {
         let fname = barc_test_file("large_gzip_0.barc").unwrap();
         let strategy = GzipWriteStrategy::default().set_compression_level(0);
+        write_read_large(&fname, &strategy).unwrap();
+    }
+
+    #[cfg(feature = "brotli")]
+    #[test]
+    fn test_write_read_large_brotli() {
+        let fname = barc_test_file("large_brotli.barc").unwrap();
+        let strategy = BrotliWriteStrategy::default();
+        write_read_large(&fname, &strategy).unwrap();
+    }
+
+    #[cfg(feature = "brotli")]
+    #[test]
+    fn test_write_read_large_brotli_0() {
+        let fname = barc_test_file("large_brotli_0.barc").unwrap();
+        let strategy = BrotliWriteStrategy::default().set_compression_level(0);
         write_read_large(&fname, &strategy).unwrap();
     }
 
