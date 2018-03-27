@@ -35,3 +35,6 @@ doctest = false
 bench = false
 doc = false
 required-features = ["barc-record"]
+
+[package.metadata.docs.rs]
+features = ["brotli", "client"]
