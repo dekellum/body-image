@@ -264,7 +264,7 @@ pub struct BrotliCompressStrategy {
 #[cfg(feature = "brotli")]
 impl BrotliCompressStrategy {
     /// Set minimum length in bytes for when to use compression.
-    /// Default: 4 KiB.
+    /// Default: 1 KiB.
     pub fn set_min_len(mut self, size: u64) -> Self {
         self.min_len = size;
         self
@@ -282,7 +282,7 @@ impl BrotliCompressStrategy {
 #[cfg(feature = "brotli")]
 impl Default for BrotliCompressStrategy {
     fn default() -> Self {
-        Self { min_len: 4 * 1024,
+        Self { min_len: 1024,
                compression_level: 6 }
     }
 }
