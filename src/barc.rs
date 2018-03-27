@@ -1,4 +1,4 @@
-//! Basic Archive (BARC) file format reader and writer.
+//! **B**ody **Arc**hive (BARC) file format reader and writer.
 
 use std::cmp;
 use std::fs::{File, OpenOptions};

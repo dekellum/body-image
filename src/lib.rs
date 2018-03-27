@@ -154,8 +154,8 @@ impl BodySink {
         self.len
     }
 
-    /// Save bytes by appending to `Ram` or writing to `FsWrite` file. When in
-    /// state `Ram` this may be more efficient than `write_all`.
+    /// Save bytes by appending to `Ram` or writing to `FsWrite` file. When
+    /// in state `Ram` this may be more efficient than `write_all`.
     pub fn save<T>(&mut self, buf: T) -> Result<(), FlError>
         where T: Into<Bytes>
     {
@@ -499,7 +499,7 @@ impl fmt::Debug for ImageState {
     }
 }
 
-/// Provides a `Read` reference for a `BodyImage` in various states.
+/// Provides a `Read` reference for a `BodyImage` in any state.
 pub enum BodyReader<'a> {
     FromRam(GatheringReader<'a>),
     FromFs(&'a File),
@@ -507,7 +507,7 @@ pub enum BodyReader<'a> {
 }
 
 impl<'a> BodyReader<'a> {
-    /// Return a Read reference for self.
+    /// Return the `Read` reference.
     pub fn as_read(&mut self) -> &mut Read {
         match *self {
             BodyReader::FromRam(ref mut cr) => cr,
