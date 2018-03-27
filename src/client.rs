@@ -51,7 +51,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
     let work = fr
         .map(|response| Monolog { prolog, response } )
         .map_err(FlError::from)
-        .and_then(|monolog| resp_future(monolog, *tune))
+        .and_then(|monolog| resp_future(monolog, tune))
         .and_then(|idialog| futres(idialog.prepare()));
 
     // Run until completion
@@ -152,7 +152,7 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     Ok(())
 }
 
-fn resp_future(monolog: Monolog, tune: Tunables)
+fn resp_future(monolog: Monolog, tune: &Tunables)
     -> Box<Future<Item=InDialog, Error=FlError> + Send>
 {
     let (resp_parts, body) = monolog.response.into_parts();
@@ -161,7 +161,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     let bsink = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
         Some(v) => check_length(v, tune.max_body()).and_then(|cl| {
             if cl > tune.max_body_ram() {
-                BodySink::with_fs()
+                BodySink::with_fs(tune.temp_dir())
             } else {
                 Ok(BodySink::with_ram(cl))
             }
@@ -183,6 +183,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         res_body:    bsink,
     };
 
+    let tune = tune.clone();
     let s = body
         .map_err(FlError::from)
         .fold(idialog, move |mut idialog, chunk| {
@@ -191,7 +192,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
                 bail!("Response stream too long: {}+", new_len);
             } else {
                 if idialog.res_body.is_ram() && new_len > tune.max_body_ram() {
-                    idialog.res_body.write_back()?;
+                    idialog.res_body.write_back(tune.temp_dir())?;
                 }
                 println!("to save chunk (len: {})", chunk.len());
                 idialog.res_body

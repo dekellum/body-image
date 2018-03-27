@@ -21,14 +21,16 @@ use failure::Error as FlError;
 // FIXME: Use at least while prototyping. Could switch to an error enum
 // for clear separation between hyper::Error and application errors.
 
+use std::env;
 use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
+use std::path::{Path, PathBuf};
 use bytes::{Bytes, BytesMut, BufMut};
 use memmap::Mmap;
-use tempfile::tempfile;
+use tempfile::tempfile_in;
 
 /// A logical buffer of bytes, which may or may not be RAM resident.
 ///
@@ -125,11 +127,12 @@ impl BodySink {
         }
     }
 
-    /// Create a new instance from a new temporary file, in state `FsWrite`.
-    pub fn with_fs() -> Result<BodySink, FlError> {
-        // FIXME: Add control for setting dir for the tempfile,
-        // possibly via Tunables.
-        let f = tempfile()?;
+    /// Create a new instance in state `FsWrite`, using a new
+    /// temporary file created in dir.
+    pub fn with_fs<P>(dir: P) -> Result<BodySink, FlError>
+        where P: AsRef<Path>
+    {
+        let f = tempfile_in(dir)?;
         Ok(BodySink {
             state: SinkState::FsWrite(f),
             len: 0
@@ -192,11 +195,13 @@ impl BodySink {
     }
 
     /// If `Ram`, convert to `FsWrite` by writing all bytes in RAM to a
-    /// temporary file.  No-op if already `FsWrite`.
-    pub fn write_back(&mut self) -> Result<(), FlError> {
+    /// temporary file, created in dir.  No-op if already `FsWrite`.
+    pub fn write_back<P>(&mut self, dir: P) -> Result<(), FlError>
+        where P: AsRef<Path>
+    {
         self.state = match self.state {
             SinkState::Ram(ref v) => {
-                let mut f = tempfile()?;
+                let mut f = tempfile_in(dir)?;
                 for c in v {
                     f.write_all(c)?;
                 }
@@ -353,7 +358,7 @@ impl BodyImage {
         -> Result<BodyImage, FlError>
     {
         if len_estimate > tune.max_body_ram() {
-            let b = BodySink::with_fs()?;
+            let b = BodySink::with_fs(tune.temp_dir())?;
             return read_to_body_fs(r, b, tune);
         }
 
@@ -393,7 +398,7 @@ impl BodyImage {
                 bail!("Decompressed response stream too long: {}+", size);
             }
             if size > tune.max_body_ram() {
-                body.write_back()?;
+                body.write_back(tune.temp_dir())?;
                 println!("Write (Fs) decoded buf len {}", len);
                 body.write_all(&buf)?;
                 return read_to_body_fs(r, body, tune)
@@ -697,7 +702,7 @@ impl Dialog {
 
 /// A collection of size limits and performance tuning
 /// constants. Setters are available via the `Tuner` class.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Tunables {
     max_body_ram:            u64,
     max_body:                u64,
@@ -705,6 +710,7 @@ pub struct Tunables {
     decode_buffer_fs:        usize,
     size_estimate_deflate:   u16,
     size_estimate_gzip:      u16,
+    temp_dir:                PathBuf,
 }
 
 impl Tunables {
@@ -717,6 +723,7 @@ impl Tunables {
             decode_buffer_fs:    64 * 1024,
             size_estimate_deflate:       4,
             size_estimate_gzip:          5,
+            temp_dir:      env::temp_dir(),
         }
     }
 
@@ -758,6 +765,12 @@ impl Tunables {
     pub fn size_estimate_deflate(&self) -> u16 {
         self.size_estimate_deflate
     }
+
+    /// Return the directory path in which to write temporary files.
+    /// Default: `std::env::temp_dir()`
+    pub fn temp_dir(&self) -> &Path {
+        &self.temp_dir
+    }
 }
 
 impl Default for Tunables {
@@ -766,7 +779,7 @@ impl Default for Tunables {
 
 /// A builder for `Tunables`.  Invariants are asserted in the various
 /// setters and `finish`.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Tuner {
     template: Tunables
 }
@@ -785,7 +798,8 @@ impl Tuner {
     }
 
     /// Set the maximum body size in bytes allowed in any form (RAM or
-    /// file). This must be at least as large as `max_body_ram`.
+    /// file). This must be larger than `max_body_ram`, as asserted on
+    /// `finish`.
     pub fn set_max_body(&mut self, size: u64) -> &mut Tuner {
         self.template.max_body = size;
         self
@@ -823,10 +837,18 @@ impl Tuner {
         self
     }
 
+    /// Set the path in which to write temporary files.
+    pub fn set_temp_dir<P>(&mut self, path: P) -> &mut Tuner
+        where P: AsRef<Path>
+    {
+        self.template.temp_dir = path.as_ref().into();
+        self
+    }
+
     /// Finish building, asserting any remaining invariants, and
     /// return a new `Tunables` instance.
     pub fn finish(&self) -> Tunables {
-        let t = self.template;
+        let t = self.template.clone();
         assert!(t.max_body_ram <= t.max_body,
                 "max_body_ram can't be greater than max_body");
         t

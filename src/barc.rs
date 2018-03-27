@@ -857,7 +857,7 @@ fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
         return Ok(BodyImage::empty());
     }
 
-    let mut body = BodySink::with_fs()?;
+    let mut body = BodySink::with_fs(tune.temp_dir())?;
     let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs());
     loop {
         let rlen = {
