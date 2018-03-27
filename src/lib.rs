@@ -710,6 +710,7 @@ pub struct Tunables {
     decode_buffer_fs:        usize,
     size_estimate_deflate:   u16,
     size_estimate_gzip:      u16,
+    size_estimate_brotli:    u16,
     temp_dir:                PathBuf,
 }
 
@@ -723,6 +724,7 @@ impl Tunables {
             decode_buffer_fs:    64 * 1024,
             size_estimate_deflate:       4,
             size_estimate_gzip:          5,
+            size_estimate_brotli:        6,
             temp_dir:      env::temp_dir(),
         }
     }
@@ -753,6 +755,13 @@ impl Tunables {
     }
 
     /// Return the size estimate, as an integer multiple of the
+    /// encoded buffer size, for the _deflate_ compression algorithm.
+    /// Default: 4.
+    pub fn size_estimate_deflate(&self) -> u16 {
+        self.size_estimate_deflate
+    }
+
+    /// Return the size estimate, as an integer multiple of the
     /// encoded buffer size, for the _gzip_ compression algorithm.
     /// Default: 5.
     pub fn size_estimate_gzip(&self) -> u16 {
@@ -760,10 +769,10 @@ impl Tunables {
     }
 
     /// Return the size estimate, as an integer multiple of the
-    /// encoded buffer size, for the _deflate_ compression algorithm.
-    /// Default: 4.
-    pub fn size_estimate_deflate(&self) -> u16 {
-        self.size_estimate_deflate
+    /// encoded buffer size, for the _Brotli_ compression algorithm.
+    /// Default: 6.
+    pub fn size_estimate_brotli(&self) -> u16 {
+        self.size_estimate_brotli
     }
 
     /// Return the directory path in which to write temporary files.
@@ -821,19 +830,27 @@ impl Tuner {
         self
     }
 
-    /// Set the size estimate, as an integer multiple of the
-    /// encoded buffer size, for the _gzip_ compression algorithm.
+    /// Set the size estimate, as an integer multiple of the encoded
+    /// buffer size, for the _deflate_ compression algorithm.
+    pub fn set_size_estimate_deflate(&mut self, multiple: u16) -> &mut Tuner {
+        assert!(multiple > 0, "size_estimate_deflate must be >= 1" );
+        self.template.size_estimate_deflate = multiple;
+        self
+    }
+
+    /// Set the size estimate, as an integer multiple of the encoded
+    /// buffer size, for the _gzip_ compression algorithm.
     pub fn set_size_estimate_gzip(&mut self, multiple: u16) -> &mut Tuner {
         assert!(multiple > 0, "size_estimate_gzip must be >= 1" );
         self.template.size_estimate_gzip = multiple;
         self
     }
 
-    /// Set the size estimate, as an integer multiple of the
-    /// encoded buffer size, for the _deflate_ compression algorithm.
-    pub fn set_size_estimate_deflate(&mut self, multiple: u16) -> &mut Tuner {
-        assert!(multiple > 0, "size_estimate_deflate must be >= 1" );
-        self.template.size_estimate_deflate = multiple;
+    /// Set the size estimate, as an integer multiple of the encoded
+    /// buffer size, for the _Brotli_ compression algorithm.
+    pub fn set_size_estimate_brotli(&mut self, multiple: u16) -> &mut Tuner {
+        assert!(multiple > 0, "size_estimate_brotli must be >= 1" );
+        self.template.size_estimate_brotli = multiple;
         self
     }
 

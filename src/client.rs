@@ -128,7 +128,7 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                         reader.as_read(),
                         tune.decode_buffer_ram());
                     let len_est = dialog.res_body.len() *
-                        u64::from(tune.size_estimate_gzip());
+                        u64::from(tune.size_estimate_brotli());
                     BodyImage::read_from(&mut decoder, len_est, tune)?
                 }
                 _ => unreachable!("Not supported: {:?}", comp)
