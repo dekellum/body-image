@@ -3,19 +3,17 @@ extern crate bytes;
 extern crate futures;
 extern crate http;
 extern crate httparse;
-extern crate hyper;
-extern crate hyper_tls;
+#[cfg(feature = "hyper")] extern crate hyper;
+#[cfg(feature = "hyper-tls")] extern crate hyper_tls;
 #[macro_use] extern crate log;
 extern crate memmap;
 extern crate tempfile;
 extern crate tokio_core;
-
-#[cfg(feature = "brotli")]
-extern crate brotli;
+#[cfg(feature = "brotli")] extern crate brotli;
 extern crate flate2;
 
 pub mod barc;
-pub mod client;
+#[cfg(feature = "hyper")] pub mod client;
 
 /// Alias for failure crate `failure::Error`
 use failure::Error as FlError;
