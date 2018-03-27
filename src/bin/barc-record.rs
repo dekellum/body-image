@@ -7,7 +7,7 @@ use std::process;
 use failure::Error as FlError;
 
 use hyper_bowl::Tunables;
-use hyper_bowl::barc::{BarcFile, PlainWriteStrategy};
+use hyper_bowl::barc::{BarcFile, NoCompressStrategy};
 use hyper_bowl::client::{decode_res_body, fetch, RequestRecordable};
 
 fn main() {
@@ -47,6 +47,6 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
 
     let bfile = BarcFile::new(barc_path);
     let mut bw = bfile.writer()?;
-    bw.write(&dl, &PlainWriteStrategy::default())?;
+    bw.write(&dl, &NoCompressStrategy::default())?;
     Ok(())
 }

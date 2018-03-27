@@ -178,23 +178,41 @@ impl Compression {
     }
 }
 
-/// Strategies for BARC record compression on write.
-pub trait WriteStrategy {
-    /// Return a `WriteWrapper` for `File` by evaluating the
+/// Strategies for BARC record compression encoding on write.
+pub trait CompressStrategy {
+    /// Return an `EncodeWrapper` for `File` by evaluating the
     /// `RecordedType` for compression worthiness.
-    fn wrap<'a>(&self, rec: &'a RecordedType, file: &'a File)
-        -> Result<WriteWrapper<'a>, FlError>;
+    fn wrap_encoder<'a>(&self, rec: &'a RecordedType, file: &'a File)
+        -> Result<EncodeWrapper<'a>, FlError>;
+}
+
+/// Strategy of no (aka `Plain`) compression.
+#[derive(Clone, Copy, Debug)]
+pub struct NoCompressStrategy {}
+
+impl Default for NoCompressStrategy {
+    fn default() -> Self { Self {} }
+}
+
+impl CompressStrategy for NoCompressStrategy {
+    /// Return an `EncodeWrapper` for `File`. This implementation
+    /// always returns a `Plain` wrapper.
+    fn wrap_encoder<'a>(&self, _rec: &'a RecordedType, file: &'a File)
+        -> Result<EncodeWrapper<'a>, FlError>
+    {
+        Ok(EncodeWrapper::Plain(file))
+    }
 }
 
 /// Strategy for gzip compression. Will not compress if a minimum
 /// length estimate is not reached.
 #[derive(Clone, Copy, Debug)]
-pub struct GzipWriteStrategy {
+pub struct GzipCompressStrategy {
     min_len: u64,
     compression_level: u32,
 }
 
-impl GzipWriteStrategy {
+impl GzipCompressStrategy {
     /// Set minimum length in bytes for when to use compression.
     /// Default: 4 KiB.
     pub fn set_min_len(mut self, size: u64) -> Self {
@@ -211,44 +229,26 @@ impl GzipWriteStrategy {
     }
 }
 
-impl Default for GzipWriteStrategy {
+impl Default for GzipCompressStrategy {
     fn default() -> Self {
         Self { min_len: 4 * 1024,
                compression_level: 6 }
     }
 }
 
-impl WriteStrategy for GzipWriteStrategy {
-    fn wrap<'a>(&self, rec: &'a RecordedType, file: &'a File)
-        -> Result<WriteWrapper<'a>, FlError>
+impl CompressStrategy for GzipCompressStrategy {
+    fn wrap_encoder<'a>(&self, rec: &'a RecordedType, file: &'a File)
+        -> Result<EncodeWrapper<'a>, FlError>
     {
         // FIXME: This only considers req/res body lengths
         let est_len = rec.req_body().len() + rec.res_body().len();
         if est_len >= self.min_len {
-            Ok(WriteWrapper::Gzip(
+            Ok(EncodeWrapper::Gzip(
                 GzEncoder::new(file, GzCompression::new(self.compression_level))
             ))
         } else {
-            Ok(WriteWrapper::Plain(file))
+            Ok(EncodeWrapper::Plain(file))
         }
-    }
-}
-
-/// Strategy of no (aka `Plain`) compression.
-#[derive(Clone, Copy, Debug)]
-pub struct PlainWriteStrategy {}
-
-impl Default for PlainWriteStrategy {
-    fn default() -> Self { Self {} }
-}
-
-impl WriteStrategy for PlainWriteStrategy {
-    /// Return a `WriteWrapper` for `File`. This implementation always
-    /// returns a `Plain` wrapper.
-    fn wrap<'a>(&self, _rec: &'a RecordedType, file: &'a File)
-        -> Result<WriteWrapper<'a>, FlError>
-    {
-        Ok(WriteWrapper::Plain(file))
     }
 }
 
@@ -256,13 +256,13 @@ impl WriteStrategy for PlainWriteStrategy {
 /// length estimate is not reached.
 #[cfg(feature = "brotli")]
 #[derive(Clone, Copy, Debug)]
-pub struct BrotliWriteStrategy {
+pub struct BrotliCompressStrategy {
     min_len: u64,
     compression_level: u32,
 }
 
 #[cfg(feature = "brotli")]
-impl BrotliWriteStrategy {
+impl BrotliCompressStrategy {
     /// Set minimum length in bytes for when to use compression.
     /// Default: 4 KiB.
     pub fn set_min_len(mut self, size: u64) -> Self {
@@ -280,7 +280,7 @@ impl BrotliWriteStrategy {
 }
 
 #[cfg(feature = "brotli")]
-impl Default for BrotliWriteStrategy {
+impl Default for BrotliCompressStrategy {
     fn default() -> Self {
         Self { min_len: 4 * 1024,
                compression_level: 6 }
@@ -288,14 +288,14 @@ impl Default for BrotliWriteStrategy {
 }
 
 #[cfg(feature = "brotli")]
-impl WriteStrategy for BrotliWriteStrategy {
-    fn wrap<'a>(&self, rec: &'a RecordedType, file: &'a File)
-        -> Result<WriteWrapper<'a>, FlError>
+impl CompressStrategy for BrotliCompressStrategy {
+    fn wrap_encoder<'a>(&self, rec: &'a RecordedType, file: &'a File)
+        -> Result<EncodeWrapper<'a>, FlError>
     {
         // FIXME: This only considers req/res body lengths
         let est_len = rec.req_body().len() + rec.res_body().len();
         if est_len >= self.min_len {
-            Ok(WriteWrapper::Brotli(Box::new(
+            Ok(EncodeWrapper::Brotli(Box::new(
                 brotli::CompressorWriter::new(
                     file,
                     4096, //FIXME: tune?
@@ -303,38 +303,38 @@ impl WriteStrategy for BrotliWriteStrategy {
                     21)
             )))
         } else {
-            Ok(WriteWrapper::Plain(file))
+            Ok(EncodeWrapper::Plain(file))
         }
     }
 }
 
 /// Wrapper holding a potentially encoding `Write` reference for the
 /// underlying BARC `File` reference.
-pub enum WriteWrapper<'a> {
+pub enum EncodeWrapper<'a> {
     Plain(&'a File),
     Gzip(GzEncoder<&'a File>),
     #[cfg(feature = "brotli")]
     Brotli(Box<brotli::CompressorWriter<&'a File>>)
 }
 
-impl<'a> WriteWrapper<'a> {
+impl<'a> EncodeWrapper<'a> {
     /// Return the `Compression` flag variant in use.
     pub fn mode(&self) -> Compression {
         match *self {
-            WriteWrapper::Plain(_) => Compression::Plain,
-            WriteWrapper::Gzip(_) => Compression::Gzip,
+            EncodeWrapper::Plain(_) => Compression::Plain,
+            EncodeWrapper::Gzip(_) => Compression::Gzip,
             #[cfg(feature = "brotli")]
-            WriteWrapper::Brotli(_) => Compression::Brotli,
+            EncodeWrapper::Brotli(_) => Compression::Brotli,
         }
     }
 
     /// Return a `Write` reference for self.
     pub fn as_write(&mut self) -> &mut Write {
         match *self {
-            WriteWrapper::Plain(ref mut f) => f,
-            WriteWrapper::Gzip(ref mut gze) => gze,
+            EncodeWrapper::Plain(ref mut f) => f,
+            EncodeWrapper::Gzip(ref mut gze) => gze,
             #[cfg(feature = "brotli")]
-            WriteWrapper::Brotli(ref mut bcw) => bcw,
+            EncodeWrapper::Brotli(ref mut bcw) => bcw,
         }
     }
 
@@ -342,14 +342,14 @@ impl<'a> WriteWrapper<'a> {
     /// completed write.
     pub fn finish(self) -> Result<(), FlError> {
         match self {
-            WriteWrapper::Plain(mut f) => {
+            EncodeWrapper::Plain(mut f) => {
                 f.flush()?;
             }
-            WriteWrapper::Gzip(gze) => {
+            EncodeWrapper::Gzip(gze) => {
                 gze.finish()?.flush()?;
             }
             #[cfg(feature = "brotli")]
-            WriteWrapper::Brotli(mut bcw) => {
+            EncodeWrapper::Brotli(mut bcw) => {
                 bcw.flush()?;
             }
         }
@@ -420,7 +420,7 @@ impl<'a> BarcWriter<'a> {
     /// Write a new record, returning the record's offset from the
     /// start of the BARC file. The writer position is then advanced
     /// to the end of the file, for the next `write`.
-    pub fn write(&mut self, rec: &RecordedType, strategy: &WriteStrategy)
+    pub fn write(&mut self, rec: &RecordedType, strategy: &CompressStrategy)
         -> Result<u64, FlError>
     {
         // BarcFile::writer() guarantees Some(File)
@@ -461,10 +461,10 @@ impl<'a> BarcWriter<'a> {
 
 // Write the record, returning a preliminary `RecordHead` with
 // observed (not compressed) lengths.
-fn write_record(file: &mut File, rec: &RecordedType, strategy: &WriteStrategy)
+fn write_record(file: &mut File, rec: &RecordedType, strategy: &CompressStrategy)
     -> Result<RecordHead, FlError>
 {
-    let mut wrapper = strategy.wrap(rec, file)?;
+    let mut wrapper = strategy.wrap_encoder(rec, file)?;
     let compress = wrapper.mode();
     let with_crlf = compress == Compression::Plain;
     let head = {
@@ -630,38 +630,38 @@ impl BarcReader {
     }
 }
 
-/// Wrapper holding a decoder (`Read`) on a `Take` limited to a record
-/// of a BARC file.
-enum ReadWrapper<'a> {
+/// Wrapper holding a decoder (providing `Read`) on a `Take` limited
+/// to a record of a BARC file.
+enum DecodeWrapper<'a> {
     Gzip(Box<GzDecoder<Take<&'a mut File>>>),
     #[cfg(feature = "brotli")]
     Brotli(Box<brotli::Decompressor<Take<&'a mut File>>>),
 }
 
-impl<'a> ReadWrapper<'a> {
+impl<'a> DecodeWrapper<'a> {
     fn new(comp: Compression, r: Take<&'a mut File>, _buf_size: usize)
-        -> ReadWrapper
+        -> DecodeWrapper
     {
         match comp {
             Compression::Gzip => {
-                ReadWrapper::Gzip(Box::new(GzDecoder::new(r)))
+                DecodeWrapper::Gzip(Box::new(GzDecoder::new(r)))
             }
             #[cfg(feature = "brotli")]
             Compression::Brotli => {
-                ReadWrapper::Brotli(Box::new(
+                DecodeWrapper::Brotli(Box::new(
                     brotli::Decompressor::new(r, _buf_size)
                 ))
             }
-            _ => panic!("ReadWrapper doesn't support {:?}", comp)
+            _ => panic!("DecodeWrapper doesn't support {:?}", comp)
         }
     }
 
     /// Return a `Read` reference for self.
     fn as_read(&mut self) -> &mut Read {
         match *self {
-            ReadWrapper::Gzip(ref mut gze) => gze,
+            DecodeWrapper::Gzip(ref mut gze) => gze,
             #[cfg(feature = "brotli")]
-            ReadWrapper::Brotli(ref mut bcw) => bcw,
+            DecodeWrapper::Brotli(ref mut bcw) => bcw,
         }
     }
 }
@@ -672,7 +672,7 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     -> Result<Record, FlError>
 {
     // Decoder over limited `Take` of compressed record len
-    let mut wrapper = ReadWrapper::new(
+    let mut wrapper = DecodeWrapper::new(
         rhead.compress,
         file.take(rhead.len),
         tune.decode_buffer_ram());
@@ -939,14 +939,14 @@ mod tests {
     #[test]
     fn test_write_read_small() {
         let fname = barc_test_file("small.barc").unwrap();
-        let strategy = PlainWriteStrategy::default();
+        let strategy = NoCompressStrategy::default();
         write_read_small(&fname, &strategy).unwrap();
     }
 
     #[test]
     fn test_write_read_small_gzip() {
         let fname = barc_test_file("small_gzip.barc").unwrap();
-        let strategy = GzipWriteStrategy::default().set_min_len(0);
+        let strategy = GzipCompressStrategy::default().set_min_len(0);
         write_read_small(&fname, &strategy).unwrap();
     }
 
@@ -954,11 +954,11 @@ mod tests {
     #[test]
     fn test_write_read_small_brotli() {
         let fname = barc_test_file("small_brotli.barc").unwrap();
-        let strategy = BrotliWriteStrategy::default().set_min_len(0);
+        let strategy = BrotliCompressStrategy::default().set_min_len(0);
         write_read_small(&fname, &strategy).unwrap();
     }
 
-    fn write_read_small(fname: &PathBuf, strategy: &WriteStrategy)
+    fn write_read_small(fname: &PathBuf, strategy: &CompressStrategy)
         -> Result<(), FlError>
     {
         let bfile = BarcFile::new(fname);
@@ -1006,14 +1006,14 @@ mod tests {
     #[test]
     fn test_write_read_empty_record() {
         let fname = barc_test_file("empty_record.barc").unwrap();
-        let strategy = PlainWriteStrategy::default();
+        let strategy = NoCompressStrategy::default();
         write_read_empty_record(&fname, &strategy).unwrap();;
     }
 
     #[test]
     fn test_write_read_empty_record_gzip() {
         let fname = barc_test_file("empty_record_gzip.barc").unwrap();
-        let strategy = GzipWriteStrategy::default().set_min_len(0);
+        let strategy = GzipCompressStrategy::default().set_min_len(0);
         write_read_empty_record(&fname, &strategy).unwrap();
     }
 
@@ -1021,11 +1021,11 @@ mod tests {
     #[test]
     fn test_write_read_empty_record_brotli() {
         let fname = barc_test_file("empty_record_brotli.barc").unwrap();
-        let strategy = BrotliWriteStrategy::default().set_min_len(0);
+        let strategy = BrotliCompressStrategy::default().set_min_len(0);
         write_read_empty_record(&fname, &strategy).unwrap();
     }
 
-    fn write_read_empty_record(fname: &PathBuf, strategy: &WriteStrategy)
+    fn write_read_empty_record(fname: &PathBuf, strategy: &CompressStrategy)
         -> Result<(), FlError>
     {
         let bfile = BarcFile::new(fname);
@@ -1055,21 +1055,21 @@ mod tests {
     #[test]
     fn test_write_read_large() {
         let fname = barc_test_file("large.barc").unwrap();
-        let strategy = PlainWriteStrategy::default();
+        let strategy = NoCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();;
     }
 
     #[test]
     fn test_write_read_large_gzip() {
         let fname = barc_test_file("large_gzip.barc").unwrap();
-        let strategy = GzipWriteStrategy::default();
+        let strategy = GzipCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();
     }
 
     #[test]
     fn test_write_read_large_gzip_0() {
         let fname = barc_test_file("large_gzip_0.barc").unwrap();
-        let strategy = GzipWriteStrategy::default().set_compression_level(0);
+        let strategy = GzipCompressStrategy::default().set_compression_level(0);
         write_read_large(&fname, &strategy).unwrap();
     }
 
@@ -1077,7 +1077,7 @@ mod tests {
     #[test]
     fn test_write_read_large_brotli() {
         let fname = barc_test_file("large_brotli.barc").unwrap();
-        let strategy = BrotliWriteStrategy::default();
+        let strategy = BrotliCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();
     }
 
@@ -1085,11 +1085,11 @@ mod tests {
     #[test]
     fn test_write_read_large_brotli_0() {
         let fname = barc_test_file("large_brotli_0.barc").unwrap();
-        let strategy = BrotliWriteStrategy::default().set_compression_level(0);
+        let strategy = BrotliCompressStrategy::default().set_compression_level(0);
         write_read_large(&fname, &strategy).unwrap();
     }
 
-    fn write_read_large(fname: &PathBuf, strategy: &WriteStrategy)
+    fn write_read_large(fname: &PathBuf, strategy: &CompressStrategy)
         -> Result<(), FlError>
     {
         let bfile = BarcFile::new(fname);
@@ -1167,7 +1167,7 @@ mod tests {
 
         let offset = writer.write(&Record {
             res_body, ..Record::default() },
-            &PlainWriteStrategy::default()).unwrap();
+            &NoCompressStrategy::default()).unwrap();
         assert_eq!(offset, 0);
         reader.seek(offset).unwrap();
 
@@ -1187,7 +1187,7 @@ mod tests {
 
         // Write another, empty
         writer.write(&Record::default(),
-                     &PlainWriteStrategy::default()).unwrap();
+                     &NoCompressStrategy::default()).unwrap();
 
         let record = reader.read(&tune).unwrap().unwrap();
         assert_eq!(record.rec_type, RecordType::Dialog);
