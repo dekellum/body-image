@@ -226,12 +226,18 @@ impl BodySink {
                 })
             }
             SinkState::FsWrite(mut f) => {
-                f.flush()?;
-                f.seek(SeekFrom::Start(0))?;
-                Ok(BodyImage {
-                    state: ImageState::FsRead(f),
-                    len: self.len
-                })
+                // Protect against empty files, which would fail if mem_map'd,
+                // by replacing with empty `Ram` state
+                if self.len == 0 {
+                    Ok(BodyImage::empty())
+                } else {
+                    f.flush()?;
+                    f.seek(SeekFrom::Start(0))?;
+                    Ok(BodyImage {
+                        state: ImageState::FsRead(f),
+                        len: self.len
+                    })
+                }
             }
         }
     }
