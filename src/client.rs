@@ -310,8 +310,8 @@ mod tests {
             .header(http::header::ACCEPT_ENCODING, "br, gzip, deflate")
             .header(http::header::USER_AGENT,
                     "Mozilla/5.0 \
-                     (compatible; hyper-bowl 0.1.0; \
-                      +http://github.com/dekellum/hyper-bowl)")
+                     (compatible; body-image 0.1.0; \
+                      +http://github.com/dekellum/body-image)")
             // Referer? Etag, If-Modified...?
             // "Connection: keep-alive" (header) is default for HTTP 1.1
             .uri(url)

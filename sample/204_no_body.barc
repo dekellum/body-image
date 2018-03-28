@@ -8,7 +8,7 @@ response-status: 204 No Content
 accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
 accept-language: en
 accept-encoding: br, gzip, deflate
-user-agent: Mozilla/5.0 (compatible; hyper-bowl 0.1.0; +http://github.com/dekellum/hyper-bowl)
+user-agent: Mozilla/5.0 (compatible; body-image 0.1.0; +http://github.com/dekellum/body-image)
 
 x-powered-by: PHP/7.0.28
 content-type: text/html; charset=UTF-8

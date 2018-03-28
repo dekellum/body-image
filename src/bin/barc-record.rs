@@ -1,14 +1,14 @@
 extern crate failure;
 extern crate http;
-extern crate hyper_bowl;
+extern crate body_image;
 
 use std::process;
 
 use failure::Error as FlError;
 
-use hyper_bowl::Tunables;
-use hyper_bowl::barc::{BarcFile, NoCompressStrategy};
-use hyper_bowl::client::{decode_res_body, fetch, RequestRecordable};
+use body_image::Tunables;
+use body_image::barc::{BarcFile, NoCompressStrategy};
+use body_image::client::{decode_res_body, fetch, RequestRecordable};
 
 fn main() {
     let mut args = std::env::args();
@@ -34,8 +34,8 @@ fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
         .header(http::header::ACCEPT_ENCODING, "br, gzip, deflate")
         .header(http::header::USER_AGENT,
                 "Mozilla/5.0 \
-                 (compatible; hyper-bowl 0.1.0; \
-                  +http://github.com/dekellum/hyper-bowl)")
+                 (compatible; body-image 0.1.0; \
+                  +http://github.com/dekellum/body-image)")
         // "Connection: keep-alive" (header) is default for HTTP 1.1
         .uri(url)
         .record()?;
