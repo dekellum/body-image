@@ -355,10 +355,12 @@ impl BodyImage {
         }
     }
 
-    /// Given a `Read` object, a length estimate in bytes (which may be wrong, or
-    /// use 0 when unknown), and `Tunables` read and prepare a new `BodyImage`.
-    /// Depending on `Tunables` an the estimate, the most appropriate buffering
-    /// strategy is used.
+    /// Given a `Read` object, a length estimate in bytes, and `Tunables` read
+    /// and prepare a new `BodyImage`.  `Tunables`, the estimate and length
+    /// actually read, will determine which buffering strategy is used. The
+    /// length estimate provides a hint to use the file system from the start,
+    /// which is slightly more optimal than writing out `Ram` buffers
+    /// later. If the length can't be estimated, use zero (0).
     pub fn read_from(r: &mut Read, len_estimate: u64, tune: &Tunables)
         -> Result<BodyImage, FlError>
     {
