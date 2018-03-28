@@ -876,4 +876,15 @@ mod tests {
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
     }
+
+    #[test]
+    fn test_body_fs_empty() {
+        let tune = Tunables::new();
+        let body = BodySink::with_fs(tune.temp_dir()).unwrap();
+        let mut body = body.prepare().unwrap();
+        assert!(body.is_empty());
+
+        body.mem_map().unwrap();
+        assert!(body.is_empty());
+    }
 }
