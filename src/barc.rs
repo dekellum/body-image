@@ -924,7 +924,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use http::header::{AGE, REFERER, VIA};
     use super::*;
-    use super::super::Tuner;
+    use ::Tuner;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, FlError> {
         let tpath = Path::new("target/testmp");
