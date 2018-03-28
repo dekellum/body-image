@@ -61,8 +61,8 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
 
 /// Decode any _gzip_, _deflate_, or (optional feature) _brotli_
 /// response Transfer-Encoding or Content-Encoding into a new response
-/// `BodyItem`, updating `Dialog` accordingly. The provided `Tunables`
-/// controls decompression buffer sizes and if the final `BodyItem`
+/// `BodyImage`, updating `Dialog` accordingly. The provided `Tunables`
+/// controls decompression buffer sizes and if the final `BodyImage`
 /// will be in `Ram` or `FsRead`.
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     -> Result<(), FlError>
