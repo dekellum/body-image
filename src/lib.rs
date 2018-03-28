@@ -37,9 +37,9 @@ use tempfile::tempfile_in;
 /// strategy:
 ///
 /// `Ram`
-/// : A vector of zero to many discontinuous byte buffers in Random Access
-///   Memory. This state is also used to represent an empty body (without
-///   allocation).
+/// : A vector of zero, one, or many discontinuous (AKA scattered) byte
+///   buffers in Random Access Memory. This state is also used to represent an
+///   empty body (without allocation).
 ///
 /// `FsRead`
 /// : Body in a (temporary) file, ready for position based, single access,
@@ -69,9 +69,9 @@ enum ImageState {
 /// strategy:
 ///
 /// `Ram`
-/// : A vector of zero to many discontinuous byte buffers in Random Access
-///   Memory. This state is also used to represent an empty body (without
-///   allocation).
+/// : A vector of zero, one, or many discontinuous (AKA scattered) byte
+///   buffers in Random Access Memory. This state is also used to represent an
+///   empty body (without allocation).
 ///
 /// `FsWrite`
 /// : Body being written to a (temporary) file.
@@ -348,15 +348,54 @@ impl BodyImage {
         Ok(self)
     }
 
-    /// Return a new `BodyReader` over self.
+    /// If `Ram` with 2 or more buffers, *gather* by copying into a single
+    /// contiguous buffer with the same total length. No-op for other
+    /// states. Possibly in combination with `mem_map`, this can be used to
+    /// ensure `Cursor` (and `&[u8]` slice) access via `reader`, at the cost
+    /// of the copy.
+    pub fn gather(&mut self) -> &mut Self {
+        let scattered = if let ImageState::Ram(ref v) = self.state {
+            v.len() > 1
+        } else {
+            false
+        };
+
+        if scattered {
+            let newb = if let ImageState::Ram(ref v) = self.state {
+                let mut newb = BytesMut::with_capacity(self.len as usize);
+                for b in v {
+                    newb.put(b);
+                }
+                newb.freeze()
+            } else {
+                unreachable!();
+            };
+            assert_eq!(newb.len() as u64, self.len);
+            self.state = ImageState::Ram(vec![newb]);
+        }
+        self
+    }
+
+    /// Return a new `BodyReader` enum over self. The enum provides a
+    /// consistent `Read` reference, or can be destructured for access to the
+    /// specific concrete types.
     pub fn reader(&self) -> BodyReader {
         match self.state {
-            ImageState::Ram(ref v) =>
-                BodyReader::FromRam(GatheringReader::new(v)),
-            ImageState::FsRead(ref f) =>
-                BodyReader::FromFs(f),
-            ImageState::MemMap(ref m) =>
-                BodyReader::FromMemMap(Cursor::new(&m.map)),
+            ImageState::Ram(ref v) => {
+                if v.is_empty() {
+                    BodyReader::Contiguous(Cursor::new(&[]))
+                } else if v.len() == 1 {
+                    BodyReader::Contiguous(Cursor::new(&v[0]))
+                } else {
+                    BodyReader::Scattered(GatheringReader::new(v))
+                }
+            }
+            ImageState::FsRead(ref f) => {
+                BodyReader::File(f)
+            }
+            ImageState::MemMap(ref m) => {
+                BodyReader::Contiguous(Cursor::new(&m.map))
+            }
         }
     }
 
@@ -518,18 +557,26 @@ impl fmt::Debug for ImageState {
 
 /// Provides a `Read` reference for a `BodyImage` in any state.
 pub enum BodyReader<'a> {
-    FromRam(GatheringReader<'a>),
-    FromFs(&'a File),
-    FromMemMap(Cursor<&'a [u8]>),
+    /// `Cursor` over a contiguous single RAM buffer, from `Ram` or
+    /// `MemMap`. Also used for the empty case. `Cursor::into_inner` may be
+    /// used for direct access to the memory byte slice.
+    Contiguous(Cursor<&'a [u8]>),
+
+    /// `GatheringReader` providing `Read` over 2 or more scattered RAM
+    /// buffers.
+    Scattered(GatheringReader<'a>),
+
+    /// File reference providing `Read`, from BodyImage `FsRead` state.
+    File(&'a File),
 }
 
 impl<'a> BodyReader<'a> {
     /// Return the `Read` reference.
     pub fn as_read(&mut self) -> &mut Read {
         match *self {
-            BodyReader::FromRam(ref mut cr) => cr,
-            BodyReader::FromFs(ref mut f) => f,
-            BodyReader::FromMemMap(ref mut cur) => cur,
+            BodyReader::Contiguous(ref mut cursor) => cursor,
+            BodyReader::Scattered(ref mut gatherer) => gatherer,
+            BodyReader::File(ref mut file) => file,
         }
     }
 }
@@ -881,6 +928,22 @@ mod tests {
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
+    }
+
+    #[test]
+    fn test_body_scattered_gather() {
+        let mut body = BodySink::with_ram_buffers(2);
+        body.save(&b"hello"[..]).unwrap();
+        body.save(&b" "[..]).unwrap();
+        body.save(&b"world"[..]).unwrap();
+        let mut body = body.prepare().unwrap();
+        body.gather();
+        if let BodyReader::Contiguous(cursor) = body.reader() {
+            let bslice = cursor.into_inner();
+            assert_eq!(b"hello world", bslice);
+        } else {
+            panic!("not contiguous?!");
+        }
     }
 
     #[test]
