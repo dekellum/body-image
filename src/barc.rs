@@ -676,7 +676,7 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
     let mut wrapper = DecodeWrapper::new(
         rhead.compress,
         file.take(rhead.len),
-        tune.decode_buffer_ram())?;
+        tune.buffer_size_ram())?;
 
     let fin = wrapper.as_read();
 
@@ -858,7 +858,7 @@ fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
     }
 
     let mut body = BodySink::with_fs(tune.temp_dir())?;
-    let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs());
+    let mut buf = BytesMut::with_capacity(tune.buffer_size_fs());
     loop {
         let rlen = {
             let b = unsafe { buf.bytes_mut() };

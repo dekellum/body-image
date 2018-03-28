@@ -417,7 +417,7 @@ impl BodyImage {
 
         let mut size: u64 = 0;
         'eof: loop {
-            let mut buf = BytesMut::with_capacity(tune.decode_buffer_ram());
+            let mut buf = BytesMut::with_capacity(tune.buffer_size_ram());
             'fill: loop {
                 let len = match r.read(unsafe { buf.bytes_mut() }) {
                     Ok(len) => len,
@@ -498,7 +498,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
     assert!(!body.is_ram());
 
     let mut size: u64 = 0;
-    let mut buf = BytesMut::with_capacity(tune.decode_buffer_fs());
+    let mut buf = BytesMut::with_capacity(tune.buffer_size_fs());
     loop {
         let len = match r.read(unsafe { buf.bytes_mut() }) {
             Ok(l) => l,
@@ -720,8 +720,8 @@ impl Dialog {
 pub struct Tunables {
     max_body_ram:            u64,
     max_body:                u64,
-    decode_buffer_ram:       usize,
-    decode_buffer_fs:        usize,
+    buffer_size_ram:         usize,
+    buffer_size_fs:          usize,
     size_estimate_deflate:   u16,
     size_estimate_gzip:      u16,
     size_estimate_brotli:    u16,
@@ -734,8 +734,8 @@ impl Tunables {
         Tunables {
             max_body_ram:       192 * 1024,
             max_body:   1024 * 1024 * 1024,
-            decode_buffer_ram:    8 * 1024,
-            decode_buffer_fs:    64 * 1024,
+            buffer_size_ram:      8 * 1024,
+            buffer_size_fs:      64 * 1024,
             size_estimate_deflate:       4,
             size_estimate_gzip:          5,
             size_estimate_brotli:        6,
@@ -756,16 +756,16 @@ impl Tunables {
         self.max_body
     }
 
-    /// Return the buffer size in bytes to use for decoding, with
-    /// output to RAM. Default: 8 KiB.
-    pub fn decode_buffer_ram(&self) -> usize {
-        self.decode_buffer_ram
+    /// Return the buffer size in bytes to use when buffering for output in
+    /// RAM. Default: 8 KiB.
+    pub fn buffer_size_ram(&self) -> usize {
+        self.buffer_size_ram
     }
 
-    /// Return the buffer size in bytes to use for decoding, with
-    /// output to a file. Default: 64 KiB.
-    pub fn decode_buffer_fs(&self) -> usize {
-        self.decode_buffer_fs
+    /// Return the buffer size in bytes to use when buffering for output to
+    /// the file-system. Default: 64 KiB.
+    pub fn buffer_size_fs(&self) -> usize {
+        self.buffer_size_fs
     }
 
     /// Return the size estimate, as an integer multiple of the
@@ -828,19 +828,18 @@ impl Tuner {
         self
     }
 
-    /// Set the buffer size in bytes to use for decoding, with output
-    /// to RAM.
-    pub fn set_decode_buffer_ram(&mut self, size: usize) -> &mut Tuner {
-        assert!(size > 0, "decode_buffer_ram must be greater than zero");
-        self.template.decode_buffer_ram = size;
+    /// Set the buffer size in bytes to use when buffering for output in RAM.
+    pub fn set_buffer_size_ram(&mut self, size: usize) -> &mut Tuner {
+        assert!(size > 0, "buffer_size_ram must be greater than zero");
+        self.template.buffer_size_ram = size;
         self
     }
 
-    /// Set the buffer size in bytes to use for decoding, with output
-    /// to a file.
-    pub fn set_decode_buffer_fs(&mut self, size: usize) -> &mut Tuner {
-        assert!(size > 0, "decode_buffer_fs must be greater than zero");
-        self.template.decode_buffer_fs = size;
+    /// Set the buffer size in bytes to use when buffering for output to the
+    /// file-system.
+    pub fn set_buffer_size_fs(&mut self, size: usize) -> &mut Tuner {
+        assert!(size > 0, "buffer_size_fs must be greater than zero");
+        self.template.buffer_size_fs = size;
         self
     }
 

@@ -127,7 +127,7 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                 Encoding::Brotli => {
                     let mut decoder = brotli::Decompressor::new(
                         reader.as_read(),
-                        tune.decode_buffer_ram());
+                        tune.buffer_size_ram());
                     let len_est = dialog.res_body.len() *
                         u64::from(tune.size_estimate_brotli());
                     BodyImage::read_from(&mut decoder, len_est, tune)?
