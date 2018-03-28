@@ -442,9 +442,9 @@ impl<'a> BarcWriter<'a> {
         if head.compress == Compression::Plain {
             assert_eq!(orig_len, head.len);
         } else if orig_len < head.len {
-            println!("WARN: Compression *increased* record size from \
-                      {} to {} bytes",
-                     orig_len, head.len);
+            warn!("Compression *increased* record size from \
+                   {} to {} bytes",
+                  orig_len, head.len);
         }
 
         // Seek back and write final record head, with known size
@@ -879,7 +879,7 @@ fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
             break;
         }
         unsafe { buf.advance_mut(rlen); }
-        println!("Write (Fs) decoded buf rlen {}", rlen);
+        debug!("Write (Fs) decoded buf rlen {}", rlen);
         body.write_all(&buf)?;
 
         if body.len() < len {

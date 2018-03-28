@@ -1,4 +1,6 @@
 extern crate failure;
+extern crate fern;
+#[macro_use] extern crate log;
 extern crate http;
 extern crate body_image;
 
@@ -18,12 +20,33 @@ fn main() {
 
     let r = run(&url, &barc_path);
     if let Err(e) = r {
-        eprintln!("Error cause: {}; (Backtrace) {}", e.cause(), e.backtrace());
+        error!("Error cause: {}; (backtrace) {}", e.cause(), e.backtrace());
         process::exit(2);
     }
 }
 
+fn setup_logger() -> Result<(), FlError> {
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "{} {}: {}",
+                record.target(),
+                record.level(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Debug)
+        .level_for("hyper::proto", log::LevelFilter::Info)
+        .level_for("tokio_core", log::LevelFilter::Info)
+        .level_for("tokio_reactor", log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply()?;
+    Ok(())
+}
+
 fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
+    setup_logger()?;
+
     let req = http::Request::builder()
         .method(http::Method::GET)
         .header(http::header::ACCEPT,
