@@ -164,15 +164,17 @@ impl BodySink {
     {
         let buf = buf.into();
         let len = buf.len() as u64;
-        match self.state {
-            SinkState::Ram(ref mut v) => {
-                v.push(buf);
+        if len > 0 {
+            match self.state {
+                SinkState::Ram(ref mut v) => {
+                    v.push(buf);
+                }
+                SinkState::FsWrite(ref mut f) => {
+                    f.write_all(&buf)?;
+                }
             }
-            SinkState::FsWrite(ref mut f) => {
-                f.write_all(&buf)?;
-            }
+            self.len += len;
         }
-        self.len += len;
         Ok(())
     }
 
@@ -182,15 +184,18 @@ impl BodySink {
         where T: AsRef<[u8]>
     {
         let buf = buf.as_ref();
-        match self.state {
-            SinkState::Ram(ref mut v) => {
-                v.push(buf.into());
+        let len = buf.len() as u64;
+        if len > 0 {
+            match self.state {
+                SinkState::Ram(ref mut v) => {
+                    v.push(buf.into());
+                }
+                SinkState::FsWrite(ref mut f) => {
+                    f.write_all(buf)?;
+                }
             }
-            SinkState::FsWrite(ref mut f) => {
-                f.write_all(buf)?;
-            }
+            self.len += len;
         }
-        self.len += buf.len() as u64;
         Ok(())
     }
 
