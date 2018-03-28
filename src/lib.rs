@@ -206,8 +206,8 @@ impl BodySink {
         self.state = match self.state {
             SinkState::Ram(ref v) => {
                 let mut f = tempfile_in(dir)?;
-                for c in v {
-                    f.write_all(c)?;
+                for b in v {
+                    f.write_all(b)?;
                 }
                 SinkState::FsWrite(f)
             }
