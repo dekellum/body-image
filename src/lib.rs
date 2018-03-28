@@ -836,3 +836,44 @@ impl Tuner {
 impl Default for Tuner {
     fn default() -> Self { Tuner::new() }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_body_empty_read() {
+        let body = BodyImage::empty();
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = Vec::new();
+        br.read_to_end(&mut obuf).unwrap();
+        assert!(obuf.is_empty());
+    }
+
+    #[test]
+    fn test_body_contiguous_read() {
+        let mut body = BodySink::with_ram_buffers(2);
+        body.write_all("hello world").unwrap();
+        let body = body.prepare().unwrap();
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+    }
+
+    #[test]
+    fn test_body_scattered_read() {
+        let mut body = BodySink::with_ram_buffers(2);
+        body.write_all("hello").unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        let body = body.prepare().unwrap();
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+    }
+}
