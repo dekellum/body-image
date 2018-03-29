@@ -494,32 +494,28 @@ impl BodyImage {
         Ok(body)
     }
 
-    /// Specialized and efficient `write_all` for `Ram` or `MemMap`. If in
-    /// state `FsRead` a temporary memory map will be made in order to write
-    /// without mutating, using or changing the file position.
+    /// Write self to `out` and return length. If in state `FsRead`, a
+    /// temporary memory map will be made in order to write without
+    /// mutating self, using or changing the file position.
     pub fn write_to(&self, out: &mut Write) -> Result<u64, FlError> {
         match self.state {
             ImageState::Ram(ref v) => {
-                let mut size: u64 = 0;
-                for c in v {
-                    let b = &c;
+                for b in v {
                     out.write_all(b)?;
-                    size += b.len() as u64;
                 }
-                Ok(size)
             }
             ImageState::MemMap(ref m) => {
                 let map = &m.map;
                 out.write_all(map)?;
-                Ok(map.len() as u64)
             }
             ImageState::FsRead(ref f) => {
+                assert!(self.len > 0);
                 let tmap = unsafe { Mmap::map(f) }?;
                 let map = &tmap;
                 out.write_all(map)?;
-                Ok(map.len() as u64)
             }
         }
+        Ok(self.len)
     }
 }
 
