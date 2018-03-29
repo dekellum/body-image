@@ -101,7 +101,8 @@ pub struct Mapped {
 }
 
 impl SinkState {
-    // Swap self with empty `Ram` and return an owned self
+    // Swap self with empty `Ram` and return an owned self.
+    // Warning: Be careful about exposing an invalid length when using.
     fn cut(&mut self) -> Self {
         mem::replace(self, SinkState::Ram(Vec::with_capacity(0)))
     }
@@ -211,21 +212,24 @@ impl BodySink {
 
     /// If `Ram`, convert to `FsWrite` by writing all bytes in RAM to a
     /// temporary file, created in dir.  No-op if already `FsWrite`. Buffers
-    /// are eagerly dropped as they are written. If any error result is
-    /// returned (e.g. opening or writing to the file), self will be emptied
-    /// and in the `Ram` state, an acceptable tradeoff with the assumption
-    /// that there is no practical recovery for this _particular_ body.
+    /// are eagerly dropped as they are written. As a consequence, if any
+    /// error result is returned (e.g. opening or writing to the file), self
+    /// will be empty and in the `Ram` state. There is no practical recovery
+    /// for the original body.
     pub fn write_back<P>(&mut self, dir: P) -> Result<&mut Self, FlError>
         where P: AsRef<Path>
     {
         if self.is_ram() {
             if let SinkState::Ram(v) = self.state.cut() {
+                let olen = self.len;
+                self.len = 0;
                 let mut f = tempfile_in(dir)?;
                 for b in v {
                     f.write_all(&b)?;
                     drop::<Bytes>(b); // Ensure ASAP drop
                 }
                 self.state = SinkState::FsWrite(f);
+                self.len = olen;
             }
         }
         Ok(self)
@@ -287,6 +291,7 @@ impl ImageState {
     }
 
     // Swap self with empty `Ram` and return an owned self
+    // Warning: Be careful about exposing an invalid length when using.
     fn cut(&mut self) -> Self {
         mem::replace(self, ImageState::empty())
     }
