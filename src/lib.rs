@@ -1,3 +1,6 @@
+#![feature(external_doc)]
+#![doc(include = "../README.md")]
+
 extern crate bytes;
 #[macro_use] extern crate failure;
 extern crate futures;
@@ -92,9 +95,9 @@ enum SinkState {
 pub struct Mapped {
     map: Mmap,
     _file: File,
-    // This ordering has munmap called before close on destruction,
+    // This ordering has `munmap` called before close on destruction,
     // which seems best, though it may not actually be a requirement
-    // to keep the File open, at least on Unix.
+    // to keep the File open, at least on Linux.
 }
 
 impl BodySink {
@@ -104,7 +107,7 @@ impl BodySink {
         BodySink::with_ram_buffers(0)
     }
 
-    /// Create a new `Ram` instance by pre-allocating a vector of bufffers
+    /// Create a new `Ram` instance by pre-allocating a vector of buffers
     /// based on the given size estimate in bytes, assuming 8 KiB
     /// buffers. With a size_estimate of 0, this is the same as `empty`.
     pub fn with_ram(size_estimate: u64) -> BodySink {
@@ -126,8 +129,8 @@ impl BodySink {
         }
     }
 
-    /// Create a new instance in state `FsWrite`, using a new
-    /// temporary file created in dir.
+    /// Create a new instance in state `FsWrite`, using a new temporary file
+    /// created in dir.
     pub fn with_fs<P>(dir: P) -> Result<BodySink, FlError>
         where P: AsRef<Path>
     {
@@ -156,8 +159,9 @@ impl BodySink {
         self.len
     }
 
-    /// Save bytes by appending to `Ram` or writing to `FsWrite` file. When
-    /// in state `Ram` this may be more efficient than `write_all`.
+    /// Save bytes by appending to `Ram` or writing to `FsWrite` file. When in
+    /// state `Ram` this may be more efficient than `write_all` if
+    /// `Into<Bytes>` doesn't copy.
     pub fn save<T>(&mut self, buf: T) -> Result<(), FlError>
         where T: Into<Bytes>
     {
@@ -400,10 +404,10 @@ impl BodyImage {
     }
 
     /// Given a `Read` object, a length estimate in bytes, and `Tunables` read
-    /// and prepare a new `BodyImage`.  `Tunables`, the estimate and length
-    /// actually read, will determine which buffering strategy is used. The
+    /// and prepare a new `BodyImage`. `Tunables`, the estimate and actual
+    /// length read will determine which buffering strategy is used. The
     /// length estimate provides a hint to use the file system from the start,
-    /// which is slightly more optimal than writing out `Ram` buffers
+    /// which is more optimal than writing out accumulated `Ram` buffers
     /// later. If the length can't be estimated, use zero (0).
     pub fn read_from(r: &mut Read, len_estimate: u64, tune: &Tunables)
         -> Result<BodyImage, FlError>
@@ -461,9 +465,9 @@ impl BodyImage {
         Ok(body)
     }
 
-    /// Specialized and efficient `write_all` for `Ram` or `MemMap`. If
-    /// in state `FsRead` a temporary memory map will be made in order to
-    /// write without mutating, using or changing the file position.
+    /// Specialized and efficient `write_all` for `Ram` or `MemMap`. If in
+    /// state `FsRead` a temporary memory map will be made in order to write
+    /// without mutating, using or changing the file position.
     pub fn write_to(&self, out: &mut Write) -> Result<u64, FlError> {
         match self.state {
             ImageState::Ram(ref v) => {
@@ -647,15 +651,15 @@ pub trait RequestRecorded {
     /// Map of HTTP request headers.
     fn req_headers(&self) -> &http::HeaderMap;
 
-    /// Request body (e.g for HTTP POST, etc.) which may or may not be
-    /// RAM resident.
+    /// Request body (e.g for HTTP POST, etc.) which may or may not be RAM
+    /// resident.
     fn req_body(&self)    -> &BodyImage;
 }
 
 /// Access by reference for HTTP request and response recording types.
 pub trait Recorded: RequestRecorded {
-    /// Map of _meta_-headers for values which are not strictly part
-    /// of the HTTP request or response headers.
+    /// Map of _meta_-headers for values which are not strictly part of the
+    /// HTTP request or response headers.
     fn meta(&self)        -> &http::HeaderMap;
 
     /// Map of HTTP response headers.
@@ -679,24 +683,23 @@ impl Recorded for Dialog {
 /// Meta `HeaderName` for the complete URL used in the request.
 pub static META_URL: &[u8]             = b"url";
 
-/// Meta `HeaderName` for the HTTP method used in the request,
-/// e.g. "GET", "POST", etc.
+/// Meta `HeaderName` for the HTTP method used in the request, e.g. "GET",
+/// "POST", etc.
 pub static META_METHOD: &[u8]          = b"method";
 
-/// Meta `HeaderName` for the response version, e.g. "HTTP/1.1",
-/// "HTTP/2.0", etc.
+/// Meta `HeaderName` for the response version, e.g. "HTTP/1.1", "HTTP/2.0",
+/// etc.
 pub static META_RES_VERSION: &[u8]     = b"response-version";
 
-/// Meta `HeaderName` for the response numeric status code, SPACE, and
-/// then a standardized _reason phrase_, e.g. "200 OK". The later is
-/// intended only for human readers.
+/// Meta `HeaderName` for the response numeric status code, SPACE, and then a
+/// standardized _reason phrase_, e.g. "200 OK". The later is intended only
+/// for human readers.
 pub static META_RES_STATUS: &[u8]      = b"response-status";
 
-/// Meta `HeaderName` for a list of content or transfer encodings
-/// decoded for the current response body. The value is in HTTP
-/// content-encoding header format, e.g. "chunked, gzip".
+/// Meta `HeaderName` for a list of content or transfer encodings decoded for
+/// the current response body. The value is in HTTP content-encoding header
+/// format, e.g. "chunked, gzip".
 pub static META_RES_DECODED: &[u8]     = b"response-decoded";
-
 
 impl Dialog {
     /// If the request body is in state `FsRead`, convert to `MemMap` via
@@ -714,8 +717,8 @@ impl Dialog {
     }
 }
 
-/// A collection of size limits and performance tuning
-/// constants. Setters are available via the `Tuner` class.
+/// A collection of size limits and performance tuning constants. Setters are
+/// available via the `Tuner` class.
 #[derive(Debug, Clone)]
 pub struct Tunables {
     max_body_ram:            u64,
@@ -743,15 +746,15 @@ impl Tunables {
         }
     }
 
-    /// Return the maximum body size in bytes allowed in RAM,
-    /// e.g. before writing to a temporary file, or memory mapping
-    /// instead of direct, bulk read. Default: 192 KiB.
+    /// Return the maximum body size in bytes allowed in RAM, e.g. before
+    /// writing to a temporary file, or memory mapping instead of direct, bulk
+    /// read. Default: 192 KiB.
     pub fn max_body_ram(&self) -> u64 {
         self.max_body_ram
     }
 
-    /// Return the maximum body size in bytes allowed in any form (RAM
-    /// or file). Default: 1 GiB.
+    /// Return the maximum body size in bytes allowed in any form (RAM or
+    /// file). Default: 1 GiB.
     pub fn max_body(&self) -> u64 {
         self.max_body
     }
@@ -768,29 +771,26 @@ impl Tunables {
         self.buffer_size_fs
     }
 
-    /// Return the size estimate, as an integer multiple of the
-    /// encoded buffer size, for the _deflate_ compression algorithm.
-    /// Default: 4.
+    /// Return the size estimate, as an integer multiple of the encoded buffer
+    /// size, for the _deflate_ compression algorithm.  Default: 4.
     pub fn size_estimate_deflate(&self) -> u16 {
         self.size_estimate_deflate
     }
 
-    /// Return the size estimate, as an integer multiple of the
-    /// encoded buffer size, for the _gzip_ compression algorithm.
-    /// Default: 5.
+    /// Return the size estimate, as an integer multiple of the encoded buffer
+    /// size, for the _gzip_ compression algorithm.  Default: 5.
     pub fn size_estimate_gzip(&self) -> u16 {
         self.size_estimate_gzip
     }
 
-    /// Return the size estimate, as an integer multiple of the
-    /// encoded buffer size, for the _Brotli_ compression algorithm.
-    /// Default: 6.
+    /// Return the size estimate, as an integer multiple of the encoded buffer
+    /// size, for the _Brotli_ compression algorithm.  Default: 6.
     pub fn size_estimate_brotli(&self) -> u16 {
         self.size_estimate_brotli
     }
 
-    /// Return the directory path in which to write temporary files.
-    /// Default: `std::env::temp_dir()`
+    /// Return the directory path in which to write temporary (`BodyImage`)
+    /// files.  Default: `std::env::temp_dir()`
     pub fn temp_dir(&self) -> &Path {
         &self.temp_dir
     }
@@ -800,8 +800,8 @@ impl Default for Tunables {
     fn default() -> Self { Tunables::new() }
 }
 
-/// A builder for `Tunables`.  Invariants are asserted in the various
-/// setters and `finish`.
+/// A builder for `Tunables`. Invariants are asserted in the various setters
+/// and `finish`.
 #[derive(Clone)]
 pub struct Tuner {
     template: Tunables
@@ -821,8 +821,8 @@ impl Tuner {
     }
 
     /// Set the maximum body size in bytes allowed in any form (RAM or
-    /// file). This must be at least as large as `max_body_ram`, as
-    /// asserted on `finish`.
+    /// file). This must be at least as large as `max_body_ram`, as asserted
+    /// on `finish`.
     pub fn set_max_body(&mut self, size: u64) -> &mut Tuner {
         self.template.max_body = size;
         self
@@ -843,24 +843,24 @@ impl Tuner {
         self
     }
 
-    /// Set the size estimate, as an integer multiple of the encoded
-    /// buffer size, for the _deflate_ compression algorithm.
+    /// Set the size estimate, as an integer multiple of the encoded buffer
+    /// size, for the _deflate_ compression algorithm.
     pub fn set_size_estimate_deflate(&mut self, multiple: u16) -> &mut Tuner {
         assert!(multiple > 0, "size_estimate_deflate must be >= 1" );
         self.template.size_estimate_deflate = multiple;
         self
     }
 
-    /// Set the size estimate, as an integer multiple of the encoded
-    /// buffer size, for the _gzip_ compression algorithm.
+    /// Set the size estimate, as an integer multiple of the encoded buffer
+    /// size, for the _gzip_ compression algorithm.
     pub fn set_size_estimate_gzip(&mut self, multiple: u16) -> &mut Tuner {
         assert!(multiple > 0, "size_estimate_gzip must be >= 1" );
         self.template.size_estimate_gzip = multiple;
         self
     }
 
-    /// Set the size estimate, as an integer multiple of the encoded
-    /// buffer size, for the _Brotli_ compression algorithm.
+    /// Set the size estimate, as an integer multiple of the encoded buffer
+    /// size, for the _Brotli_ compression algorithm.
     pub fn set_size_estimate_brotli(&mut self, multiple: u16) -> &mut Tuner {
         assert!(multiple > 0, "size_estimate_brotli must be >= 1" );
         self.template.size_estimate_brotli = multiple;
@@ -875,8 +875,8 @@ impl Tuner {
         self
     }
 
-    /// Finish building, asserting any remaining invariants, and
-    /// return a new `Tunables` instance.
+    /// Finish building, asserting any remaining invariants, and return a new
+    /// `Tunables` instance.
     pub fn finish(&self) -> Tunables {
         let t = self.template.clone();
         assert!(t.max_body_ram <= t.max_body,
