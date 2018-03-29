@@ -245,8 +245,8 @@ impl BodySink {
                 })
             }
             SinkState::FsWrite(mut f) => {
-                // Protect against empty files, which would fail if mem_map'd,
-                // by replacing with empty `Ram` state
+                // Protect against empty files, which would fail if
+                // mem_map'd, by replacing with empty `Ram` state
                 if self.len == 0 {
                     Ok(BodyImage::empty())
                 } else {
