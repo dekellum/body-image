@@ -94,7 +94,7 @@ enum SinkState {
 #[derive(Debug)]
 pub struct Mapped {
     map: Mmap,
-    _file: File,
+    file: File,
     // This ordering has `munmap` called before close on destruction,
     // which seems best, though it may not actually be a requirement
     // to keep the File open, at least on Linux.
@@ -270,12 +270,23 @@ impl fmt::Debug for SinkState {
     }
 }
 
+impl ImageState {
+    fn empty() -> ImageState {
+        ImageState::Ram(Vec::with_capacity(0))
+    }
+
+    // Swap self with empty `Ram` and return an owned self
+    fn cut(&mut self) -> Self {
+        mem::replace(self, ImageState::empty())
+    }
+}
+
 impl BodyImage {
-    /// Create new empty instance, which does not pre-allocate. The state is
+    /// Create new empty instance with no allocation. The state is
     /// `Ram` with a zero-capacity vector.
     pub fn empty() -> BodyImage {
         BodyImage {
-            state: ImageState::Ram(Vec::with_capacity(0)),
+            state: ImageState::empty(),
             len: 0
         }
     }
@@ -325,24 +336,21 @@ impl BodyImage {
         Ok(self)
     }
 
-    /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
-    /// other states.
+    /// If `FsRead`, convert to `MemMap` by memory mapping the file.
+    /// No-op for other states.
     pub fn mem_map(&mut self) -> Result<&mut Self, FlError> {
         if let ImageState::FsRead(_) = self.state {
             assert!(self.len > 0);
-            // We need to swap in a temporary Empty state in order to move the
-            // file, given the mapping can fail.
-            if let ImageState::FsRead(file) = mem::replace(
-                &mut self.state,
-                ImageState::Ram(Vec::with_capacity(0)))
-            {
+            // Swap with empty, to move file out of FsRead
+            if let ImageState::FsRead(file) = self.state.cut() {
                 match unsafe { Mmap::map(&file) } {
                     Ok(map) => {
                         self.state = ImageState::MemMap(
-                            Mapped { map, _file: file }
+                            Mapped { map, file }
                         );
                     }
                     Err(e) => {
+                        // Restore FsRead on failure
                         self.state = ImageState::FsRead(file);
                         return Err(FlError::from(e));
                     }
@@ -350,6 +358,17 @@ impl BodyImage {
             }
         }
         Ok(self)
+    }
+
+    /// If `MemMap`, unmap, converting back to the original `FsRead`.
+    /// No-op for other states.
+    pub fn mem_unmap(&mut self) -> &mut Self {
+        if let ImageState::MemMap(_) = self.state {
+            if let ImageState::MemMap(m) = self.state.cut() {
+                self.state = ImageState::FsRead(m.file);
+            }
+        }
+        self
     }
 
     /// If `Ram` with 2 or more buffers, *gather* by copying into a single
@@ -969,6 +988,23 @@ mod tests {
         body.write_all("world").unwrap();
         let mut body = body.prepare().unwrap();
         body.mem_map().unwrap();
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+    }
+
+    #[test]
+    fn test_body_fs_map_unmap_read() {
+        let tune = Tunables::new();
+        let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
+        body.write_all("hello").unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        let mut body = body.prepare().unwrap();
+        body.mem_map().unwrap();
+        body.mem_unmap();
         let mut body_reader = body.reader();
         let br = body_reader.as_read();
         let mut obuf = String::new();

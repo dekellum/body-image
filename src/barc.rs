@@ -915,7 +915,7 @@ fn map_body(file: &mut File, offset: u64, len: u64)
             .map(&dup_file)?
     };
 
-    Ok(BodyImage::with_map(Mapped { map, _file: dup_file }))
+    Ok(BodyImage::with_map(Mapped { map, file: dup_file }))
 }
 
 #[cfg(test)]
