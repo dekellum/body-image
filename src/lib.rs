@@ -946,6 +946,37 @@ mod tests {
     }
 
     #[test]
+    fn test_body_fs_read() {
+        let tune = Tunables::new();
+        let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
+        body.write_all("hello").unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        let body = body.prepare().unwrap();
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+    }
+
+    #[test]
+    fn test_body_fs_map_read() {
+        let tune = Tunables::new();
+        let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
+        body.write_all("hello").unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        let mut body = body.prepare().unwrap();
+        body.mem_map().unwrap();
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+    }
+
+    #[test]
     fn test_body_fs_empty() {
         let tune = Tunables::new();
         let body = BodySink::with_fs(tune.temp_dir()).unwrap();
