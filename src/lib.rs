@@ -100,6 +100,13 @@ pub struct Mapped {
     // to keep the File open, at least on Linux.
 }
 
+impl SinkState {
+    // Swap self with empty `Ram` and return an owned self
+    fn cut(&mut self) -> Self {
+        mem::replace(self, SinkState::Ram(Vec::with_capacity(0)))
+    }
+}
+
 impl BodySink {
     /// Create new empty instance, which does not pre-allocate. The state is
     /// `Ram` with a zero-capacity vector.
@@ -203,20 +210,24 @@ impl BodySink {
     }
 
     /// If `Ram`, convert to `FsWrite` by writing all bytes in RAM to a
-    /// temporary file, created in dir.  No-op if already `FsWrite`.
+    /// temporary file, created in dir.  No-op if already `FsWrite`. Buffers
+    /// are eagerly dropped as they are written. If any error result is
+    /// returned (e.g. opening or writing to the file), self will be emptied
+    /// and in the `Ram` state, an acceptable tradeoff with the assumption
+    /// that there is no practical recovery for this _particular_ body.
     pub fn write_back<P>(&mut self, dir: P) -> Result<&mut Self, FlError>
         where P: AsRef<Path>
     {
-        self.state = match self.state {
-            SinkState::Ram(ref v) => {
+        if self.is_ram() {
+            if let SinkState::Ram(v) = self.state.cut() {
                 let mut f = tempfile_in(dir)?;
                 for b in v {
-                    f.write_all(b)?;
+                    f.write_all(&b)?;
+                    drop::<Bytes>(b); // Ensure ASAP drop
                 }
-                SinkState::FsWrite(f)
+                self.state = SinkState::FsWrite(f);
             }
-            SinkState::FsWrite(_) => return Ok(self)
-        };
+        }
         Ok(self)
     }
 
