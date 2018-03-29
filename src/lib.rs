@@ -986,6 +986,37 @@ mod tests {
     }
 
     #[test]
+    fn test_body_fs_back_read() {
+        let tune = Tunables::new();
+        let mut body = BodySink::with_ram_buffers(2);
+        body.write_all("hello").unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        body.write_back(tune.temp_dir()).unwrap();
+        let body = body.prepare().unwrap();
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+    }
+
+    #[test]
+    fn test_body_fs_back_fail() {
+        let tune = Tuner::new().set_temp_dir("./no-existe/").finish();
+        let mut body = BodySink::with_ram_buffers(2);
+        body.write_all("hello").unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        if let Err(_) = body.write_back(tune.temp_dir()) {
+            assert!(body.is_ram());
+            assert_eq!(body.len(), 0);
+        } else {
+            panic!("write_back with bogus dir success?!");
+        }
+    }
+
+    #[test]
     fn test_body_fs_map_read() {
         let tune = Tunables::new();
         let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
