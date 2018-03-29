@@ -373,9 +373,9 @@ impl BodyImage {
 
     /// If `Ram` with 2 or more buffers, *gather* by copying into a single
     /// contiguous buffer with the same total length. No-op for other
-    /// states. Possibly in combination with `mem_map`, this can be used to
-    /// ensure `Cursor` (and `&[u8]` slice) access via `reader`, at the cost
-    /// of the copy.
+    /// states. Buffers are eagerly dropped as they are copied. Possibly in
+    /// combination with `mem_map`, this can be used to ensure `Cursor` (and
+    /// `&[u8]` slice) access via `reader`, at the cost of the copy.
     pub fn gather(&mut self) -> &mut Self {
         let scattered = if let ImageState::Ram(ref v) = self.state {
             v.len() > 1
@@ -384,17 +384,16 @@ impl BodyImage {
         };
 
         if scattered {
-            let newb = if let ImageState::Ram(ref v) = self.state {
+            if let ImageState::Ram(v) = self.state.cut() {
                 let mut newb = BytesMut::with_capacity(self.len as usize);
                 for b in v {
-                    newb.put(b);
+                    newb.put_slice(&b);
+                    drop::<Bytes>(b); // Ensure ASAP drop
                 }
-                newb.freeze()
-            } else {
-                unreachable!();
-            };
-            assert_eq!(newb.len() as u64, self.len);
-            self.state = ImageState::Ram(vec![newb]);
+                let newb = newb.freeze();
+                assert_eq!(newb.len() as u64, self.len);
+                self.state = ImageState::Ram(vec![newb]);
+            }
         }
         self
     }
