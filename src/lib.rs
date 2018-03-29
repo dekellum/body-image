@@ -204,7 +204,7 @@ impl BodySink {
 
     /// If `Ram`, convert to `FsWrite` by writing all bytes in RAM to a
     /// temporary file, created in dir.  No-op if already `FsWrite`.
-    pub fn write_back<P>(&mut self, dir: P) -> Result<(), FlError>
+    pub fn write_back<P>(&mut self, dir: P) -> Result<&mut Self, FlError>
         where P: AsRef<Path>
     {
         self.state = match self.state {
@@ -215,9 +215,9 @@ impl BodySink {
                 }
                 SinkState::FsWrite(f)
             }
-            SinkState::FsWrite(_) => return Ok(())
+            SinkState::FsWrite(_) => return Ok(self)
         };
-        Ok(())
+        Ok(self)
     }
 
     /// Consumes self, converts and returns as `BodyImage` ready for read.
