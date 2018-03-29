@@ -484,7 +484,7 @@ impl BodyImage {
             }
             size += len;
             if size > tune.max_body() {
-                bail!("Decompressed response stream too long: {}+", size);
+                bail!("Body is too long: {}+", size);
             }
             if size > tune.max_body_ram() {
                 body.write_back(tune.temp_dir())?;
@@ -551,7 +551,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
 
         size += len as u64;
         if size > tune.max_body() {
-            bail!("Decompressed response stream too long: {}+", size);
+            bail!("Body is too long: {}+", size);
         }
         debug!("Write (Fs) decoded buf len {}", len);
         body.write_all(&buf)?;
