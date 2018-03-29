@@ -1007,6 +1007,22 @@ mod tests {
     }
 
     #[test]
+    fn test_body_w_back_w_read() {
+        let tune = Tunables::new();
+        let mut body = BodySink::with_ram_buffers(2);
+        body.write_all("hello").unwrap();
+        body.write_back(tune.temp_dir()).unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        let body = body.prepare().unwrap();
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+    }
+
+    #[test]
     fn test_body_fs_back_fail() {
         let tune = Tuner::new().set_temp_dir("./no-existe/").finish();
         let mut body = BodySink::with_ram_buffers(2);
