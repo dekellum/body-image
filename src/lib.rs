@@ -41,8 +41,8 @@ use tempfile::tempfile_in;
 ///
 /// `Ram`
 /// : A vector of zero, one, or many discontinuous (AKA scattered) byte
-///   buffers in Random Access Memory. This state is also used to represent an
-///   empty body (without allocation).
+///   buffers in Random Access Memory. This state is also used to represent
+///   an empty body (without allocation).
 ///
 /// `FsRead`
 /// : Body in a (temporary) file, ready for position based, single access,
@@ -73,8 +73,8 @@ enum ImageState {
 ///
 /// `Ram`
 /// : A vector of zero, one, or many discontinuous (AKA scattered) byte
-///   buffers in Random Access Memory. This state is also used to represent an
-///   empty body (without allocation).
+///   buffers in Random Access Memory. This state is also used to represent
+///   an empty body (without allocation).
 ///
 /// `FsWrite`
 /// : Body being written to a (temporary) file.
@@ -311,7 +311,7 @@ impl BodyImage {
         }
     }
 
-    /// Create new instance from an single byte slice.
+    /// Create new instance from a single byte slice.
     pub fn from_slice<T>(bytes: T) -> BodyImage
         where T: Into<Bytes>
     {
@@ -338,8 +338,8 @@ impl BodyImage {
         self.len
     }
 
-    /// Prepare for re-reading. If `FsRead` seeks to beginning of file. No-op
-    /// for other states.
+    /// Prepare for re-reading. If `FsRead`, seeks to beginning of file.
+    /// No-op for other states.
     pub fn prepare(&mut self) -> Result<&mut Self, FlError> {
         if let ImageState::FsRead(ref mut f) = self.state {
             f.seek(SeekFrom::Start(0))?;
@@ -410,8 +410,8 @@ impl BodyImage {
     }
 
     /// Return a new `BodyReader` enum over self. The enum provides a
-    /// consistent `Read` reference, or can be destructured for access to the
-    /// specific concrete types.
+    /// consistent `Read` reference, or can be destructured for access to
+    /// the specific concrete types.
     pub fn reader(&self) -> BodyReader {
         match self.state {
             ImageState::Ram(ref v) => {
@@ -611,7 +611,7 @@ impl<'a> BodyReader<'a> {
 }
 
 /// A specialized reader for `BodyImage` in `Ram`, presenting a continuous
-/// (gathered) `Read` interface over 0 to N non-contiguous byte buffers.
+/// (gathered) `Read` interface over N non-contiguous byte buffers.
 pub struct GatheringReader<'a> {
     current: Cursor<&'a [u8]>,
     remainder: &'a [Bytes]
