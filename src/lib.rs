@@ -699,6 +699,41 @@ pub trait Recorded: RequestRecorded {
     fn res_body(&self)    -> &BodyImage;
 }
 
+impl Dialog {
+    /// A mutable reference to the _meta_-headers for values not strictly
+    /// part of the HTTP request or response headers. This is provided to
+    /// allow appending with application specific name/value pairs prior to
+    /// usage or serializing.
+    pub fn meta_mut(&mut self) -> &mut http::HeaderMap { &mut self.meta }
+
+    /// The HTTP method (verb), e.g. `GET`, `POST`, etc.  This is
+    /// also available in the `meta` headers, via the `META_METHOD`
+    /// name.
+    pub fn method(&self)      -> &http::Method         { &self.prolog.method }
+
+    /// The complete URL as used in the request. This is also made available
+    /// in the `meta` headers, via the `META_URL` name.
+    pub fn url(&self)         -> &http::Uri            { &self.prolog.url }
+
+    /// A mutable reference to the request body. This is primarly provided
+    /// to allow state mutating operations such as `BodyImage::mem_map`.
+    pub fn req_body_mut(&mut self) -> &mut BodyImage {
+        &mut self.prolog.req_body
+    }
+
+    /// The response status code. This is also made available in the `meta`
+    /// headers, via the `META_RES_STATUS` name.
+    pub fn res_status(&self)  -> http::StatusCode      { self.status }
+
+    /// The response HTTP version. This is also made available in the `meta`
+    /// headers, via the `META_RES_VERSION` name.
+    pub fn res_version(&self) -> http::Version         { self.version }
+
+    /// A mutable reference to the response body. This is primarly provided
+    /// to allow state mutating operations such as `BodyImage::mem_map`.
+    pub fn res_body_mut(&mut self) -> &mut BodyImage   { &mut self.res_body }
+}
+
 impl RequestRecorded for Dialog {
     fn req_headers(&self) -> &http::HeaderMap      { &self.prolog.req_headers }
     fn req_body(&self)    -> &BodyImage            { &self.prolog.req_body }
@@ -730,22 +765,6 @@ pub static META_RES_STATUS: &[u8]      = b"response-status";
 /// the current response body. The value is in HTTP content-encoding header
 /// format, e.g. "chunked, gzip".
 pub static META_RES_DECODED: &[u8]     = b"response-decoded";
-
-impl Dialog {
-    /// If the request body is in state `FsRead`, convert to `MemMap` via
-    /// `BodyImage::mem_map` and return reference to the body.
-    pub fn mem_map_req_body(&mut self) -> Result<&BodyImage, FlError> {
-        let b = self.prolog.req_body.mem_map()?;
-        Ok(b)
-    }
-
-    /// If the response body is in state `FsRead`, convert to `MemMap` via
-    /// `BodyImage::mem_map` and return reference to the body.
-    pub fn mem_map_res_body(&mut self) -> Result<&BodyImage, FlError> {
-        let b = self.res_body.mem_map()?;
-        Ok(b)
-    }
-}
 
 /// A collection of size limits and performance tuning constants. Setters are
 /// available via the `Tuner` class.
