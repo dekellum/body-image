@@ -1082,14 +1082,6 @@ mod tests {
         write_read_large(&fname, &strategy).unwrap();
     }
 
-    #[cfg(feature = "brotli")]
-    #[test]
-    fn test_write_read_large_brotli_0() {
-        let fname = barc_test_file("large_brotli_0.barc").unwrap();
-        let strategy = BrotliCompressStrategy::default().set_compression_level(0);
-        write_read_large(&fname, &strategy).unwrap();
-    }
-
     fn write_read_large(fname: &PathBuf, strategy: &CompressStrategy)
         -> Result<(), FlError>
     {
