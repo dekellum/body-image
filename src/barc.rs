@@ -72,31 +72,15 @@ struct RecordHead {
     res_h:            usize,
 }
 
-/// An owned BARC record.
+/// An owned BARC record with public fields.
 #[derive(Debug, Default)]
 pub struct Record {
-    rec_type:         RecordType,
-    meta:             http::HeaderMap,
-    req_headers:      http::HeaderMap,
-    req_body:         BodyImage,
-    res_headers:      http::HeaderMap,
-    res_body:         BodyImage,
-}
-
-impl Record {
-    /// A mutable reference to the _meta_-headers for values not strictly
-    /// part of the HTTP request or response headers. This is provided to
-    /// allow appending with application specific name/value pairs prior to
-    /// using or (re-)writing.
-    pub fn meta_mut(&mut self) -> &mut http::HeaderMap { &mut self.meta }
-
-    /// A mutable reference to the request body. This is primarly provided
-    /// to allow state mutating operations such as `BodyImage::mem_map`.
-    pub fn req_body_mut(&mut self) -> &mut BodyImage   { &mut self.req_body }
-
-    /// A mutable reference to the response body. This is primarly provided
-    /// to allow state mutating operations such as `BodyImage::mem_map`.
-    pub fn res_body_mut(&mut self) -> &mut BodyImage   { &mut self.res_body }
+    pub rec_type:         RecordType,
+    pub meta:             http::HeaderMap,
+    pub req_headers:      http::HeaderMap,
+    pub req_body:         BodyImage,
+    pub res_headers:      http::HeaderMap,
+    pub res_body:         BodyImage,
 }
 
 /// Access to BARC record-like objects by reference. Extends
