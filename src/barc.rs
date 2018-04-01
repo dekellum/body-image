@@ -75,11 +75,24 @@ struct RecordHead {
 /// An owned BARC record with public fields.
 #[derive(Debug, Default)]
 pub struct Record {
+    /// Record type.
     pub rec_type:         RecordType,
+
+    /// Map of _meta_-headers for values which are not strictly part of the
+    /// HTTP request or response headers. This can be extended with
+    /// application specific name/value pairs.
     pub meta:             http::HeaderMap,
+
+    /// Map of HTTP request headers.
     pub req_headers:      http::HeaderMap,
+
+    /// Request body which may or may not be RAM resident.
     pub req_body:         BodyImage,
+
+    /// Map of HTTP response headers.
     pub res_headers:      http::HeaderMap,
+
+    /// Response body which may or may not be RAM resident.
     pub res_body:         BodyImage,
 }
 
