@@ -18,11 +18,6 @@ extern crate flate2;
 pub mod barc;
 #[cfg(feature = "client")] pub mod client;
 
-/// Alias for failure crate `failure::Error`
-use failure::Error as FlError;
-// FIXME: Use at least while prototyping. Could switch to an error enum
-// for clear separation between hyper::Error and application errors.
-
 use std::env;
 use std::fmt;
 use std::fs::File;
@@ -33,6 +28,26 @@ use std::path::{Path, PathBuf};
 use bytes::{Bytes, BytesMut, BufMut};
 use memmap::Mmap;
 use tempfile::tempfile_in;
+
+/// Error enumeration for `BodyImage` and `BodySink` types.
+#[derive(Fail, Debug)]
+pub enum BodyError {
+    /// Error for when `Tunables::max_body` length is exceeded.
+    #[fail(display = "Body length of {}+ bytes exceeds Tunables::max_body",
+           _0)]
+    BodyTooLong(u64),
+
+    /// IO error associated with file creation/writes `FsWrite`, reads
+    /// `FsRead`, or memory mapping.
+    #[fail(display = "{}", _0)]
+    Io(#[cause] io::Error),
+}
+
+impl From<io::Error> for BodyError {
+    fn from(err: io::Error) -> BodyError {
+        BodyError::Io(err)
+    }
+}
 
 /// A logical buffer of bytes, which may or may not be RAM resident.
 ///
@@ -139,7 +154,7 @@ impl BodySink {
 
     /// Create a new instance in state `FsWrite`, using a new temporary file
     /// created in dir.
-    pub fn with_fs<P>(dir: P) -> Result<BodySink, FlError>
+    pub fn with_fs<P>(dir: P) -> Result<BodySink, BodyError>
         where P: AsRef<Path>
     {
         let f = tempfile_in(dir)?;
@@ -170,7 +185,7 @@ impl BodySink {
     /// Save bytes by appending to `Ram` or writing to `FsWrite` file. When in
     /// state `Ram` this may be more efficient than `write_all` if
     /// `Into<Bytes>` doesn't copy.
-    pub fn save<T>(&mut self, buf: T) -> Result<(), FlError>
+    pub fn save<T>(&mut self, buf: T) -> Result<(), BodyError>
         where T: Into<Bytes>
     {
         let buf = buf.into();
@@ -191,7 +206,7 @@ impl BodySink {
 
     /// Write all bytes to self.  When in state `FsWrite` this is copy free
     /// and more optimal than `save`.
-    pub fn write_all<T>(&mut self, buf: T) -> Result<(), FlError>
+    pub fn write_all<T>(&mut self, buf: T) -> Result<(), BodyError>
         where T: AsRef<[u8]>
     {
         let buf = buf.as_ref();
@@ -216,7 +231,7 @@ impl BodySink {
     /// error result is returned (e.g. opening or writing to the file), self
     /// will be empty and in the `Ram` state. There is no practical recovery
     /// for the original body.
-    pub fn write_back<P>(&mut self, dir: P) -> Result<&mut Self, FlError>
+    pub fn write_back<P>(&mut self, dir: P) -> Result<&mut Self, BodyError>
         where P: AsRef<Path>
     {
         if self.is_ram() {
@@ -236,7 +251,7 @@ impl BodySink {
     }
 
     /// Consumes self, converts and returns as `BodyImage` ready for read.
-    pub fn prepare(self) -> Result<BodyImage, FlError> {
+    pub fn prepare(self) -> Result<BodyImage, BodyError> {
         match self.state {
             SinkState::Ram(v) => {
                 Ok(BodyImage {
@@ -345,7 +360,7 @@ impl BodyImage {
 
     /// Prepare for re-reading. If `FsRead`, seeks to beginning of file.
     /// No-op for other states.
-    pub fn prepare(&mut self) -> Result<&mut Self, FlError> {
+    pub fn prepare(&mut self) -> Result<&mut Self, BodyError> {
         if let ImageState::FsRead(ref mut f) = self.state {
             f.seek(SeekFrom::Start(0))?;
         }
@@ -354,7 +369,7 @@ impl BodyImage {
 
     /// If `FsRead`, convert to `MemMap` by memory mapping the file.
     /// No-op for other states.
-    pub fn mem_map(&mut self) -> Result<&mut Self, FlError> {
+    pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
         if let ImageState::FsRead(_) = self.state {
             assert!(self.len > 0);
             // Swap with empty, to move file out of FsRead
@@ -368,7 +383,7 @@ impl BodyImage {
                     Err(e) => {
                         // Restore FsRead on failure
                         self.state = ImageState::FsRead(file);
-                        return Err(FlError::from(e));
+                        return Err(BodyError::from(e));
                     }
                 }
             }
@@ -444,7 +459,7 @@ impl BodyImage {
     /// which is more optimal than writing out accumulated `Ram` buffers
     /// later. If the length can't be estimated, use zero (0).
     pub fn read_from(r: &mut Read, len_estimate: u64, tune: &Tunables)
-        -> Result<BodyImage, FlError>
+        -> Result<BodyImage, BodyError>
     {
         if len_estimate > tune.max_body_ram() {
             let b = BodySink::with_fs(tune.temp_dir())?;
@@ -483,7 +498,7 @@ impl BodyImage {
             }
             size += len;
             if size > tune.max_body() {
-                bail!("Body is too long: {}+", size);
+                return Err(BodyError::BodyTooLong(size));
             }
             if size > tune.max_body_ram() {
                 body.write_back(tune.temp_dir())?;
@@ -501,7 +516,7 @@ impl BodyImage {
     /// Write self to `out` and return length. If in state `FsRead`, a
     /// temporary memory map will be made in order to write without
     /// mutating self, using or changing the file position.
-    pub fn write_to(&self, out: &mut Write) -> Result<u64, FlError> {
+    pub fn write_to(&self, out: &mut Write) -> Result<u64, BodyError> {
         match self.state {
             ImageState::Ram(ref v) => {
                 for b in v {
@@ -526,7 +541,7 @@ impl BodyImage {
 // Read all bytes from r, consume and write to a `BodySink` in state
 // `FsWrite`, returning a final prepared `BodyImage`.
 fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
-    -> Result<BodyImage, FlError>
+    -> Result<BodyImage, BodyError>
 {
     assert!(!body.is_ram());
 
@@ -550,7 +565,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
 
         size += len as u64;
         if size > tune.max_body() {
-            bail!("Body is too long: {}+", size);
+            return Err(BodyError::BodyTooLong(size));
         }
         debug!("Write (Fs) buffer len {}", len);
         body.write_all(&buf)?;
@@ -1004,6 +1019,27 @@ mod tests {
         let mut obuf = Vec::new();
         br.read_to_end(&mut obuf).unwrap();
         assert_eq!(salutation, &obuf[..]);
+    }
+
+    #[test]
+    fn test_body_read_from_too_long() {
+        let tune = Tuner::new()
+            .set_max_body_ram(6)
+            .set_max_body(6)
+            .finish();
+        let salutation = b"hello world";
+        let mut src = Cursor::new(salutation);
+        if let Err(e) = BodyImage::read_from(&mut src, 0, &tune) {
+            if let BodyError::BodyTooLong(l) = e {
+                assert_eq!(l, salutation.len() as u64)
+            }
+            else {
+                panic!("Other error: {}", e);
+            }
+        }
+        else {
+            panic!("Read from, too long, success!?");
+        }
     }
 
     #[test]

@@ -162,7 +162,7 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
     let bsink = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
         Some(v) => check_length(v, tune.max_body()).and_then(|cl| {
             if cl > tune.max_body_ram() {
-                BodySink::with_fs(tune.temp_dir())
+                BodySink::with_fs(tune.temp_dir()).map_err(FlError::from)
             } else {
                 Ok(BodySink::with_ram(cl))
             }
@@ -199,6 +199,7 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
                 idialog.res_body
                     .save(chunk)
                     .and(Ok(idialog))
+                    .map_err(FlError::from)
             }
         });
     Box::new(s)
