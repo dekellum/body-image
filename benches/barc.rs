@@ -7,7 +7,7 @@ use test::Bencher;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use failure::Error as FlError;
+use failure::Error as Flare;
 
 use body_image::{BodySink, Tunables};
 use body_image::barc::*;
@@ -15,7 +15,7 @@ use body_image::barc::*;
 // FIXME: This was copied near-verbatim from src/barc.rs unit tests and only
 // serves as a rough compression performance sanity check.
 
-fn barc_test_file(name: &str) -> Result<PathBuf, FlError> {
+fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
     let tpath = Path::new("target/testmp");
     fs::create_dir_all(tpath)?;
 
@@ -75,7 +75,7 @@ fn test_write_read_large_brotli_0(b: &mut Bencher) {
 }
 
 fn write_read_large(fname: &PathBuf, strategy: &CompressStrategy)
-    -> Result<(), FlError>
+    -> Result<(), Flare>
 {
     let bfile = BarcFile::new(fname);
 
