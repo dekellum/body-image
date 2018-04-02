@@ -8,9 +8,8 @@ use failure::Error as Flare;
 use brotli;
 use flate2::read::{DeflateDecoder, GzDecoder};
 use bytes::Bytes;
+use futures::future;
 use futures::{Future, Stream};
-use futures::future::err as futerr;
-use futures::future::result as futres;
 use http;
 use hyper;
 use hyper::Client;
@@ -54,7 +53,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
         .map(|response| Monolog { prolog, response } )
         .map_err(Flare::from)
         .and_then(|monolog| resp_future(monolog, tune))
-        .and_then(|idialog| futres(idialog.prepare()));
+        .and_then(|idialog| future::result(idialog.prepare()));
 
     // Run until completion
     core.run(work)
@@ -175,7 +174,7 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
     // Unwrap BodySink, returning any error as Future
     let bsink = match bsink {
         Ok(b) => b,
-        Err(e) => { return Box::new(futerr(e)); }
+        Err(e) => { return Box::new(future::err(e)); }
     };
 
     let idialog = InDialog {
