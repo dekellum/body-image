@@ -8,7 +8,7 @@ following:
 
 * The concurrent processing potential afforded by both threads and Rust's
   asynchronous facilities: Divide the available RAM by the maximum number
-  of request/response bodies in memory concurrently.
+  of request/response bodies in memory at any one point in time.
 
 * With chunked transfer encoding, we frequently don't know the size of the
   body until it is fully downloaded (no Content-Length header).
@@ -28,9 +28,31 @@ body, and may start or later transition to a temporary file based on
 size. `BodyImage` provides consistent access (reading) to a body and
 includes support for memory-mapping a file based body.
 
-## BARC file format
+## BARC container format
 
-TBD...
+BARC is a minimal container file format for the storage of one or many
+HTTP request and response dialogs. A fixed length ASCII-limited record
+head specifies lengths of a subsequent series of request and response
+header blocks and bodies which are stored as raw (unencoded) bytes
+with CRLF padding. When not using the internal compression feature,
+the format is easily human readable, which makes it ideal for
+debugging and integration tests that need HTTP request/response
+headers and bodies as test fixtures or examples.
+
+See the source /sample/*.barc files. (FIXME link)
+
+Other features:
+
+* An additional *meta*-headers block provides more recording details
+  and can also be used to store application-specific names/values.
+
+* Concurrent, and sequential or random-access reads by record offset
+  (using an external index, such as a database).
+
+* Single-writer sessions are guaranteed safe with N concurrent readers
+  (in or out of process).
+
+* Optional per-record gzip or Brotli compression (headers and bodies)
 
 ## Dialog
 
