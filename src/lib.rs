@@ -994,6 +994,19 @@ mod tests {
     }
 
     #[test]
+    fn test_body_read_from() {
+        let tune = Tunables::new();
+        let salutation = b"hello world";
+        let mut src = Cursor::new(salutation);
+        let body = BodyImage::read_from(&mut src, 0, &tune).unwrap();
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = Vec::new();
+        br.read_to_end(&mut obuf).unwrap();
+        assert_eq!(salutation, &obuf[..]);
+    }
+
+    #[test]
     fn test_body_fs_read() {
         let tune = Tunables::new();
         let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
