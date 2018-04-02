@@ -471,7 +471,6 @@ impl BodyImage {
                     break 'fill; // not 'eof as may have bytes in buf
 
                 }
-                debug!("Decoded inner buf len {}", len);
                 unsafe { buf.advance_mut(len); }
 
                 if buf.remaining_mut() < 1024 {
@@ -488,11 +487,11 @@ impl BodyImage {
             }
             if size > tune.max_body_ram() {
                 body.write_back(tune.temp_dir())?;
-                debug!("Write (Fs) decoded buf len {}", len);
+                debug!("Write (Fs) buffer len {}", len);
                 body.write_all(&buf)?;
                 return read_to_body_fs(r, body, tune)
             }
-            debug!("Saved (Ram) decoded buf len {}", len);
+            debug!("Saved (Ram) buffer len {}", len);
             body.save(buf.freeze())?;
         }
         let body = body.prepare()?;
@@ -553,7 +552,7 @@ fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
         if size > tune.max_body() {
             bail!("Body is too long: {}+", size);
         }
-        debug!("Write (Fs) decoded buf len {}", len);
+        debug!("Write (Fs) buffer len {}", len);
         body.write_all(&buf)?;
         buf.clear();
     }

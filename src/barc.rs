@@ -892,7 +892,7 @@ fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
             break;
         }
         unsafe { buf.advance_mut(rlen); }
-        debug!("Write (Fs) decoded buf rlen {}", rlen);
+        debug!("Write (Fs) buffer len {}", rlen);
         body.write_all(&buf)?;
 
         if body.len() < len {
