@@ -997,9 +997,9 @@ mod tests {
     use http::header::{AGE, REFERER, VIA};
     use super::*;
     use ::Tuner;
-    use failure::Error as FlError;
+    use failure::Error as Flare;
 
-    fn barc_test_file(name: &str) -> Result<PathBuf, FlError> {
+    fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
         let tpath = Path::new("target/testmp");
         fs::create_dir_all(tpath)?;
 
@@ -1033,7 +1033,7 @@ mod tests {
     }
 
     fn write_read_small(fname: &PathBuf, strategy: &CompressStrategy)
-        -> Result<(), FlError>
+        -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
 
@@ -1100,7 +1100,7 @@ mod tests {
     }
 
     fn write_read_empty_record(fname: &PathBuf, strategy: &CompressStrategy)
-        -> Result<(), FlError>
+        -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
 
@@ -1156,7 +1156,7 @@ mod tests {
     }
 
     fn write_read_large(fname: &PathBuf, strategy: &CompressStrategy)
-        -> Result<(), FlError>
+        -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
 
