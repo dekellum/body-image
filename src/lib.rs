@@ -101,7 +101,7 @@ pub struct Mapped {
 }
 
 impl SinkState {
-    // Swap self with empty `Ram` and return an owned self.
+    // Swap self with empty `Ram`, and return moved original.
     // Warning: Be careful about exposing an invalid length when using.
     fn cut(&mut self) -> Self {
         mem::replace(self, SinkState::Ram(Vec::with_capacity(0)))
@@ -290,7 +290,7 @@ impl ImageState {
         ImageState::Ram(Vec::with_capacity(0))
     }
 
-    // Swap self with empty `Ram` and return an owned self
+    // Swap self with empty `Ram`, and return moved original.
     // Warning: Be careful about exposing an invalid length when using.
     fn cut(&mut self) -> Self {
         mem::replace(self, ImageState::empty())
