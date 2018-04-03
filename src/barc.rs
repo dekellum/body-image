@@ -10,7 +10,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 
 use bytes::{BytesMut, BufMut};
-use failure::{Fail, Error as Flare};
+use failure::{err_msg, Fail, Error as Flare};
 use flate2::Compression as GzCompression;
 use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
@@ -928,7 +928,7 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, BarcError> {
         }
         Ok(httparse::Status::Partial) => {
             Err(BarcError::ReadInvalidHeader(
-                format_err!("Header block not CRLF terminated")
+                err_msg("Header block not CRLF terminated")
             ))
         }
         Err(e) => Err(BarcError::ReadInvalidHeader(Flare::from(e)))
