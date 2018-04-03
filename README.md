@@ -33,11 +33,11 @@ includes support for memory-mapping a file based body.
 BARC is a minimal container file format for the storage of one or many
 HTTP request and response dialogs. A fixed length ASCII-limited record
 head specifies lengths of a subsequent series of request and response
-header blocks and bodies which are stored as raw (unencoded) bytes
-with CRLF padding. When not using the internal compression feature,
-the format is easily human readable, which makes it ideal for
-debugging and integration tests that need HTTP request/response
-headers and bodies as test fixtures or examples.
+header blocks and bodies which are stored as raw (unencoded)
+bytes. When not using the internal compression feature, the format is
+easily human readable, which makes it ideal as debug output or for
+integration tests that need HTTP request/response bodies with headers
+as test fixtures or examples.
 
 See the source /sample/*.barc files. (FIXME link)
 
