@@ -29,7 +29,9 @@ use bytes::{Bytes, BytesMut, BufMut};
 use memmap::Mmap;
 use tempfile::tempfile_in;
 
-/// Error enumeration for `BodyImage` and `BodySink` types.
+/// Error enumeration for `BodyImage` and `BodySink` types.  This may be
+/// extended in the future, so exhaustive matching in external code is not
+/// recommended.
 #[derive(Fail, Debug)]
 pub enum BodyError {
     /// Error for when `Tunables::max_body` length is exceeded.
