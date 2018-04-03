@@ -9,6 +9,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 
 use bytes::{BytesMut, BufMut};
+use failure::Error as Flare;
 use flate2::Compression as GzCompression;
 use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
@@ -95,13 +96,11 @@ pub enum BarcError {
     #[fail(display = "Invalid record head hex digit [{}]", _0)]
     ReadInvalidRecHeadHex(u8),
 
-    /// Read a non-terminated header block.
-    #[fail(display = "Header block not CRLF terminated")]
-    ReadHeaderBlockNotTerminated,
-
-    /// Error reading and parsing header name or value.
-    #[fail(display = "Read header; {}", _0)]
-    ReadHeader(String),
+    /// Error reading and parsing header name, value or block (with cause)
+    #[fail(display = "Invalid header; {}", _0)]
+    ReadInvalidHeader(Flare),
+    // FIXME: Can't anotate Flare as cause, see:
+    //        https://github.com/rust-lang-nursery/failure/issues/176
 }
 
 impl From<io::Error> for BarcError {
@@ -886,17 +885,23 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, BarcError> {
             for h in heads {
                 hmap.append(
                     h.name.parse::<HeaderName>()
-                        .map_err(|e| BarcError::ReadHeader(e.to_string()))?,
+                        .map_err(|e| {
+                            BarcError::ReadInvalidHeader(Flare::from(e))
+                        })?,
                     HeaderValue::from_bytes(h.value)
-                        .map_err(|e| BarcError::ReadHeader(e.to_string()))?
+                        .map_err(|e| {
+                            BarcError::ReadInvalidHeader(Flare::from(e))
+                        })?
                 );
             }
             Ok(hmap)
         }
         Ok(httparse::Status::Partial) => {
-            Err(BarcError::ReadHeaderBlockNotTerminated)
+            Err(BarcError::ReadInvalidHeader(
+                format_err!("Header block not CRLF terminated")
+            ))
         }
-        Err(e) => Err(BarcError::ReadHeader(e.to_string()))
+        Err(e) => Err(BarcError::ReadInvalidHeader(Flare::from(e)))
     }
 }
 
