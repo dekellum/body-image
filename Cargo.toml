@@ -28,8 +28,8 @@ barc-record = ["fern", "client"]
 doctest = false
 
 [[bin]]
-name = "barc-record"
-path = "src/bin/barc-record.rs"
+name = "barc"
+path = "src/main.rs"
 test = false
 doctest = false
 bench = false
