@@ -913,16 +913,11 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, BarcError> {
             let mut hmap = http::HeaderMap::with_capacity(heads.len());
             assert_eq!(size, buf.len());
             for h in heads {
-                hmap.append(
-                    h.name.parse::<HeaderName>()
-                        .map_err(|e| {
-                            BarcError::ReadInvalidHeader(Flare::from(e))
-                        })?,
-                    HeaderValue::from_bytes(h.value)
-                        .map_err(|e| {
-                            BarcError::ReadInvalidHeader(Flare::from(e))
-                        })?
-                );
+                let name = h.name.parse::<HeaderName>()
+                    .map_err(|e| BarcError::ReadInvalidHeader(Flare::from(e)))?;
+                let value = HeaderValue::from_bytes(h.value)
+                    .map_err(|e| BarcError::ReadInvalidHeader(Flare::from(e)))?;
+                hmap.append(name, value);
             }
             Ok(hmap)
         }
