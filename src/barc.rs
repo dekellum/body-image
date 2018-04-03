@@ -1419,6 +1419,22 @@ mod tests {
     }
 
     #[test]
+    fn test_read_truncated() {
+        let tune = Tunables::new();
+        let bfile = BarcFile::new("sample/truncated.barc");
+        let mut reader = bfile.reader().unwrap();
+        if let Err(e) = reader.read(&tune) {
+            if let BarcError::Io(ioe) = e {
+                assert_eq!(ErrorKind::UnexpectedEof, ioe.kind());
+            } else {
+                panic!("Other error type {:?}", e);
+            }
+        } else {
+            panic!("Should not succeed!");
+        }
+    }
+
+    #[test]
     fn test_read_204_no_body() {
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/204_no_body.barc");
