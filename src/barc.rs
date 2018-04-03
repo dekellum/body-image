@@ -2,13 +2,15 @@
 
 use std::cmp;
 use std::fs::{File, OpenOptions};
+use std::fmt;
+use std::io;
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Take, Write};
 use std::ops::{AddAssign,ShlAssign};
 use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 
 use bytes::{BytesMut, BufMut};
-use failure::Error as FlError;
+use failure::{err_msg, Fail, Error as Flare};
 use flate2::Compression as GzCompression;
 use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
@@ -20,8 +22,8 @@ use memmap::MmapOptions;
 #[cfg(feature = "brotli")]
 use brotli;
 
-use {BodyImage, BodySink, Dialog, Mapped, Recorded, RequestRecorded,
-     Tunables};
+use {BodyError, BodyImage, BodySink, Dialog, Mapped,
+     Recorded, RequestRecorded, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -58,6 +60,89 @@ pub struct BarcWriter<'a> {
 /// and position.
 pub struct BarcReader {
     file: File
+}
+
+/// Error enumeration for all barc module errors. This may be extended in the
+/// future, so exhaustive matching in external code is not recommended.
+#[derive(Debug)]
+pub enum BarcError {
+    /// Error with `BodySink` or `BodyImage`.
+    Body(BodyError),
+
+    /// IO errors, reading from or writing to a BARC file.
+    Io(io::Error),
+
+    /// Unknown `RecordType` byte flag.
+    UnknownRecordType(u8),
+
+    /// Unknown `Compression` byte flag.
+    UnknownCompression(u8),
+
+    /// Decoder unsupported for the `Compression` encoding found on read.
+    DecoderUnsupported(Compression),
+
+    /// Read an incomplete record head.
+    ReadIncompleteRecHead(usize),
+
+    /// Read an invalid record head.
+    ReadInvalidRecHead,
+
+    /// Read an invalid record head hex digit.
+    ReadInvalidRecHeadHex(u8),
+
+    /// Error reading and parsing header name, value or block (with cause)
+    ReadInvalidHeader(Flare),
+}
+
+impl fmt::Display for BarcError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BarcError::Body(ref be) =>
+                write!(f, "With Body; {}", be),
+            BarcError::Io(ref e) =>
+                write!(f, "{}", e),
+            BarcError::UnknownRecordType(b) =>
+                write!(f, "Unknown record type flag [{}]", b),
+            BarcError::UnknownCompression(b) =>
+                write!(f, "Unknown compression flag [{}]", b),
+            BarcError::DecoderUnsupported(c) =>
+                write!(f, "No decoder for {:?}. Enable the feature?", c),
+            BarcError::ReadIncompleteRecHead(l) =>
+                write!(f, "Incomplete record head, len {}", l),
+            BarcError::ReadInvalidRecHead =>
+                write!(f, "Invalid record head suffix"),
+            BarcError::ReadInvalidRecHeadHex(b) =>
+                write!(f, "Invalid record head hex digit [{}]", b),
+            BarcError::ReadInvalidHeader(ref flare) =>
+                write!(f, "Invalid header; {}", flare),
+        }
+    }
+}
+
+// Fail is implemented manually because we currently can't specify
+// ReadInvalidHeader's Flare type as #[cause], see:
+// https://github.com/rust-lang-nursery/failure/issues/176
+impl Fail for BarcError {
+    fn cause(&self) -> Option<&Fail> {
+        match *self {
+            BarcError::Body(ref be)               => Some(be),
+            BarcError::Io(ref e)                  => Some(e),
+            BarcError::ReadInvalidHeader(ref flr) => Some(flr.cause()),
+            _ => None
+        }
+    }
+}
+
+impl From<io::Error> for BarcError {
+    fn from(err: io::Error) -> BarcError {
+        BarcError::Io(err)
+    }
+}
+
+impl From<BodyError> for BarcError {
+    fn from(err: BodyError) -> BarcError {
+        BarcError::Body(err)
+    }
 }
 
 /// A parsed record head.
@@ -143,11 +228,11 @@ impl RecordType {
     }
 
     /// Return variant for (byte) flag, or fail.
-    fn try_from(f: u8) -> Result<Self, FlError> {
+    fn try_from(f: u8) -> Result<Self, BarcError> {
         match f {
             b'R' => Ok(RecordType::Reserved),
             b'D' => Ok(RecordType::Dialog),
-            _ => Err(format_err!("Unknown record type flag [{}]", f))
+            _ => Err(BarcError::UnknownRecordType(f))
         }
     }
 }
@@ -181,12 +266,12 @@ impl Compression {
     }
 
     /// Return variant for (byte) flag, or fail.
-    fn try_from(f: u8) -> Result<Self, FlError> {
+    fn try_from(f: u8) -> Result<Self, BarcError> {
         match f {
             b'P' => Ok(Compression::Plain),
             b'G' => Ok(Compression::Gzip),
             b'B' => Ok(Compression::Brotli),
-            _ => Err(format_err!("Unknown compression flag [{}]", f))
+            _ => Err(BarcError::UnknownCompression(f))
         }
     }
 }
@@ -196,7 +281,7 @@ pub trait CompressStrategy {
     /// Return an `EncodeWrapper` for `File` by evaluating the
     /// `RecordedType` for compression worthiness.
     fn wrap_encoder<'a>(&self, rec: &'a RecordedType, file: &'a File)
-        -> Result<EncodeWrapper<'a>, FlError>;
+        -> Result<EncodeWrapper<'a>, BarcError>;
 }
 
 /// Strategy of no (aka `Plain`) compression.
@@ -211,7 +296,7 @@ impl CompressStrategy for NoCompressStrategy {
     /// Return an `EncodeWrapper` for `File`. This implementation
     /// always returns a `Plain` wrapper.
     fn wrap_encoder<'a>(&self, _rec: &'a RecordedType, file: &'a File)
-        -> Result<EncodeWrapper<'a>, FlError>
+        -> Result<EncodeWrapper<'a>, BarcError>
     {
         Ok(EncodeWrapper::Plain(file))
     }
@@ -251,7 +336,7 @@ impl Default for GzipCompressStrategy {
 
 impl CompressStrategy for GzipCompressStrategy {
     fn wrap_encoder<'a>(&self, rec: &'a RecordedType, file: &'a File)
-        -> Result<EncodeWrapper<'a>, FlError>
+        -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
         let est_len = rec.req_body().len() + rec.res_body().len();
@@ -303,7 +388,7 @@ impl Default for BrotliCompressStrategy {
 #[cfg(feature = "brotli")]
 impl CompressStrategy for BrotliCompressStrategy {
     fn wrap_encoder<'a>(&self, rec: &'a RecordedType, file: &'a File)
-        -> Result<EncodeWrapper<'a>, FlError>
+        -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
         let est_len = rec.req_body().len() + rec.res_body().len();
@@ -353,7 +438,7 @@ impl<'a> EncodeWrapper<'a> {
 
     /// Consume the wrapper, finishing any encoding and flushing the
     /// completed write.
-    pub fn finish(self) -> Result<(), FlError> {
+    pub fn finish(self) -> Result<(), BarcError> {
         match self {
             EncodeWrapper::Plain(mut f) => {
                 f.flush()?;
@@ -401,9 +486,9 @@ impl BarcFile {
     /// possibly creating it, or erroring) if this is the first time
     /// called. May block on the write lock, as only one `BarcWriter`
     /// instance is allowed.
-    pub fn writer(&self) -> Result<BarcWriter, FlError> {
+    pub fn writer(&self) -> Result<BarcWriter, BarcError> {
         let mut guard = self.write_lock.lock().unwrap(); // FIXME:
-        // PoisonError is not send, so can't map to FlError
+        // PoisonError is not send, so can't map to BarcError
 
         if (*guard).is_none() {
             let file = OpenOptions::new()
@@ -420,7 +505,7 @@ impl BarcFile {
 
     /// Get a reader for this file. Errors if the file does not
     /// exist.
-    pub fn reader(&self) -> Result<BarcReader, FlError> {
+    pub fn reader(&self) -> Result<BarcReader, BarcError> {
         let file = OpenOptions::new()
             .read(true)
             .open(&self.path)?;
@@ -434,7 +519,7 @@ impl<'a> BarcWriter<'a> {
     /// start of the BARC file. The writer position is then advanced
     /// to the end of the file, for the next `write`.
     pub fn write(&mut self, rec: &RecordedType, strategy: &CompressStrategy)
-        -> Result<u64, FlError>
+        -> Result<u64, BarcError>
     {
         // BarcFile::writer() guarantees Some(File)
         let file = &mut *self.guard.as_mut().unwrap();
@@ -475,7 +560,7 @@ impl<'a> BarcWriter<'a> {
 // Write the record, returning a preliminary `RecordHead` with
 // observed (not compressed) lengths.
 fn write_record(file: &mut File, rec: &RecordedType, strategy: &CompressStrategy)
-    -> Result<RecordHead, FlError>
+    -> Result<RecordHead, BarcError>
 {
     let mut wrapper = strategy.wrap_encoder(rec, file)?;
     let compress = wrapper.mode();
@@ -515,7 +600,7 @@ fn write_record(file: &mut File, rec: &RecordedType, strategy: &CompressStrategy
 
 // Write record head to out, asserting the various length constraints.
 fn write_record_head(out: &mut Write, head: &RecordHead)
-    -> Result<(), FlError>
+    -> Result<(), BarcError>
 {
     // Check input ranges
     assert!(head.len   <= V2_MAX_RECORD,   "len exceeded");
@@ -536,7 +621,7 @@ fn write_record_head(out: &mut Write, head: &RecordHead)
 
 // Write header block to out, returning the length written.
 fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
-    -> Result<usize, FlError>
+    -> Result<usize, BarcError>
 {
     let mut size = 0;
     for (key, value) in headers.iter() {
@@ -554,7 +639,7 @@ fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
 
 // Write a body to out, returning the length written.
 fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
-    -> Result<u64, FlError>
+    -> Result<u64, BarcError>
 {
     let mut size = body.write_to(out)?;
     if with_crlf && size > 0 {
@@ -564,7 +649,7 @@ fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
 }
 
 // Like `write_all`, but return the length of the provided byte slice.
-fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, FlError> {
+fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, BarcError> {
     out.write_all(bs)?;
     Ok(bs.len())
 }
@@ -576,7 +661,7 @@ impl BarcReader {
     /// whether the request and response bodies are read directly into RAM,
     /// mapped or buffered in a file.
     pub fn read(&mut self, tune: &Tunables)
-        -> Result<Option<Record>, FlError>
+        -> Result<Option<Record>, BarcError>
     {
         let fin = &mut self.file;
 
@@ -637,7 +722,7 @@ impl BarcReader {
     /// `BarcWriter::write` for a specific record) from the start of
     /// the BARC file. This effects subsequent calls to `read`, which
     /// may error if the position is not to a valid record head.
-    pub fn seek(&mut self, offset: u64) -> Result<(), FlError> {
+    pub fn seek(&mut self, offset: u64) -> Result<(), BarcError> {
         self.file.seek(SeekFrom::Start(offset))?;
         Ok(())
     }
@@ -653,7 +738,7 @@ enum DecodeWrapper<'a> {
 
 impl<'a> DecodeWrapper<'a> {
     fn new(comp: Compression, r: Take<&'a mut File>, _buf_size: usize)
-        -> Result<DecodeWrapper, FlError>
+        -> Result<DecodeWrapper, BarcError>
     {
         match comp {
             Compression::Gzip => {
@@ -665,8 +750,7 @@ impl<'a> DecodeWrapper<'a> {
                     brotli::Decompressor::new(r, _buf_size)
                 )))
             }
-            _ => bail!("DecodeWrapper: no support for {:?}; \
-                        enable the feature?", comp)
+            _ => Err(BarcError::DecoderUnsupported(comp))
         }
     }
 
@@ -683,7 +767,7 @@ impl<'a> DecodeWrapper<'a> {
 // Read and return a compressed `Record`. This is specialized for
 // NO_CRLF and since bodies can't be directly mapped from the file.
 fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
-    -> Result<Record, FlError>
+    -> Result<Record, BarcError>
 {
     // Decoder over limited `Take` of compressed record len
     let mut wrapper = DecodeWrapper::new(
@@ -717,7 +801,7 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
 
 // Return RecordHead or None if EOF
 fn read_record_head(r: &mut Read)
-    -> Result<Option<RecordHead>, FlError>
+    -> Result<Option<RecordHead>, BarcError>
 {
     let mut buf = [0u8; V2_HEAD_SIZE];
 
@@ -726,10 +810,10 @@ fn read_record_head(r: &mut Read)
         return Ok(None);
     }
     if size != V2_HEAD_SIZE {
-        bail!("Incomplete header len {}", size);
+        return Err(BarcError::ReadIncompleteRecHead(size));
     }
     if &buf[0..6] != b"BARC2 " {
-        bail!("Invalid header suffix");
+        return Err(BarcError::ReadInvalidRecHead);
     }
 
     let len       = parse_hex(&buf[6..18])?;
@@ -746,7 +830,7 @@ fn read_record_head(r: &mut Read)
 // (EOF) from partial bytes read (a format error), so it also returns
 // the number of bytes read.
 fn read_record_head_buf(r: &mut Read, mut buf: &mut [u8])
-    -> Result<usize, FlError>
+    -> Result<usize, BarcError>
 {
     let mut size = 0;
     loop {
@@ -773,7 +857,7 @@ fn read_record_head_buf(r: &mut Read, mut buf: &mut [u8])
 }
 
 // Read lowercase hexadecimal unsigned value directly from bytes.
-fn parse_hex<T>(buf: &[u8]) -> Result<T, FlError>
+fn parse_hex<T>(buf: &[u8]) -> Result<T, BarcError>
     where T: AddAssign<T> + From<u8> + ShlAssign<u8>
 {
     let mut v = T::from(0u8);
@@ -784,7 +868,7 @@ fn parse_hex<T>(buf: &[u8]) -> Result<T, FlError>
         } else if *d >= b'a' && *d <= b'f' {
             v += T::from(10 + (*d - b'a'));
         } else {
-            bail!("Illegal head hex digit: [{}]", d);
+            return Err(BarcError::ReadInvalidRecHeadHex(*d));
         }
     }
     Ok(v)
@@ -792,7 +876,7 @@ fn parse_hex<T>(buf: &[u8]) -> Result<T, FlError>
 
 // Reader header block of len bytes to HeaderMap.
 fn read_headers(r: &mut Read, with_crlf: bool, len: usize)
-    -> Result<http::HeaderMap, FlError>
+    -> Result<http::HeaderMap, BarcError>
 {
     if len == 0 {
         return Ok(http::HeaderMap::with_capacity(0));
@@ -816,7 +900,7 @@ fn read_headers(r: &mut Read, with_crlf: bool, len: usize)
 }
 
 // Parse header byte slice to HeaderMap.
-fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
+fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, BarcError> {
     let mut headbuf = [httparse::EMPTY_HEADER; 128];
 
     // FIXME: httparse will return TooManyHeaders if headbuf isn't
@@ -829,21 +913,26 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, FlError> {
             let mut hmap = http::HeaderMap::with_capacity(heads.len());
             assert_eq!(size, buf.len());
             for h in heads {
-                hmap.append(h.name.parse::<HeaderName>()?,
-                            HeaderValue::from_bytes(h.value)?);
+                let name = h.name.parse::<HeaderName>()
+                    .map_err(|e| BarcError::ReadInvalidHeader(Flare::from(e)))?;
+                let value = HeaderValue::from_bytes(h.value)
+                    .map_err(|e| BarcError::ReadInvalidHeader(Flare::from(e)))?;
+                hmap.append(name, value);
             }
             Ok(hmap)
         }
         Ok(httparse::Status::Partial) => {
-            bail!("Header block not terminated with blank line")
+            Err(BarcError::ReadInvalidHeader(
+                err_msg("Header block not CRLF terminated")
+            ))
         }
-        Err(e) => Err(FlError::from(e))
+        Err(e) => Err(BarcError::ReadInvalidHeader(Flare::from(e)))
     }
 }
 
 // Read into `BodyImage` of state `Ram` as a single buffer.
 fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
-    -> Result<BodyImage, FlError>
+    -> Result<BodyImage, BarcError>
 {
     if len == 0 {
         return Ok(BodyImage::empty());
@@ -864,7 +953,7 @@ fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
 // Read into `BodyImage` state `FsWrite`. Assumes no CRLF terminator
 // (only used for compressed records).
 fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
-    -> Result<BodyImage, FlError>
+    -> Result<BodyImage, BarcError>
 {
     if len == 0 {
         return Ok(BodyImage::empty());
@@ -911,7 +1000,7 @@ fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
 // offset and length. Assumes (and asserts that) current is positioned
 // at offset, and seeks file past the body len.
 fn map_body(file: &mut File, offset: u64, len: u64)
-    -> Result<BodyImage, FlError>
+    -> Result<BodyImage, BarcError>
 {
     assert!(len > 2);
 
@@ -938,8 +1027,9 @@ mod tests {
     use http::header::{AGE, REFERER, VIA};
     use super::*;
     use ::Tuner;
+    use failure::Error as Flare;
 
-    fn barc_test_file(name: &str) -> Result<PathBuf, FlError> {
+    fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
         let tpath = Path::new("target/testmp");
         fs::create_dir_all(tpath)?;
 
@@ -973,7 +1063,7 @@ mod tests {
     }
 
     fn write_read_small(fname: &PathBuf, strategy: &CompressStrategy)
-        -> Result<(), FlError>
+        -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
 
@@ -1040,7 +1130,7 @@ mod tests {
     }
 
     fn write_read_empty_record(fname: &PathBuf, strategy: &CompressStrategy)
-        -> Result<(), FlError>
+        -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
 
@@ -1096,7 +1186,7 @@ mod tests {
     }
 
     fn write_read_large(fname: &PathBuf, strategy: &CompressStrategy)
-        -> Result<(), FlError>
+        -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
 
@@ -1298,8 +1388,11 @@ mod tests {
         reader.seek(1).unwrap();
 
         if let Err(e) = reader.read(&tune) {
-            println!("{}", e);
-            assert!(e.to_string().contains("Incomplete header"));
+            if let BarcError::ReadIncompleteRecHead(l) = e {
+                assert_eq!(l, V2_HEAD_SIZE - 1);
+            } else {
+                panic!("Other error: {}", e);
+            }
         } else {
             panic!("Should not succeed!");
         }
@@ -1315,8 +1408,27 @@ mod tests {
         reader.seek(1).unwrap();
 
         if let Err(e) = reader.read(&tune) {
-            println!("{}", e);
-            assert!(e.to_string().contains("Invalid header suffix"));
+            if let BarcError::ReadInvalidRecHead = e {
+                assert!(true);
+            } else {
+                panic!("Other error: {}", e);
+            }
+        } else {
+            panic!("Should not succeed!");
+        }
+    }
+
+    #[test]
+    fn test_read_truncated() {
+        let tune = Tunables::new();
+        let bfile = BarcFile::new("sample/truncated.barc");
+        let mut reader = bfile.reader().unwrap();
+        if let Err(e) = reader.read(&tune) {
+            if let BarcError::Io(ioe) = e {
+                assert_eq!(ErrorKind::UnexpectedEof, ioe.kind());
+            } else {
+                panic!("Other error type {:?}", e);
+            }
         } else {
             panic!("Should not succeed!");
         }

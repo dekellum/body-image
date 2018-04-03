@@ -1,0 +1,32 @@
+BARC2 00000000078e DP 00077 000e7 0000000000 00138
+
+url: https://example.com/
+method: GET
+response-version: HTTP/1.1
+response-status: 200 OK
+response-decoded: gzip
+
+accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
+accept-language: en
+accept-encoding: br, gzip, deflate
+user-agent: Mozilla/5.0 (compatible; body-image 0.1.0; +http://github.com/dekellum/body-image)
+
+content-encoding: gzip
+cache-control: max-age=604800
+content-type: text/html
+date: Mon, 26 Feb 2018 22:37:44 GMT
+etag: "1541025663+gzip"
+expires: Mon, 05 Mar 2018 22:37:44 GMT
+last-modified: Fri, 09 Aug 2013 23:54:35 GMT
+server: ECS (pae/3796)
+vary: Accept-Encoding
+x-cache: HIT
+content-length: 606
+
+<!doctype html>
+<html>
+<head>
+    <title>Example Domain</title>
+
+*** Truncated Record For Error Testing ***
+

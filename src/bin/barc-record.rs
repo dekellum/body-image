@@ -6,7 +6,7 @@ extern crate body_image;
 
 use std::process;
 
-use failure::Error as FlError;
+use failure::Error as Flare;
 
 use body_image::Tunables;
 use body_image::barc::{BarcFile, NoCompressStrategy};
@@ -25,7 +25,7 @@ fn main() {
     }
 }
 
-fn setup_logger() -> Result<(), FlError> {
+fn setup_logger() -> Result<(), Flare> {
     fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -44,7 +44,7 @@ fn setup_logger() -> Result<(), FlError> {
     Ok(())
 }
 
-fn run(url: &str, barc_path: &str) -> Result<(), FlError> {
+fn run(url: &str, barc_path: &str) -> Result<(), Flare> {
     setup_logger()?;
 
     let req = http::Request::builder()

@@ -1,14 +1,16 @@
 //! HTTP client integration and utilities.
 
-use failure::Error as FlError;
-
 #[cfg(feature = "brotli")]
 use brotli;
+
+/// Convenient and non-repetitive alias
+/// Also: "a sudden brief burst of bright flame or light."
+use failure::Error as Flare;
+
 use flate2::read::{DeflateDecoder, GzDecoder};
 use bytes::Bytes;
+use futures::future;
 use futures::{Future, Stream};
-use futures::future::err as futerr;
-use futures::future::result as futres;
 use http;
 use hyper;
 use hyper::Client;
@@ -26,7 +28,7 @@ use {BodyImage, BodySink,
 type HyRequest = http::Request<hyper::Body>;
 
 /// Run an HTTP request to completion, returning the full `Dialog`.
-pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
+pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
     // FIXME: State of the Core (v Reactor), incl. construction,
     // use from multiple threads is under flux:
     // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
@@ -50,13 +52,13 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
 
     let work = fr
         .map(|response| Monolog { prolog, response } )
-        .map_err(FlError::from)
+        .map_err(Flare::from)
         .and_then(|monolog| resp_future(monolog, tune))
-        .and_then(|idialog| futres(idialog.prepare()));
+        .and_then(|idialog| future::result(idialog.prepare()));
 
     // Run until completion
     core.run(work)
-        .map_err(FlError::from)
+        .map_err(Flare::from)
 }
 
 /// Decode any _gzip_, _deflate_, or (optional feature) _brotli_
@@ -65,7 +67,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, FlError> {
 /// controls decompression buffer sizes and if the final `BodyImage`
 /// will be in `Ram` or `FsRead`.
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
-    -> Result<(), FlError>
+    -> Result<(), Flare>
 {
     let headers = &dialog.res_headers;
     let encodings = headers
@@ -154,7 +156,7 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
 }
 
 fn resp_future(monolog: Monolog, tune: &Tunables)
-    -> Box<Future<Item=InDialog, Error=FlError> + Send>
+    -> Box<Future<Item=InDialog, Error=Flare> + Send>
 {
     let (resp_parts, body) = monolog.response.into_parts();
 
@@ -162,7 +164,7 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
     let bsink = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
         Some(v) => check_length(v, tune.max_body()).and_then(|cl| {
             if cl > tune.max_body_ram() {
-                BodySink::with_fs(tune.temp_dir())
+                BodySink::with_fs(tune.temp_dir()).map_err(Flare::from)
             } else {
                 Ok(BodySink::with_ram(cl))
             }
@@ -173,7 +175,7 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
     // Unwrap BodySink, returning any error as Future
     let bsink = match bsink {
         Ok(b) => b,
-        Err(e) => { return Box::new(futerr(e)); }
+        Err(e) => { return Box::new(future::err(e)); }
     };
 
     let idialog = InDialog {
@@ -186,7 +188,7 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
 
     let tune = tune.clone();
     let s = body
-        .map_err(FlError::from)
+        .map_err(Flare::from)
         .fold(idialog, move |mut idialog, chunk| {
             let new_len = idialog.res_body.len() + (chunk.len() as u64);
             if new_len > tune.max_body() {
@@ -199,13 +201,14 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
                 idialog.res_body
                     .save(chunk)
                     .and(Ok(idialog))
+                    .map_err(Flare::from)
             }
         });
     Box::new(s)
 }
 
 fn check_length(v: &http::header::HeaderValue, max: u64)
-    -> Result<u64, FlError>
+    -> Result<u64, Flare>
 {
     let l = *ContentLength::parse_header(&Raw::from(v.as_bytes()))?;
     if l > max {
@@ -252,7 +255,7 @@ struct InDialog {
 impl InDialog {
     /// Prepare the response body for reading and generate meta
     /// headers.
-    fn prepare(self) -> Result<Dialog, FlError> {
+    fn prepare(self) -> Result<Dialog, Flare> {
         Ok(Dialog {
             meta:        self.derive_meta()?,
             prolog:      self.prolog,
@@ -263,7 +266,7 @@ impl InDialog {
         })
     }
 
-    fn derive_meta(&self) -> Result<http::HeaderMap, FlError> {
+    fn derive_meta(&self) -> Result<http::HeaderMap, Flare> {
         let mut hs = http::HeaderMap::with_capacity(6);
         use http::header::HeaderName;
 
@@ -297,16 +300,16 @@ impl InDialog {
 pub trait RequestRecordable {
     /// Short-hand for completing the builder with an empty body, as is
     /// the case with many HTTP request methods (e.g. GET).
-    fn record(&mut self) -> Result<RequestRecord, FlError>;
+    fn record(&mut self) -> Result<RequestRecord, Flare>;
 
     /// Complete the builder with any request body that can be converted to a
     /// `Bytes` buffer.
-    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, FlError>
+    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, Flare>
         where B: Into<Bytes>;
 }
 
 impl RequestRecordable for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord, FlError> {
+    fn record(&mut self) -> Result<RequestRecord, Flare> {
         let request = self.body(hyper::Body::empty())?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -319,7 +322,7 @@ impl RequestRecordable for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body } })
     }
 
-    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, FlError>
+    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, Flare>
         where B: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -346,7 +349,7 @@ mod tests {
     use ::Tuner;
     use super::*;
 
-    fn create_request(url: &str) -> Result<RequestRecord, FlError> {
+    fn create_request(url: &str) -> Result<RequestRecord, Flare> {
         http::Request::builder()
             .method(http::Method::GET)
             .header(http::header::ACCEPT,
