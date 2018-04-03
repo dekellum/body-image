@@ -2,6 +2,7 @@
 
 use std::cmp;
 use std::fs::{File, OpenOptions};
+use std::fmt;
 use std::io;
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Take, Write};
 use std::ops::{AddAssign,ShlAssign};
@@ -9,7 +10,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 
 use bytes::{BytesMut, BufMut};
-use failure::Error as Flare;
+use failure::{Fail, Error as Flare};
 use flate2::Compression as GzCompression;
 use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
@@ -61,46 +62,75 @@ pub struct BarcReader {
     file: File
 }
 
-/// Error enumeration for all barc module errors
-#[derive(Fail, Debug)]
+/// Error enumeration for all barc module errors. This may be extended in the
+/// future, so exhaustive matching in external code is not recommended.
+#[derive(Debug)]
 pub enum BarcError {
     /// Error with `BodySink` or `BodyImage`.
-    #[fail(display = "With Body; {}", _0)]
-    Body(#[cause] BodyError),
+    Body(BodyError),
 
     /// IO errors, reading from or writing to a BARC file.
-    #[fail(display = "{}", _0)]
-    Io(#[cause] io::Error),
+    Io(io::Error),
 
-    /// Unknown record type.
-    #[fail(display = "Unknown record type flag [{}]", _0)]
+    /// Unknown `RecordType` byte flag.
     UnknownRecordType(u8),
 
-    /// Unknown compression flag.
-    #[fail(display = "Unknown compression flag [{}]", _0)]
-    UnknownCompressionFlag(u8),
+    /// Unknown `Compression` byte flag.
+    UnknownCompression(u8),
 
-    /// Decoder unsupported for read found encoding.
-    #[fail(display = "No decoder for {:?}. Enable the feature?", _0)]
+    /// Decoder unsupported for the `Compression` encoding found on read.
     DecoderUnsupported(Compression),
 
     /// Read an incomplete record head.
-    #[fail(display = "Incomplete record head, len {}", _0)]
     ReadIncompleteRecHead(usize),
 
     /// Read an invalid record head.
-    #[fail(display = "Invalid record head suffix")]
     ReadInvalidRecHead,
 
     /// Read an invalid record head hex digit.
-    #[fail(display = "Invalid record head hex digit [{}]", _0)]
     ReadInvalidRecHeadHex(u8),
 
     /// Error reading and parsing header name, value or block (with cause)
-    #[fail(display = "Invalid header; {}", _0)]
     ReadInvalidHeader(Flare),
-    // FIXME: Can't anotate Flare as cause, see:
-    //        https://github.com/rust-lang-nursery/failure/issues/176
+}
+
+impl fmt::Display for BarcError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BarcError::Body(ref be) =>
+                write!(f, "With Body; {}", be),
+            BarcError::Io(ref e) =>
+                write!(f, "{}", e),
+            BarcError::UnknownRecordType(b) =>
+                write!(f, "Unknown record type flag [{}]", b),
+            BarcError::UnknownCompression(b) =>
+                write!(f, "Unknown compression flag [{}]", b),
+            BarcError::DecoderUnsupported(c) =>
+                write!(f, "No decoder for {:?}. Enable the feature?", c),
+            BarcError::ReadIncompleteRecHead(l) =>
+                write!(f, "Incomplete record head, len {}", l),
+            BarcError::ReadInvalidRecHead =>
+                write!(f, "Invalid record head suffix"),
+            BarcError::ReadInvalidRecHeadHex(b) =>
+                write!(f, "Invalid record head hex digit [{}]", b),
+            BarcError::ReadInvalidHeader(ref flare) =>
+                write!(f, "Invalid header; {}", flare),
+        }
+    }
+}
+
+// Fail is implemented manually because we currently can't specify
+// ReadInvalidHeader's Flare type as #[cause], see:
+// https://github.com/rust-lang-nursery/failure/issues/176
+impl Fail for BarcError {
+    fn cause(&self) -> Option<&Fail> {
+        match *self {
+            BarcError::Body(ref be)               => Some(be),
+            BarcError::Io(ref e)                  => Some(e),
+            BarcError::ReadInvalidHeader(ref flr) => Some(flr.cause()),
+            _ => None
+        }
+    }
 }
 
 impl From<io::Error> for BarcError {
@@ -241,7 +271,7 @@ impl Compression {
             b'P' => Ok(Compression::Plain),
             b'G' => Ok(Compression::Gzip),
             b'B' => Ok(Compression::Brotli),
-            _ => Err(BarcError::UnknownCompressionFlag(f))
+            _ => Err(BarcError::UnknownCompression(f))
         }
     }
 }
