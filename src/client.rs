@@ -1,11 +1,12 @@
 //! HTTP client integration and utilities.
 
+#[cfg(feature = "brotli")]
+use brotli;
+
 /// Convenient and non-repetitive alias
 /// Also: "a sudden brief burst of bright flame or light."
 use failure::Error as Flare;
 
-#[cfg(feature = "brotli")]
-use brotli;
 use flate2::read::{DeflateDecoder, GzDecoder};
 use bytes::Bytes;
 use futures::future;
