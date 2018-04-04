@@ -1,28 +1,33 @@
+extern crate body_image;
+#[macro_use] extern crate clap;
 extern crate failure;
 extern crate fern;
-#[macro_use] extern crate log;
 extern crate http;
-extern crate body_image;
+#[macro_use] extern crate log;
 
 use std::process;
 
+use body_image::{VERSION, Tunables};
+use body_image::barc::{BarcFile, NoCompressStrategy};
+use clap::{Arg, App, SubCommand};
 use failure::Error as Flare;
 
-use body_image::Tunables;
-use body_image::barc::{BarcFile, NoCompressStrategy};
-use body_image::client::{decode_res_body, fetch, RequestRecordable};
+#[cfg(feature = "client")]
+mod record;
 
 fn main() {
-    let mut args = std::env::args();
-    args.next(); //$0
-    let url = args.next().expect("URL argument required");
-    let barc_path = args.next().expect("BARC-FILE argument required");
-
-    let r = run(&url, &barc_path);
+    let r = run();
     if let Err(e) = r {
         error!("Error cause: {}; (backtrace) {}", e.cause(), e.backtrace());
         process::exit(2);
     }
+}
+
+fn setup_app() -> Result<App, Flare> {
+    App::new("barc")
+        .version(crate_version!())
+        .author(crate_authors!("\n"))
+        .about("Tool for BARC file recording and manipulation")
 }
 
 fn setup_logger() -> Result<(), Flare> {
@@ -36,40 +41,15 @@ fn setup_logger() -> Result<(), Flare> {
             ))
         })
         .level(log::LevelFilter::Debug)
-        .level_for("hyper::proto", log::LevelFilter::Info)
-        .level_for("tokio_core", log::LevelFilter::Info)
+        .level_for("hyper::proto",  log::LevelFilter::Info)
+        .level_for("tokio_core",    log::LevelFilter::Info)
         .level_for("tokio_reactor", log::LevelFilter::Info)
         .chain(std::io::stderr())
         .apply()?;
     Ok(())
 }
 
-fn run(url: &str, barc_path: &str) -> Result<(), Flare> {
+fn run() -> Result<(), Flare> {
     setup_logger()?;
-
-    let req = http::Request::builder()
-        .method(http::Method::GET)
-        .header(http::header::ACCEPT,
-                "text/html, application/xhtml+xml, \
-                 application/xml;q=0.9, \
-                 */*;q=0.8" )
-        .header(http::header::ACCEPT_LANGUAGE, "en")
-        .header(http::header::ACCEPT_ENCODING, "br, gzip, deflate")
-        .header(http::header::USER_AGENT,
-                "Mozilla/5.0 \
-                 (compatible; body-image 0.1.0; \
-                  +http://github.com/dekellum/body-image)")
-        // "Connection: keep-alive" (header) is default for HTTP 1.1
-        .uri(url)
-        .record()?;
-
-    let tune = Tunables::new();
-    let mut dl = fetch(req, &tune)?;
-
-    decode_res_body(&mut dl, &tune)?;
-
-    let bfile = BarcFile::new(barc_path);
-    let mut bw = bfile.writer()?;
-    bw.write(&dl, &NoCompressStrategy::default())?;
     Ok(())
 }

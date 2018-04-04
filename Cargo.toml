@@ -6,6 +6,7 @@ authors = ["David Kellum <dek-oss@gravitext.com>"]
 [dependencies]
 brotli     = { version = ">=1.2.0, <2", optional = true }
 bytes      = ">=0.4.6, <2"
+clap       = ">=2.31.2, <3"
 failure    = ">=0.1.0, <2"
 fern       = { version = ">=0.5.5, <2", optional = true }
 flate2     = ">=1.0.1, <2"
@@ -20,9 +21,8 @@ tempfile   = ">=2.2.0, <3"
 tokio-core = ">=0.1.12, <2"
 
 [features]
-default = ["brotli"]
+default = ["fern", "brotli"]
 client = ["hyper", "hyper-tls"]
-barc-record = ["fern", "client"]
 
 [lib]
 doctest = false
@@ -34,7 +34,6 @@ test = false
 doctest = false
 bench = false
 doc = false
-required-features = ["barc-record"]
 
 [package.metadata.docs.rs]
 features = ["brotli", "client"]
