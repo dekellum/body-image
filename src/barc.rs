@@ -62,8 +62,9 @@ pub struct BarcReader {
     file: File
 }
 
-/// Error enumeration for all barc module errors. This may be extended in the
-/// future, so exhaustive matching in external code is not recommended.
+/// Error enumeration for all barc module errors.  This may be extended in the
+/// future, so exhaustive matching is discouraged with a hidden, unused
+/// variant.
 #[derive(Debug)]
 pub enum BarcError {
     /// Error with `BodySink` or `BodyImage`.
@@ -92,6 +93,9 @@ pub enum BarcError {
 
     /// Error reading and parsing header name, value or block (with cause)
     ReadInvalidHeader(Flare),
+
+    #[doc(hidden)]
+    __FutureProof94,
 }
 
 impl fmt::Display for BarcError {
@@ -115,6 +119,7 @@ impl fmt::Display for BarcError {
                 write!(f, "Invalid record head hex digit [{}]", b),
             BarcError::ReadInvalidHeader(ref flare) =>
                 write!(f, "Invalid header; {}", flare),
+            BarcError::__FutureProof94 => unreachable!()
         }
     }
 }
