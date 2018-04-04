@@ -1,15 +1,13 @@
 extern crate body_image;
 #[macro_use] extern crate clap;
-extern crate failure;
+#[macro_use] extern crate failure;
 extern crate fern;
 extern crate http;
 #[macro_use] extern crate log;
 
 use std::process;
 
-use body_image::{VERSION, Tunables};
-use body_image::barc::{BarcFile, NoCompressStrategy};
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App, AppSettings, SubCommand};
 use failure::Error as Flare;
 
 #[cfg(feature = "client")]
@@ -23,15 +21,71 @@ fn main() {
     }
 }
 
-fn setup_app() -> Result<App, Flare> {
-    App::new("barc")
-        .version(crate_version!())
-        .author(crate_authors!("\n"))
-        .about("Tool for BARC file recording and manipulation")
+fn run() -> Result<(), Flare> {
+    let m = setup_cli().get_matches();
+
+    setup_logger(m.occurrences_of("debug"))?;
+    let scname = m.subcommand_name().unwrap(); // required
+
+    match scname {
+        "cat" => unimplemented!(),
+        #[cfg(feature = "client")]
+        "record" => {
+            let sm = m.subcommand_matches("record").unwrap();
+            record::record(sm.value_of("url").unwrap(),
+                           sm.value_of("file").unwrap())
+        }
+        #[cfg(not(feature = "client"))]
+        "record" => {
+            bail!("Sub-command \"record\" requires the \"client\" \
+                   build feature");
+        }
+        _ => {
+            bail!("Sub-command \"{}\" not supported", scname);
+        }
+    }
 }
 
-fn setup_logger() -> Result<(), Flare> {
-    fern::Dispatch::new()
+fn setup_cli() -> App<'static, 'static> {
+    let appl = App::new("barc")
+        .version(crate_version!())
+        .about("Tool for BARC file recording and manipulation")
+        .setting(AppSettings::SubcommandRequired)
+        .arg(Arg::with_name("debug")
+             .short("d")
+             .long("debug")
+             .multiple(true)
+             .help("enable additional logging (may repeat for more)")
+             .global(true) );
+
+    let rec_about = if cfg!(feature = "client") {
+        "Record an HTTP dialog via network (included)"
+    } else {
+        "Record an HTTP dialog via network \
+         (NOT BUILT, lacks \"client\" feature)"
+    };
+    let rec = SubCommand::with_name("record")
+        .about(rec_about)
+        .args(&[
+            Arg::with_name("url")
+                .required(true)
+                .index(1)
+                .value_name("URL")
+                .help("the (http://) URL to fetch"),
+            Arg::with_name("file")
+                .required(true)
+                .index(2)
+                .value_name("BARC-FILE")
+                .help("path to BARC file to create/append"),
+            ]);
+    let cat = SubCommand::with_name("cat")
+        .about("Print BARC records to standard output");
+    appl.subcommand(rec)
+        .subcommand(cat)
+}
+
+fn setup_logger(debug_flags: u64) -> Result<(), Flare> {
+    let mut disp = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
                 "{} {}: {}",
@@ -39,17 +93,24 @@ fn setup_logger() -> Result<(), Flare> {
                 record.level(),
                 message
             ))
-        })
-        .level(log::LevelFilter::Debug)
-        .level_for("hyper::proto",  log::LevelFilter::Info)
-        .level_for("tokio_core",    log::LevelFilter::Info)
-        .level_for("tokio_reactor", log::LevelFilter::Info)
-        .chain(std::io::stderr())
-        .apply()?;
-    Ok(())
-}
+        });
+    disp = if debug_flags == 0 {
+        disp.level(log::LevelFilter::Info)
+    } else {
+        disp.level(log::LevelFilter::Debug)
+    };
 
-fn run() -> Result<(), Flare> {
-    setup_logger()?;
-    Ok(())
+    disp = if debug_flags < 2 {
+        // These are only for record/client deps, but are harmless if not
+        // loaded.
+        disp.level_for("hyper::proto",  log::LevelFilter::Info)
+            .level_for("tokio_core",    log::LevelFilter::Info)
+            .level_for("tokio_reactor", log::LevelFilter::Info)
+    } else {
+        disp
+    };
+
+    disp.chain(std::io::stderr())
+        .apply()
+        .map_err(Flare::from)
 }

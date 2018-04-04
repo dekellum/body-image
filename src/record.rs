@@ -2,8 +2,9 @@ use failure::Error as Flare;
 use body_image::Tunables;
 use body_image::barc::{BarcFile, NoCompressStrategy};
 use body_image::client::{decode_res_body, fetch, RequestRecordable};
+use http;
 
-fn record(url: &str, barc_path: &str) -> Result<(), Flare> {
+pub(crate) fn record(url: &str, barc_path: &str) -> Result<(), Flare> {
     let req = http::Request::builder()
         .method(http::Method::GET)
         .header(http::header::ACCEPT,
