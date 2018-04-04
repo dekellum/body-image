@@ -29,6 +29,27 @@ use bytes::{Bytes, BytesMut, BufMut};
 use memmap::Mmap;
 use tempfile::tempfile_in;
 
+/// Meta `HeaderName` for the complete URL used in the request.
+pub static META_URL: &[u8]             = b"url";
+
+/// Meta `HeaderName` for the HTTP method used in the request, e.g. "GET",
+/// "POST", etc.
+pub static META_METHOD: &[u8]          = b"method";
+
+/// Meta `HeaderName` for the response version, e.g. "HTTP/1.1", "HTTP/2.0",
+/// etc.
+pub static META_RES_VERSION: &[u8]     = b"response-version";
+
+/// Meta `HeaderName` for the response numeric status code, SPACE, and then a
+/// standardized _reason phrase_, e.g. "200 OK". The later is intended only
+/// for human readers.
+pub static META_RES_STATUS: &[u8]      = b"response-status";
+
+/// Meta `HeaderName` for a list of content or transfer encodings decoded for
+/// the current response body. The value is in HTTP content-encoding header
+/// format, e.g. "chunked, gzip".
+pub static META_RES_DECODED: &[u8]     = b"response-decoded";
+
 /// Error enumeration for `BodyImage` and `BodySink` types.  This may be
 /// extended in the future so exhaustive matching is gently discouraged with
 /// an unused variant.
@@ -765,27 +786,6 @@ impl Recorded for Dialog {
     fn res_headers(&self) -> &http::HeaderMap      { &self.res_headers }
     fn res_body(&self)    -> &BodyImage            { &self.res_body }
 }
-
-/// Meta `HeaderName` for the complete URL used in the request.
-pub static META_URL: &[u8]             = b"url";
-
-/// Meta `HeaderName` for the HTTP method used in the request, e.g. "GET",
-/// "POST", etc.
-pub static META_METHOD: &[u8]          = b"method";
-
-/// Meta `HeaderName` for the response version, e.g. "HTTP/1.1", "HTTP/2.0",
-/// etc.
-pub static META_RES_VERSION: &[u8]     = b"response-version";
-
-/// Meta `HeaderName` for the response numeric status code, SPACE, and then a
-/// standardized _reason phrase_, e.g. "200 OK". The later is intended only
-/// for human readers.
-pub static META_RES_STATUS: &[u8]      = b"response-status";
-
-/// Meta `HeaderName` for a list of content or transfer encodings decoded for
-/// the current response body. The value is in HTTP content-encoding header
-/// format, e.g. "chunked, gzip".
-pub static META_RES_DECODED: &[u8]     = b"response-decoded";
 
 /// A collection of size limits and performance tuning constants. Setters are
 /// available via the `Tuner` class.
