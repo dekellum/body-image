@@ -7,6 +7,12 @@ use http;
 pub(crate) fn record(url: &str, barc_path: &str, strategy: &CompressStrategy)
     -> Result<(), Flare>
 {
+    let encodings = if cfg!(feature = "brotli") {
+        "br, gzip, deflate"
+    } else {
+        "gzip, deflate"
+    };
+
     let req = http::Request::builder()
         .method(http::Method::GET)
         .header(http::header::ACCEPT,
@@ -14,7 +20,7 @@ pub(crate) fn record(url: &str, barc_path: &str, strategy: &CompressStrategy)
                  application/xml;q=0.9, \
                  */*;q=0.8" )
         .header(http::header::ACCEPT_LANGUAGE, "en")
-        .header(http::header::ACCEPT_ENCODING, "br, gzip, deflate")
+        .header(http::header::ACCEPT_ENCODING, encodings)
         .header(http::header::USER_AGENT,
                 "Mozilla/5.0 \
                  (compatible; body-image 0.1.0; \
