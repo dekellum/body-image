@@ -266,7 +266,7 @@ impl Compression {
     fn flag(self) -> char {
         match self {
             Compression::Plain   => 'P',
-            Compression::Gzip    => 'G',
+            Compression::Gzip    => 'Z',
             Compression::Brotli  => 'B',
         }
     }
@@ -275,7 +275,7 @@ impl Compression {
     fn try_from(f: u8) -> Result<Self, BarcError> {
         match f {
             b'P' => Ok(Compression::Plain),
-            b'G' => Ok(Compression::Gzip),
+            b'Z' => Ok(Compression::Gzip),
             b'B' => Ok(Compression::Brotli),
             _ => Err(BarcError::UnknownCompression(f))
         }
