@@ -10,11 +10,12 @@ use std::process;
 use clap::{Arg, App, AppSettings, SubCommand};
 use failure::Error as Flare;
 
+#[cfg(feature = "client")]
 use body_image::barc::{CompressStrategy,
                        NoCompressStrategy,
                        GzipCompressStrategy};
 
-#[cfg(feature = "brotli")]
+#[cfg(feature = "client, brotli")]
 use body_image::barc::BrotliCompressStrategy;
 
 #[cfg(feature = "client")]
