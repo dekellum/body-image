@@ -1,9 +1,11 @@
-extern crate body_image;
+             extern crate body_image;
 #[macro_use] extern crate clap;
 #[macro_use] extern crate failure;
-extern crate fern;
-extern crate http;
+             extern crate fern;
+             extern crate http;
 #[macro_use] extern crate log;
+
+#[cfg(feature = "client")] mod record;
 
 use std::process;
 
@@ -15,11 +17,8 @@ use body_image::barc::{CompressStrategy,
                        NoCompressStrategy,
                        GzipCompressStrategy};
 
-#[cfg(feature = "client, brotli")]
+#[cfg(all(feature = "client", feature = "brotli"))]
 use body_image::barc::BrotliCompressStrategy;
-
-#[cfg(feature = "client")]
-mod record;
 
 fn main() {
     let r = run();

@@ -1,23 +1,27 @@
 //! HTTP client integration and utilities.
 
+extern crate futures;
+extern crate hyper;
+extern crate hyper_tls;
+extern crate tokio_core;
+
 #[cfg(feature = "brotli")]
 use brotli;
+
+use bytes::Bytes;
 
 /// Convenient and non-repetitive alias
 /// Also: "a sudden brief burst of bright flame or light."
 use failure::Error as Flare;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
-use bytes::Bytes;
-use futures::future;
-use futures::{Future, Stream};
+use self::futures::{future, Future, Stream};
 use http;
-use hyper;
-use hyper::Client;
-use hyper::client::compat::CompatFutureResponse;
-use hyper::header::{ContentEncoding, ContentLength, Encoding, Header, Raw};
-use hyper_tls;
-use tokio_core::reactor::Core;
+use self::hyper::Client;
+use self::hyper::client::compat::CompatFutureResponse;
+use self::hyper::header::{ContentEncoding, ContentLength, Encoding,
+                          Header, Raw};
+use self::tokio_core::reactor::Core;
 
 use {BodyImage, BodySink,
      Prolog, Dialog, RequestRecorded, Tunables,

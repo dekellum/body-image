@@ -1,21 +1,17 @@
 #![feature(external_doc)]
 #![doc(include = "../README.md")]
 
-extern crate bytes;
-#[macro_use] extern crate failure;
-extern crate futures;
-extern crate http;
-extern crate httparse;
-#[cfg(feature = "client")] extern crate hyper;
-#[cfg(feature = "client")] extern crate hyper_tls;
-#[macro_use] extern crate log;
-extern crate memmap;
-extern crate tempfile;
-extern crate tokio_core;
 #[cfg(feature = "brotli")] extern crate brotli;
-extern crate flate2;
+                           extern crate bytes;
+#[macro_use]               extern crate failure;
+                           extern crate flate2;
+                           extern crate http;
+                           extern crate httparse;
+#[macro_use]               extern crate log;
+                           extern crate memmap;
+                           extern crate tempfile;
 
-pub mod barc;
+                           pub mod barc;
 #[cfg(feature = "client")] pub mod client;
 
 use std::env;
