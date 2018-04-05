@@ -1,10 +1,12 @@
 use failure::Error as Flare;
 use body_image::Tunables;
-use body_image::barc::{BarcFile, NoCompressStrategy};
+use body_image::barc::{BarcFile, CompressStrategy};
 use body_image::client::{decode_res_body, fetch, RequestRecordable};
 use http;
 
-pub(crate) fn record(url: &str, barc_path: &str) -> Result<(), Flare> {
+pub(crate) fn record(url: &str, barc_path: &str, strategy: &CompressStrategy)
+    -> Result<(), Flare>
+{
     let req = http::Request::builder()
         .method(http::Method::GET)
         .header(http::header::ACCEPT,
@@ -28,6 +30,6 @@ pub(crate) fn record(url: &str, barc_path: &str) -> Result<(), Flare> {
 
     let bfile = BarcFile::new(barc_path);
     let mut bw = bfile.writer()?;
-    bw.write(&dl, &NoCompressStrategy::default())?;
+    bw.write(&dl, strategy)?;
     Ok(())
 }

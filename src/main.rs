@@ -10,6 +10,13 @@ use std::process;
 use clap::{Arg, App, AppSettings, SubCommand};
 use failure::Error as Flare;
 
+use body_image::barc::{CompressStrategy,
+                       NoCompressStrategy,
+                       GzipCompressStrategy};
+
+#[cfg(feature = "brotli")]
+use body_image::barc::BrotliCompressStrategy;
+
 #[cfg(feature = "client")]
 mod record;
 
@@ -32,8 +39,21 @@ fn run() -> Result<(), Flare> {
         #[cfg(feature = "client")]
         "record" => {
             let sm = m.subcommand_matches("record").unwrap();
+            let mut cs: Box<CompressStrategy> =
+                Box::new(NoCompressStrategy::default());
+            match sm.is_present("brotli") {
+                #[cfg(feature = "brotli")]
+                true => {
+                    cs = Box::new(BrotliCompressStrategy::default());
+                }
+                _ => {}
+            }
+            if sm.is_present("gzip") {
+                cs = Box::new(GzipCompressStrategy::default());
+            }
             record::record(sm.value_of("url").unwrap(),
-                           sm.value_of("file").unwrap())
+                           sm.value_of("file").unwrap(),
+                           cs.as_ref())
         }
         #[cfg(not(feature = "client"))]
         "record" => {
@@ -62,11 +82,20 @@ fn setup_cli() -> App<'static, 'static> {
         "Record an HTTP dialog via network (included)"
     } else {
         "Record an HTTP dialog via network \
-         (NOT BUILT, lacks \"client\" feature)"
+         (not built, needs \"client\" feature)"
     };
     let rec = SubCommand::with_name("record")
         .about(rec_about)
         .args(&[
+            Arg::with_name("gzip")
+                .short("z")
+                .long("gzip")
+                .help("Use gzip compression strategy"),
+            Arg::with_name("brotli")
+                .short("b")
+                .long("brotli")
+                .conflicts_with("gzip")
+                .help("Use Brotli compression strategy (brotli feature)"),
             Arg::with_name("url")
                 .required(true)
                 .index(1)
