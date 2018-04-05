@@ -8,7 +8,7 @@ brotli     = { version = ">=1.2.0, <2", optional = true }
 bytes      = ">=0.4.6, <2"
 clap       = { version = ">=2.31.2, <3", default-features = false,  features = ["color", "wrap_help"] }
 failure    = ">=0.1.0, <2"
-fern       = { version = ">=0.5.5, <2", optional = true }
+fern       = ">=0.5.5, <2"
 flate2     = ">=1.0.1, <2"
 futures    = ">=0.1.18, <2"
 http       = ">=0.1.4, <2"
@@ -21,7 +21,7 @@ tempfile   = ">=2.2.0, <3"
 tokio-core = ">=0.1.12, <2"
 
 [features]
-default = ["fern", "brotli"]
+default = ["brotli"]
 client = ["hyper", "hyper-tls"]
 
 [lib]
