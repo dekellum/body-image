@@ -25,6 +25,9 @@ use bytes::{Bytes, BytesMut, BufMut};
 use memmap::Mmap;
 use tempfile::tempfile_in;
 
+/// The crate version string.
+pub static VERSION: &str               = env!("CARGO_PKG_VERSION");
+
 /// Meta `HeaderName` for the complete URL used in the request.
 pub static META_URL: &[u8]             = b"url";
 
