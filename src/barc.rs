@@ -626,7 +626,7 @@ fn write_record_head(out: &mut Write, head: &RecordHead)
 }
 
 // Write header block to out, returning the length written.
-fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
+pub fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
     -> Result<usize, BarcError>
 {
     let mut size = 0;
@@ -644,7 +644,7 @@ fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
 }
 
 // Write a body to out, returning the length written.
-fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
+pub fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
     -> Result<u64, BarcError>
 {
     let mut size = body.write_to(out)?;
