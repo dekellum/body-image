@@ -182,17 +182,22 @@ fn cat(barc_path: &str, start: &StartPos, count: usize, parts: &Parts)
     }
     let fout = &mut io::stdout();
     let mut i = 0;
+    let mut offset = reader.offset();
     while let Some(record) = reader.read(&tune)? {
         if let StartPos::Index(s) = *start {
             if i < s { i += 1; continue; }
         }
         i += 1;
         if i > count { break; }
+        println!("====== file {:-<38} offset {:#012x} ======",
+                 barc_path, offset);
         if parts.meta        { write_headers(fout, true, record.meta())?; }
         if parts.req_headers { write_headers(fout, true, record.req_headers())?; }
         if parts.req_body    { write_body   (fout, true, record.req_body())?; }
         if parts.res_headers { write_headers(fout, true, record.res_headers())?; }
         if parts.res_body    { write_body   (fout, true, record.res_body())?; }
+
+        offset = reader.offset();
     }
 
     Ok(())

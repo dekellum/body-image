@@ -59,7 +59,8 @@ pub struct BarcWriter<'a> {
 /// BARC file handle for read access. Each reader has its own file handle
 /// and position.
 pub struct BarcReader {
-    file: File
+    file: File,
+    offset: u64
 }
 
 /// Error enumeration for all barc module errors.  This may be extended in the
@@ -516,7 +517,7 @@ impl BarcFile {
             .read(true)
             .open(&self.path)?;
         // FIXME: Use fs2 crate for: file.try_lock_shared()?
-        Ok(BarcReader { file })
+        Ok(BarcReader { file, offset: 0 })
     }
 }
 
@@ -625,7 +626,9 @@ fn write_record_head(out: &mut Write, head: &RecordHead)
     Ok(())
 }
 
-// Write header block to out, returning the length written.
+/// Write header block to out, with optional CR+LF end padding, and return the
+/// length written. This is primarily an implementation detail of `BarcWriter`,
+/// but is made public for its general diagnostic utility.
 pub fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
     -> Result<usize, BarcError>
 {
@@ -643,7 +646,9 @@ pub fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap
     Ok(size)
 }
 
-// Write a body to out, returning the length written.
+/// Write body to out, with optional CR+LF end padding, and return the length
+/// written.  This is primarily an implementation detail of `BarcWriter`, but
+/// is made public for its general diagnostic utility.
 pub fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
     -> Result<u64, BarcError>
 {
@@ -671,9 +676,6 @@ impl BarcReader {
     {
         let fin = &mut self.file;
 
-        // Record start position in case we need to rewind
-        let start = fin.seek(SeekFrom::Current(0))?;
-
         let rhead = match read_record_head(fin) {
             Ok(Some(rh)) => rh,
             Ok(None) => return Ok(None),
@@ -687,12 +689,13 @@ impl BarcReader {
         // partial record payload.  In this case, seek back to start
         // and return None.
         if rec_type == RecordType::Reserved {
-            fin.seek(SeekFrom::Start(start))?;
+            fin.seek(SeekFrom::Start(self.offset))?;
             return Ok(None);
         }
 
         if rhead.compress != Compression::Plain {
             let rec = read_compressed(fin, &rhead, tune)?;
+            self.offset = fin.seek(SeekFrom::Current(0))?;
             return Ok(Some(rec))
         }
 
@@ -704,7 +707,7 @@ impl BarcReader {
         let req_body = if rhead.req_b <= tune.max_body_ram() {
             read_body_ram(fin, WITH_CRLF, rhead.req_b as usize)
         } else {
-            let offset = start + (V2_HEAD_SIZE as u64) + total;
+            let offset = self.offset + (V2_HEAD_SIZE as u64) + total;
             map_body(fin, offset, rhead.req_b)
         }?;
 
@@ -716,20 +719,29 @@ impl BarcReader {
         let res_body = if body_len <= tune.max_body_ram() {
             read_body_ram(fin, WITH_CRLF, body_len as usize)
         } else {
-            let offset = start + (V2_HEAD_SIZE as u64) + total;
+            let offset = self.offset + (V2_HEAD_SIZE as u64) + total;
             map_body(fin, offset, body_len)
         }?;
+
+        self.offset = fin.seek(SeekFrom::Current(0))?;
 
         Ok(Some(Record { rec_type, meta, req_headers, req_body,
                          res_headers, res_body }))
     }
 
-    /// Seek to a known offset (e.g. 0 or returned from
-    /// `BarcWriter::write` for a specific record) from the start of
-    /// the BARC file. This effects subsequent calls to `read`, which
-    /// may error if the position is not to a valid record head.
+    /// Returns the current offset in bytes of this reader, which starts as 0
+    /// and is advanced by each succesful return from `read` or updated via
+    /// `seek`.
+    pub fn offset(&self) -> u64 {
+        self.offset
+    }
+
+    /// Seek to a known byte offset (e.g. 0 or as returned from
+    /// `BarcWriter::write` or `offset`) from the start of the BARC file. This
+    /// effects subsequent calls to `read`, which may error if the position is
+    /// not to a valid record head.
     pub fn seek(&mut self, offset: u64) -> Result<(), BarcError> {
-        self.file.seek(SeekFrom::Start(offset))?;
+        self.offset = self.file.seek(SeekFrom::Start(offset))?;
         Ok(())
     }
 }
