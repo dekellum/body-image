@@ -6,7 +6,7 @@ authors = ["David Kellum <dek-oss@gravitext.com>"]
 [dependencies]
 brotli     = { version = ">=1.2.0, <2", optional = true }
 bytes      = ">=0.4.6, <2"
-clap       = { version = ">=2.31.2, <3", optional = true, default-features = false, features = ["color", "wrap_help"] }
+clap       = { version = ">=2.31.2, <3", optional = true, default-features = false, features = ["wrap_help"] }
 failure    = ">=0.1.0, <2"
 fern       = { version = ">=0.5.5, <2", optional = true }
 flate2     = ">=1.0.1, <2"
