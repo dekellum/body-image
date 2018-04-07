@@ -126,7 +126,11 @@ fn filter_flags(matches: &ArgMatches) -> Result<(StartPos, usize), Flare> {
             bail!("--offset flag can't be applied to more than one \
                    input file");
         }
-        let v = v.parse()?;
+        let v = if v.starts_with("0x") {
+            u64::from_str_radix(&v[2..], 16)?
+        } else {
+            v.parse()?
+        };
         start = StartPos::Offset(v);
     }
     if let Some(v) = matches.value_of("count") {
@@ -236,20 +240,9 @@ fn cp(barc_in: &str,
 }
 
 fn setup_cli() -> App<'static, 'static> {
-    let appl = App::new("barc")
-        .version(crate_version!())
-        .about("Tool for BARC file recording and manipulation")
-        .setting(AppSettings::SubcommandRequired)
-        .setting(AppSettings::DeriveDisplayOrder)
-        .arg(Arg::with_name("debug")
-             .short("d")
-             .long("debug")
-             .multiple(true)
-             .help("enable additional logging (may repeat for more)")
-             .global(true) );
-
     let rec_about = if cfg!(feature = "client") {
-        "Record an HTTP dialog via network (included)"
+        "Record an HTTP dialog via network \
+         (feature included)"
     } else {
         "Record an HTTP dialog via network \
          (not built, needs \"client\" feature)"
@@ -271,12 +264,12 @@ fn setup_cli() -> App<'static, 'static> {
                 .required(true)
                 .index(1)
                 .value_name("URL")
-                .help("the (http://) URL to fetch"),
+                .help("The (http://…) URL to fetch"),
             Arg::with_name("file")
                 .required(true)
                 .index(2)
                 .value_name("BARC-OUT-FILE")
-                .help("path to BARC file to create/append"),
+                .help("Path to BARC file to create/append"),
         ]);
 
     let cat = SubCommand::with_name("cat")
@@ -293,18 +286,19 @@ fn setup_cli() -> App<'static, 'static> {
                 .short("o")
                 .long("offset")
                 .number_of_values(1)
-                .help("Offset in bytes to first input record"),
+                .help("Offset in bytes to first input record \
+                       (prefix with \"0x\" for hex)"),
             Arg::with_name("index")
                 .short("i")
                 .long("index")
                 .number_of_values(1)
-                .conflicts_with("start-offset")
-                .help("Zero based index to first input record (Default: 0)"),
+                .conflicts_with("offset")
+                .help("Zero-based index to first input record (default: 0)"),
             Arg::with_name("count")
                 .short("c")
                 .long("count")
                 .number_of_values(1)
-                .help("Count of records to print (Default: all until EOF)"),
+                .help("Count of records to print (default: all until EOF)"),
             Arg::with_name("meta")
                 .long("meta")
                 .alias("meta-head")
@@ -325,7 +319,7 @@ fn setup_cli() -> App<'static, 'static> {
                 .required(true)
                 .multiple(true)
                 .value_name("BARC-FILE")
-                .help("BARC file paths from which to read")
+                .help("BARC file path(s) from which to read")
         ]);
 
     let cp = SubCommand::with_name("cp")
@@ -346,13 +340,13 @@ fn setup_cli() -> App<'static, 'static> {
                 .short("i")
                 .long("index")
                 .number_of_values(1)
-                .conflicts_with("start-offset")
-                .help("Zero based index to first input record (Default: 0)"),
+                .conflicts_with("offset")
+                .help("Zero based index to first input record (default: 0)"),
             Arg::with_name("count")
                 .short("c")
                 .long("count")
                 .number_of_values(1)
-                .help("Count of records to print (Default: all until EOF)"),
+                .help("Count of records to print (default: all until EOF)"),
             Arg::with_name("gzip")
                 .short("z")
                 .long("gzip")
@@ -366,14 +360,26 @@ fn setup_cli() -> App<'static, 'static> {
                 .required(true)
                 .multiple(true)
                 .value_name("BARC-IN-FILE")
-                .help("BARC file paths from which to read and final to write"),
+                .help("BARC file path(s) from which to read"),
             Arg::with_name("out-file")
                 .required(true)
                 .value_name("BARC-OUT-FILE")
                 .help("BARC file path to create/append")
         ]);
 
-    appl.subcommand(cat)
+    App::new("barc")
+        .version(crate_version!())
+        .about("Tool for BARC file recording and manipulation")
+        .setting(AppSettings::SubcommandRequired)
+        .setting(AppSettings::DeriveDisplayOrder)
+        .max_term_width(100)
+        .arg(Arg::with_name("debug")
+             .short("d")
+             .long("debug")
+             .multiple(true)
+             .help("Enable additional logging (may repeat for more)")
+             .global(true))
+        .subcommand(cat)
         .subcommand(cp)
         .subcommand(rec)
 }
