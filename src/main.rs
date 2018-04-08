@@ -408,8 +408,8 @@ fn setup_logger(debug_flags: u64) -> Result<(), Flare> {
         .format(|out, message, record| {
             out.finish(format_args!(
                 "{} {}: {}",
-                record.target(),
                 record.level(),
+                record.target(),
                 message
             ))
         });
