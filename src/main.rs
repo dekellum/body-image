@@ -175,6 +175,7 @@ impl Default for Parts {
     }
 }
 
+// The `cat` command implementation.
 fn cat(barc_path: &str, start: &StartPos, count: usize, parts: &Parts)
     -> Result<(), Flare>
 {
@@ -207,6 +208,7 @@ fn cat(barc_path: &str, start: &StartPos, count: usize, parts: &Parts)
     Ok(())
 }
 
+// The `cp` command implementation.
 fn cp(barc_in: &str,
       barc_out: &str,
       start: &StartPos,
@@ -239,17 +241,28 @@ fn cp(barc_in: &str,
     Ok(())
 }
 
-fn setup_cli() -> App<'static, 'static> {
+fn setup_cli<'a, 'b>() -> App<'a, 'b>
+    where 'a: 'b
+{
     let rec_about = if cfg!(feature = "client") {
-        "Record an HTTP dialog via network \
+        "Record an HTTP dialog via the network \
          (feature included)"
     } else {
-        "Record an HTTP dialog via network \
-         (not built, needs \"client\" feature)"
+        "Record an HTTP dialog via the network \
+         (feature not included)"
     };
+
     let rec = SubCommand::with_name("record")
         .setting(AppSettings::DeriveDisplayOrder)
         .about(rec_about)
+        .after_help(
+            "This command depends on the non-default \"client\" feature at \
+             build time.\n\
+             \n\
+             Currently `record` is limited to GET requests using a \
+             browser-like (HTML preferring) Accept header.  The flags (--gzip, \
+             --brotli) control output compression. By default, no compression \
+             is used.")
         .args(&[
             Arg::with_name("gzip")
                 .short("z")
@@ -264,7 +277,7 @@ fn setup_cli() -> App<'static, 'static> {
                 .required(true)
                 .index(1)
                 .value_name("URL")
-                .help("The (http://…) URL to fetch"),
+                .help("The http(s)://... URL to fetch"),
             Arg::with_name("file")
                 .required(true)
                 .index(2)
@@ -276,11 +289,16 @@ fn setup_cli() -> App<'static, 'static> {
         .setting(AppSettings::DeriveDisplayOrder)
         .about("Print BARC records to standard output")
         .after_help(
-            "By default prints all records and all fields within each record \
-             from the given BARC File(s). The output flags \
-             (--meta, --req-body, etc.) can be used to select specific \
-             fields. The flags (--offset, --index, --count) can be used to \
-             filter a single input file.")
+            "By default, prints all fields of all records in the given BARC \
+             file(s). Records are decompressed as needed. Instead of the \
+             machine readable BARC record head, an informational separator \
+             line is printed at the begining of each record, including the \
+             file name and offset of the record in hexadecimal. Use the `cp` \
+             command instead to output BARC formatted records to a file.\n\
+             \n\
+             The output flags (--meta, --req-body, etc.) can be used to \
+             select specific fields. The flags (--offset, --index, --count) \
+             can be used to filter a single input file.")
         .args(&[
             Arg::with_name("offset")
                 .short("o")
@@ -327,9 +345,10 @@ fn setup_cli() -> App<'static, 'static> {
         .setting(AppSettings::DontDelimitTrailingValues)
         .about("Copy BARC records from input(s) to an output file")
         .after_help(
-            "By default copies all records from input file(s) to the output \
-             file. The flags (--offset, --index, --count) can be used to \
-             filter a single input file.")
+            "By default, copies all records from the input file(s) and appends \
+             to the output file. The flags (--offset, --index, --count) can be \
+             used to filter a single input file. The flags (--gzip, --brotli) \
+             control output compression. By default, no compression is used.")
         .args(&[
             Arg::with_name("offset")
                 .short("o")
@@ -377,7 +396,7 @@ fn setup_cli() -> App<'static, 'static> {
              .short("d")
              .long("debug")
              .multiple(true)
-             .help("Enable additional logging (may repeat for more)")
+             .help("Enable more logging, and up to `-ddd`")
              .global(true))
         .subcommand(cat)
         .subcommand(cp)

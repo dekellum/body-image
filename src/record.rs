@@ -6,6 +6,7 @@ use body_image::client::{ACCEPT_ENCODINGS, BROWSE_ACCEPT,
                          user_agent, RequestRecordable};
 use http;
 
+/// The `record` command implementation.
 pub(crate) fn record(url: &str, barc_path: &str, strategy: &CompressStrategy)
     -> Result<(), Flare>
 {
