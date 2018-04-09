@@ -30,7 +30,8 @@ fn main() {
 }
 
 fn run() -> Result<(), Flare> {
-    let m = setup_cli().get_matches();
+    let var_help = VarHelp::default();
+    let m = setup_cli(&var_help).get_matches();
 
     setup_logger(m.occurrences_of("debug"))?;
     let scname = m.subcommand_name().unwrap(); // required
@@ -109,8 +110,9 @@ fn compress_flags(matches: &ArgMatches) -> Result<Box<CompressStrategy>, Flare>
     Ok(cs)
 }
 
-// Parse filter flags into a (StartPos, count) tupple, or error.
-fn filter_flags(matches: &ArgMatches) -> Result<(StartPos, usize), Flare> {
+// Parse filter flags and return (StartPos, count) or error.
+fn filter_flags(matches: &ArgMatches) -> Result<(StartPos, usize), Flare>
+{
     let files_len = matches.values_of("file").unwrap().len();
     let mut start = StartPos::default();
     let mut count = usize::max_value();
@@ -242,28 +244,43 @@ fn cp(barc_in: &str,
     Ok(())
 }
 
-fn setup_cli<'a, 'b>() -> App<'a, 'b>
-    where 'a: 'b
-{
-    let rec_about = if cfg!(feature = "client") {
-        "Record an HTTP dialog via the network \
-         (feature included)"
-    } else {
-        "Record an HTTP dialog via the network \
-         (feature not included)"
-    };
+// Container for dynamically generated help text, to appease Clap's str
+// reference help text lifetimes.
+struct VarHelp {
+    record_about: String,
+    record_after: String
+}
 
-    let rec = SubCommand::with_name("record")
-        .setting(AppSettings::DeriveDisplayOrder)
-        .about(rec_about)
-        .after_help(
+impl Default for VarHelp {
+    fn default() -> VarHelp {
+        let feature = if cfg!(feature = "client") {
+            "included"
+        } else {
+            "not included"
+        };
+        let record_about = format!(
+            "Record an HTTP dialog via the network ({})",
+            feature);
+        let record_after = format!(
             "This command depends on the non-default \"client\" feature at \
-             build time.\n\
+             build time, which was {}.\n\
              \n\
              Currently `record` is limited to GET requests using a \
-             browser-like (HTML preferring) Accept header.  The flags (--gzip, \
-             --brotli) control output compression. By default, no compression \
-             is used.")
+             browser-like User-Agent and (HTML preferring) Accept header. The \
+             flags (--gzip, --brotli) control output compression. By default, \
+             no compression is used.",
+            feature);
+        VarHelp { record_about, record_after }
+    }
+}
+
+fn setup_cli<'a, 'b>(var_help: &'a VarHelp) -> App<'a, 'b>
+    where 'a: 'b
+{
+    let rec = SubCommand::with_name("record")
+        .setting(AppSettings::DeriveDisplayOrder)
+        .about(var_help.record_about.as_str())
+        .after_help(var_help.record_after.as_str())
         .args(&[
             Arg::with_name("gzip")
                 .short("z")
