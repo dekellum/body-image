@@ -318,8 +318,8 @@ fn setup_cli<'a, 'b>(var_help: &'a VarHelp) -> App<'a, 'b>
              command instead to output BARC formatted records to a file.\n\
              \n\
              The output flags (--meta, --req-body, etc.) can be used to \
-             select specific fields. The flags (--offset, --index, --count) \
-             can be used to filter a single input file.")
+             select specific fields. The options (--offset, --index, --count) \
+             can be used to select record(s) from a single input file.")
         .args(&[
             Arg::with_name("offset")
                 .short("o")
@@ -367,9 +367,10 @@ fn setup_cli<'a, 'b>(var_help: &'a VarHelp) -> App<'a, 'b>
         .about("Copy BARC records from input(s) to an output file")
         .after_help(
             "By default, copies all records from the input file(s) and appends \
-             to the output file. The flags (--offset, --index, --count) can be \
-             used to filter a single input file. The flags (--gzip, --brotli) \
-             control output compression. By default, no compression is used.")
+             to the output file. The options (--offset, --index, --count) can \
+             be used to select record(s) from a single input file. The flags \
+             (--gzip, --brotli) control output compression. By default, no \
+             compression is used.")
         .args(&[
             Arg::with_name("offset")
                 .short("o")
