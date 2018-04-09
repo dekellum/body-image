@@ -30,8 +30,8 @@ use memmap::Mmap;
 use tempfile::tempfile_in;
 
 /// Error enumeration for `BodyImage` and `BodySink` types.  This may be
-/// extended in the future, so exhaustive matching is discouraged with a
-/// hidden, unused variant.
+/// extended in the future so exhaustive matching is gently discouraged with
+/// an unused variant.
 #[derive(Fail, Debug)]
 pub enum BodyError {
     /// Error for when `Tunables::max_body` length is exceeded.
@@ -44,9 +44,10 @@ pub enum BodyError {
     #[fail(display = "{}", _0)]
     Io(#[cause] io::Error),
 
-    #[doc(hidden)]
+    /// Unused variant to both enable non-exhaustive matching and warn against
+    /// exhaustive matching.
     #[fail(display = "The future!")]
-    __FutureProof76,
+    _FutureProof,
 }
 
 impl From<io::Error> for BodyError {

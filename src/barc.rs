@@ -63,7 +63,7 @@ pub struct BarcReader {
 }
 
 /// Error enumeration for all barc module errors.  This may be extended in the
-/// future, so exhaustive matching is discouraged with a hidden, unused
+/// future, so exhaustive matching is gently discouraged with an unused
 /// variant.
 #[derive(Debug)]
 pub enum BarcError {
@@ -94,8 +94,9 @@ pub enum BarcError {
     /// Error reading and parsing header name, value or block (with cause)
     ReadInvalidHeader(Flare),
 
-    #[doc(hidden)]
-    __FutureProof94,
+    /// Unused variant to both enable non-exhaustive matching and warn against
+    /// exhaustive matching.
+    _FutureProof,
 }
 
 impl fmt::Display for BarcError {
@@ -119,7 +120,7 @@ impl fmt::Display for BarcError {
                 write!(f, "Invalid record head hex digit [{}]", b),
             BarcError::ReadInvalidHeader(ref flare) =>
                 write!(f, "Invalid header; {}", flare),
-            BarcError::__FutureProof94 => unreachable!()
+            BarcError::_FutureProof => unreachable!()
         }
     }
 }
