@@ -79,15 +79,15 @@ fn run() -> Result<(), Flare> {
 fn part_flags(matches: &ArgMatches) -> Parts {
     let mut parts = Parts::default();
     if  matches.is_present("meta") ||
-        matches.is_present("req_headers") || matches.is_present("req_body") ||
-        matches.is_present("res_headers") || matches.is_present("res_body")
+        matches.is_present("req_head") || matches.is_present("req_body") ||
+        matches.is_present("res_head") || matches.is_present("res_body")
     {
         parts = Parts::falsie();
-        if matches.is_present("meta")        { parts.meta        = true; }
-        if matches.is_present("req_headers") { parts.req_headers = true; }
-        if matches.is_present("req_body")    { parts.req_body    = true; }
-        if matches.is_present("res_headers") { parts.res_headers = true; }
-        if matches.is_present("res_body")    { parts.res_body    = true; }
+        if matches.is_present("meta")     { parts.meta     = true; }
+        if matches.is_present("req_head") { parts.req_head = true; }
+        if matches.is_present("req_body") { parts.req_body = true; }
+        if matches.is_present("res_head") { parts.res_head = true; }
+        if matches.is_present("res_body") { parts.res_body = true; }
     }
     parts
 }
@@ -104,6 +104,7 @@ fn compress_flags(matches: &ArgMatches) -> Result<Box<CompressStrategy>, Flare>
             bail!("Brotli compression requires the \"broli\" build feature");
         }
     }
+    // brotli/gzip are exclusive (conflicts_with)
     if matches.is_present("gzip") {
         cs = Box::new(GzipCompressStrategy::default());
     }
@@ -124,6 +125,7 @@ fn filter_flags(matches: &ArgMatches) -> Result<(StartPos, usize), Flare>
         let v = v.parse()?;
         start = StartPos::Index(v);
     }
+    // index/offset are exclusive (conflicts_with)
     if let Some(v) = matches.value_of("offset") {
         if files_len > 1 {
             bail!("--offset flag can't be applied to more than one \
@@ -156,25 +158,25 @@ impl Default for StartPos {
 
 struct Parts {
     meta: bool,
-    req_headers: bool,
+    req_head: bool,
     req_body: bool,
-    res_headers: bool,
+    res_head: bool,
     res_body: bool,
 }
 
 impl Parts {
     fn falsie() -> Parts {
         Parts { meta: false,
-                req_headers: false, req_body: false,
-                res_headers: false, res_body: false }
+                req_head: false, req_body: false,
+                res_head: false, res_body: false }
     }
 }
 
 impl Default for Parts {
     fn default() -> Parts {
         Parts { meta: true,
-                req_headers: true, req_body: true,
-                res_headers: true, res_body: true }
+                req_head: true, req_body: true,
+                res_head: true, res_body: true }
     }
 }
 
@@ -189,9 +191,10 @@ fn cat(barc_path: &str, start: &StartPos, count: usize, parts: &Parts)
         reader.seek(o)?;
     }
     let fout = &mut io::stdout();
+    let nl = true;
     let mut i = 0;
     let mut offset = reader.offset();
-    while let Some(record) = reader.read(&tune)? {
+    while let Some(rec) = reader.read(&tune)? {
         if let StartPos::Index(s) = *start {
             if i < s { i += 1; continue; }
         }
@@ -199,11 +202,11 @@ fn cat(barc_path: &str, start: &StartPos, count: usize, parts: &Parts)
         if i > count { break; }
         println!("====== file {:-<38} offset {:#012x} ======",
                  barc_path, offset);
-        if parts.meta        { write_headers(fout, true, record.meta())?; }
-        if parts.req_headers { write_headers(fout, true, record.req_headers())?; }
-        if parts.req_body    { write_body   (fout, true, record.req_body())?; }
-        if parts.res_headers { write_headers(fout, true, record.res_headers())?; }
-        if parts.res_body    { write_body   (fout, true, record.res_body())?; }
+        if parts.meta     { write_headers(fout, nl, rec.meta())?; }
+        if parts.req_head { write_headers(fout, nl, rec.req_headers())?; }
+        if parts.req_body { write_body   (fout, nl, rec.req_body())?; }
+        if parts.res_head { write_headers(fout, nl, rec.res_headers())?; }
+        if parts.res_body { write_body   (fout, nl, rec.res_body())?; }
 
         offset = reader.offset();
     }
@@ -339,13 +342,13 @@ fn setup_cli<'a, 'b>(var_help: &'a VarHelp) -> App<'a, 'b>
                 .long("meta")
                 .alias("meta-head")
                 .help("Output meta headers"),
-            Arg::with_name("req_headers")
+            Arg::with_name("req_head")
                 .long("req-head")
                 .help("Output request headers"),
             Arg::with_name("req_body")
                 .long("req-body")
                 .help("Output request bodies"),
-            Arg::with_name("res_headers")
+            Arg::with_name("res_head")
                 .long("res-head")
                 .help("Output response headers"),
             Arg::with_name("res_body")
@@ -437,15 +440,14 @@ fn setup_logger(debug_flags: u64) -> Result<(), Flare> {
         disp.level(log::LevelFilter::Debug)
     };
 
-    disp = if debug_flags < 2 {
+    if debug_flags < 2 {
         // These are only for record/client deps, but are harmless if not
         // loaded.
-        disp.level_for("hyper::proto",  log::LevelFilter::Info)
+        disp = disp
+            .level_for("hyper::proto",  log::LevelFilter::Info)
             .level_for("tokio_core",    log::LevelFilter::Info)
-            .level_for("tokio_reactor", log::LevelFilter::Info)
-    } else {
-        disp
-    };
+            .level_for("tokio_reactor", log::LevelFilter::Info);
+    }
 
     disp.chain(std::io::stderr())
         .apply()
