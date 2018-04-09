@@ -62,6 +62,8 @@ fn run() -> Result<(), Flare> {
             let cs = compress_flags(subm)?;
             record::record(subm.value_of("url").unwrap(),
                            subm.value_of("file").unwrap(),
+                           !subm.is_present("no_decode"),
+                           subm.value_of("accept"),
                            cs.as_ref())
         }
         #[cfg(not(feature = "client"))]
@@ -268,10 +270,10 @@ impl Default for VarHelp {
             "This command depends on the non-default \"client\" feature at \
              build time, which was {}.\n\
              \n\
-             Currently `record` is limited to GET requests using a \
-             browser-like User-Agent and (HTML preferring) Accept header. The \
-             flags (--gzip, --brotli) control output compression. By default, \
-             no compression is used.",
+             Currently `record` is limited to GET requests.  The browser-like \
+             (HTML preferring) Accept header default can be overridden by the \
+             --accept option. The flags (--gzip, --brotli) control output \
+             compression. By default, no compression is used.",
             feature);
         VarHelp { record_about, record_after }
     }
@@ -294,6 +296,14 @@ fn setup_cli<'a, 'b>(var_help: &'a VarHelp) -> App<'a, 'b>
                 .long("brotli")
                 .conflicts_with("gzip")
                 .help("Use Brotli compression strategy (brotli feature)"),
+            Arg::with_name("no_decode")
+                .long("no-decode")
+                .help("Don't attempt to decode any \
+                       Content or Transfer-Encoding"),
+            Arg::with_name("accept")
+                .long("accept")
+                .number_of_values(1)
+                .help("Set request Accept header value, e.g. \"*/*\""),
             Arg::with_name("url")
                 .required(true)
                 .index(1)
