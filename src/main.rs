@@ -96,9 +96,10 @@ fn compress_flags(matches: &ArgMatches) -> Result<Box<CompressStrategy>, Flare>
 {
     let mut cs: Box<CompressStrategy> = Box::new(NoCompressStrategy::default());
     if matches.is_present("brotli") {
-        if cfg!(feature = "brotli") {
+        #[cfg(feature = "brotli")] {
             cs = Box::new(BrotliCompressStrategy::default());
-        } else {
+        }
+        #[cfg(not(feature = "brotli"))] {
             bail!("Brotli compression requires the \"broli\" build feature");
         }
     }
