@@ -1,31 +1,52 @@
 //! HTTP client integration and utilities.
 
+extern crate futures;
+extern crate hyper;
+extern crate hyper_tls;
+extern crate tokio_core;
+
 #[cfg(feature = "brotli")]
 use brotli;
+
+use bytes::Bytes;
 
 /// Convenient and non-repetitive alias
 /// Also: "a sudden brief burst of bright flame or light."
 use failure::Error as Flare;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
-use bytes::Bytes;
-use futures::future;
-use futures::{Future, Stream};
+use self::futures::{future, Future, Stream};
 use http;
-use hyper;
-use hyper::Client;
-use hyper::client::compat::CompatFutureResponse;
-use hyper::header::{ContentEncoding, ContentLength, Encoding, Header, Raw};
-use hyper_tls;
-use tokio_core::reactor::Core;
+use self::hyper::Client;
+use self::hyper::client::compat::CompatFutureResponse;
+use self::hyper::header::{ContentEncoding, ContentLength, Encoding,
+                          Header, Raw};
+use self::tokio_core::reactor::Core;
 
 use {BodyImage, BodySink,
      Prolog, Dialog, RequestRecorded, Tunables,
      META_URL, META_METHOD, META_RES_DECODED,
-     META_RES_VERSION, META_RES_STATUS};
+     META_RES_VERSION, META_RES_STATUS, VERSION};
 
 /// The HTTP request (with body) type (as of hyper 0.11.x.)
 type HyRequest = http::Request<hyper::Body>;
+
+/// Appropriate value for the HTTP accept-encoding request header, including
+/// (br)otli when the brotli feature is configured.
+#[cfg(feature = "brotli")]
+pub static ACCEPT_ENCODINGS: &str          = "br, gzip, deflate";
+
+/// Appropriate value for the HTTP accept-encoding request header, including
+/// (br)otli when the brotli feature is configured.
+#[cfg(not(feature = "brotli"))]
+pub static ACCEPT_ENCODINGS: &str          = "gzip, deflate";
+
+/// A browser-like HTTP accept request header value, with preference for
+/// hypertext.
+pub static BROWSE_ACCEPT: &str =
+    "text/html, application/xhtml+xml, \
+     application/xml;q=0.9, \
+     */*;q=0.8";
 
 /// Run an HTTP request to completion, returning the full `Dialog`.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
@@ -153,6 +174,13 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
                            ds.join(", ").parse()?);
     }
     Ok(())
+}
+
+/// Return a generic HTTP user-agent header value for the crate, with version
+pub fn user_agent() -> String {
+    format!("Mozilla/5.0 (compatible; body-image {}; \
+             +https://crates.io/crates/body-image)",
+            VERSION)
 }
 
 fn resp_future(monolog: Monolog, tune: &Tunables)
@@ -352,18 +380,10 @@ mod tests {
     fn create_request(url: &str) -> Result<RequestRecord, Flare> {
         http::Request::builder()
             .method(http::Method::GET)
-            .header(http::header::ACCEPT,
-                    "text/html, application/xhtml+xml, \
-                     application/xml;q=0.9, \
-                     */*;q=0.8" )
+            .header(http::header::ACCEPT, BROWSE_ACCEPT)
             .header(http::header::ACCEPT_LANGUAGE, "en")
-            .header(http::header::ACCEPT_ENCODING, "br, gzip, deflate")
-            .header(http::header::USER_AGENT,
-                    "Mozilla/5.0 \
-                     (compatible; body-image 0.1.0; \
-                      +http://github.com/dekellum/body-image)")
-            // Referer? Etag, If-Modified...?
-            // "Connection: keep-alive" (header) is default for HTTP 1.1
+            .header(http::header::ACCEPT_ENCODING, ACCEPT_ENCODINGS)
+            .header(http::header::USER_AGENT, &user_agent()[..])
             .uri(url)
             .record()
     }

@@ -6,10 +6,11 @@ authors = ["David Kellum <dek-oss@gravitext.com>"]
 [dependencies]
 brotli     = { version = ">=1.2.0, <2", optional = true }
 bytes      = ">=0.4.6, <2"
+clap       = { version = ">=2.31.2, <3", optional = true, default-features = false, features = ["wrap_help"] }
 failure    = ">=0.1.0, <2"
 fern       = { version = ">=0.5.5, <2", optional = true }
 flate2     = ">=1.0.1, <2"
-futures    = ">=0.1.18, <2"
+futures    = { version = ">=0.1.18, <2", optional = true }
 http       = ">=0.1.4, <2"
 httparse   = ">=1.2.4, <2"
 hyper      = { version = ">=0.11.15, <2", optional = true, features = ["compat"] }
@@ -17,24 +18,24 @@ hyper-tls  = { version = ">=0.1.2, <2", optional = true }
 log        = ">=0.4.1, <2"
 memmap     = ">=0.6.2, <2"
 tempfile   = ">=2.2.0, <3"
-tokio-core = ">=0.1.12, <2"
+tokio-core = { version = ">=0.1.12, <2", optional = true }
 
 [features]
-default = ["brotli"]
-client = ["hyper", "hyper-tls"]
-barc-record = ["fern", "client"]
+default = ["brotli", "cli"]
+client = ["futures", "hyper", "hyper-tls", "tokio-core"]
+cli = ["fern", "clap"]
 
 [lib]
 doctest = false
 
 [[bin]]
-name = "barc-record"
-path = "src/bin/barc-record.rs"
+name = "barc"
+path = "src/main.rs"
 test = false
 doctest = false
 bench = false
 doc = false
-required-features = ["barc-record"]
+required-features = ["cli"]
 
 [package.metadata.docs.rs]
 features = ["brotli", "client"]
