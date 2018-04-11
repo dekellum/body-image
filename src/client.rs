@@ -19,11 +19,12 @@ use self::futures::{future, Future, Stream};
 use http;
 use self::hyper::Client;
 use self::hyper::client::compat::CompatFutureResponse;
-use self::hyper::header::{ContentEncoding, ContentLength, Encoding,
-                          Header, Raw};
+use self::hyper::header::{ContentEncoding, ContentLength,
+                          Encoding as HyEncoding,
+                          Header, TransferEncoding, Raw};
 use self::tokio_core::reactor::Core;
 
-use {BodyImage, BodySink,
+use {BodyImage, BodySink, BodyError, Encoding,
      Prolog, Dialog, RequestRecorded, Tunables,
      META_URL, META_METHOD, META_RES_DECODED,
      META_RES_VERSION, META_RES_STATUS, VERSION};
@@ -82,15 +83,11 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
         .map_err(Flare::from)
 }
 
-/// Decode any _gzip_, _deflate_, or (optional feature) _brotli_
-/// response Transfer-Encoding or Content-Encoding into a new response
-/// `BodyImage`, updating `Dialog` accordingly. The provided `Tunables`
-/// controls decompression buffer sizes and if the final `BodyImage`
-/// will be in `Ram` or `FsRead`.
-pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
-    -> Result<(), Flare>
+/// Return a list of supported encodings from the headers Transfer-Encoding
+/// and Content-Encoding.  The `Chunked` encoding will be the first value if
+/// found. At most one compression encoding will be the last value if found.
+pub fn find_encodings(headers: &http::HeaderMap)-> Vec<Encoding>
 {
-    let headers = &dialog.res_headers;
     let encodings = headers
         .get_all(http::header::TRANSFER_ENCODING)
         .iter()
@@ -108,20 +105,55 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
         if let Ok(v) = ContentEncoding::parse_header(&Raw::from(v.as_bytes())) {
             for av in v.iter() {
                 match *av {
-                    Encoding::Chunked => chunked = true,
-                    Encoding::Gzip | Encoding::Deflate => { // supported
-                        compress = Some(av.clone());
+                    HyEncoding::Identity => {},
+                    HyEncoding::Chunked => {
+                        chunked = true
+                    }
+                    HyEncoding::Deflate => {
+                        compress = Some(Encoding::Deflate);
                         break 'headers;
                     }
-                    #[cfg(feature = "brotli")]
-                    Encoding::Brotli => {
+                    HyEncoding::Gzip => {
+                        compress = Some(Encoding::Gzip);
+                        break 'headers;
+                    }
+                    HyEncoding::Brotli => {
                         compress = Some(Encoding::Brotli);
                         break 'headers;
                     }
-                    Encoding::Identity => (),
                     _ => {
-                        warn!("decode_res_body: Unsupported encoding: {:?}",
-                              av);
+                        warn!("Found unknown encoding: {:?}", av);
+                        break 'headers;
+                    }
+                }
+            }
+        }
+    }
+    let mut encodings = Vec::with_capacity(2);
+    if chunked {
+        encodings.push(Encoding::Chunked);
+    }
+    if let Some(e) = compress {
+        encodings.push(e);
+    }
+    encodings
+}
+
+/// Return true if the chunked Transfer-Encoding can be found in the headers.
+pub fn find_chunked(headers: &http::HeaderMap) -> bool
+{
+    let encodings = headers.get_all(http::header::TRANSFER_ENCODING);
+
+    'headers: for v in encodings {
+        if let Ok(v) = TransferEncoding::parse_header(&Raw::from(v.as_bytes()))
+        {
+            for av in v.iter() {
+                match *av {
+                    HyEncoding::Identity => {},
+                    HyEncoding::Chunked => {
+                        return true;
+                    }
+                    _ => {
                         break 'headers;
                     }
                 }
@@ -129,51 +161,85 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
         }
     }
 
-    if let Some(ref comp) = compress {
-        dialog.res_body = {
-            debug!("Body to {:?} decode: {:?}", comp, dialog.res_body);
-            let mut reader = dialog.res_body.reader();
-            match *comp {
-                Encoding::Gzip => {
-                    let mut decoder = GzDecoder::new(reader.as_read());
-                    let len_est = dialog.res_body.len() *
-                        u64::from(tune.size_estimate_gzip());
-                    BodyImage::read_from(&mut decoder, len_est, tune)?
-                }
-                Encoding::Deflate => {
-                    let mut decoder = DeflateDecoder::new(reader.as_read());
-                    let len_est = dialog.res_body.len() *
-                        u64::from(tune.size_estimate_deflate());
-                    BodyImage::read_from(&mut decoder, len_est, tune)?
-                }
-                #[cfg(feature = "brotli")]
-                Encoding::Brotli => {
-                    let mut decoder = brotli::Decompressor::new(
-                        reader.as_read(),
-                        tune.buffer_size_ram());
-                    let len_est = dialog.res_body.len() *
-                        u64::from(tune.size_estimate_brotli());
-                    BodyImage::read_from(&mut decoder, len_est, tune)?
-                }
-                _ => unreachable!("Not supported: {:?}", comp)
-            }
-        };
-        debug!("Body update: {:?}", dialog.res_body);
+    return false;
+}
+
+/// Decode the response body of the provided `Dialog` compressed with any
+/// supported `Encoding`, updated the dialog accordingly.  The provided
+/// `Tunables` controls decompression buffer sizes and if the final
+/// `BodyImage` will be in `Ram` or `FsRead`. Returns `Ok(true)` if the
+/// response body was decoded, `Ok(false)` if no or unsupported encoding,
+/// or an error on failure.
+pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
+    -> Result<bool, Flare> //FIXME: BodyError
+{
+    let encodings = find_encodings(&dialog.res_headers);
+
+    let compression = encodings.last().and_then( |e| {
+        if *e != Encoding::Chunked { Some(*e) } else { None }
+    });
+
+    let mut decoded = false;
+    if let Some(comp) = compression {
+        debug!("Body to {:?} decode: {:?}", comp, dialog.res_body);
+        let new_body = decompress(&dialog.res_body, comp, tune)?;
+        if let Some(b) = new_body {
+            dialog.res_body = b;
+            decoded = true;
+            debug!("Body update: {:?}", dialog.res_body);
+        } else {
+            warn!("Unsupported encoding: {:?} not decoded", comp);
+        }
+
     }
 
-    if chunked || compress.is_some() {
-        let mut ds = Vec::with_capacity(2);
-        if chunked {
-            ds.push(Encoding::Chunked.to_string())
+    dialog.res_decoded = encodings.clone(); //FIXME
+
+    if !encodings.is_empty() {
+        let mut joined = String::with_capacity(20);
+        for e in encodings {
+            if !joined.is_empty() { joined.push_str(", "); }
+            joined.push_str(&e.to_string());
         }
-        if let Some(ref e) = compress {
-            ds.push(e.to_string())
-        }
+
         dialog.meta.append(http::header::HeaderName
                            ::from_lowercase(META_RES_DECODED).unwrap(),
-                           ds.join(", ").parse()?);
+                           joined.parse()?);
     }
-    Ok(())
+    Ok(decoded)
+}
+
+/// Decompress the provided body of any supported compression `Encoding`,
+/// using `Tunables` for buffering and the final returned `BodyImage`. If the
+/// encoding is not supported (e.g. `Chunked` or `Brotli` without the feature
+/// enabled), returns `None`.
+pub fn decompress(body: &BodyImage, compression: Encoding, tune: &Tunables)
+    -> Result<Option<BodyImage>, BodyError>
+{
+    let mut reader = body.reader();
+    match compression {
+        Encoding::Gzip => {
+            let mut decoder = GzDecoder::new(reader.as_read());
+            let len_est = body.len() * u64::from(tune.size_estimate_gzip());
+            Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
+        }
+        Encoding::Deflate => {
+            let mut decoder = DeflateDecoder::new(reader.as_read());
+            let len_est = body.len() * u64::from(tune.size_estimate_deflate());
+            Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
+        }
+        #[cfg(feature = "brotli")]
+        Encoding::Brotli => {
+            let mut decoder = brotli::Decompressor::new(
+                reader.as_read(),
+                tune.buffer_size_ram());
+            let len_est = body.len() * u64::from(tune.size_estimate_brotli());
+            Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
+        }
+        _ => {
+            Ok(None)
+        }
+    }
 }
 
 /// Return a generic HTTP user-agent header value for the crate, with version
@@ -284,12 +350,19 @@ impl InDialog {
     /// Prepare the response body for reading and generate meta
     /// headers.
     fn prepare(self) -> Result<Dialog, Flare> {
+        let res_decoded = if find_chunked(&self.res_headers) {
+            vec![Encoding::Chunked]
+        } else {
+            Vec::with_capacity(0)
+        };
+
         Ok(Dialog {
             meta:        self.derive_meta()?,
             prolog:      self.prolog,
             version:     self.version,
             status:      self.status,
             res_headers: self.res_headers,
+            res_decoded,
             res_body:    self.res_body.prepare()?,
         })
     }

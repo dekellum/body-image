@@ -706,6 +706,27 @@ struct Prolog {
     req_body:     BodyImage,
 }
 
+/// A subset of supported HTTP Transfer or Content-Encoding values. The
+/// `Display`/`ToString` representation is as per the HTTP header value.
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub enum Encoding {
+    Chunked,
+    Deflate,
+    Gzip,
+    Brotli,
+}
+
+impl fmt::Display for Encoding {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match *self {
+            Encoding::Chunked => "chunked",
+            Encoding::Deflate => "deflate",
+            Encoding::Gzip    => "gzip",
+            Encoding::Brotli  => "br",
+        })
+    }
+}
+
 /// An HTTP request and response recording.
 #[derive(Debug)]
 pub struct Dialog {
@@ -713,6 +734,7 @@ pub struct Dialog {
     prolog:       Prolog,
     version:      http::Version,
     status:       http::StatusCode,
+    res_decoded:  Vec<Encoding>,
     res_headers:  http::HeaderMap,
     res_body:     BodyImage,
 }
@@ -769,6 +791,10 @@ impl Dialog {
     /// The response HTTP version. This is also made available in the `meta`
     /// headers, via the `META_RES_VERSION` name.
     pub fn res_version(&self) -> http::Version         { self.version }
+
+    /// A list of encodings that were removed (decoded) to provide this
+    /// representation of the response body (`res_body`). May be empty.
+    pub fn res_decoded(&self) -> &Vec<Encoding>        { &self.res_decoded }
 
     /// A mutable reference to the response body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.
