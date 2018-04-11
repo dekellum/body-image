@@ -25,9 +25,7 @@ use self::hyper::header::{ContentEncoding, ContentLength,
 use self::tokio_core::reactor::Core;
 
 use {BodyImage, BodySink, BodyError, Encoding,
-     Prolog, Dialog, RequestRecorded, Tunables,
-     META_URL, META_METHOD, META_RES_DECODED,
-     META_RES_VERSION, META_RES_STATUS, VERSION};
+     Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
 /// The HTTP request (with body) type (as of hyper 0.11.x.)
 type HyRequest = http::Request<hyper::Body>;
@@ -171,7 +169,7 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool
 /// response body was decoded, `Ok(false)` if no or unsupported encoding,
 /// or an error on failure.
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
-    -> Result<bool, Flare> //FIXME: BodyError
+    -> Result<bool, BodyError>
 {
     let encodings = find_encodings(&dialog.res_headers);
 
@@ -193,25 +191,14 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
 
     }
 
-    dialog.res_decoded = encodings.clone(); //FIXME
+    dialog.res_decoded = encodings;
 
-    if !encodings.is_empty() {
-        let mut joined = String::with_capacity(20);
-        for e in encodings {
-            if !joined.is_empty() { joined.push_str(", "); }
-            joined.push_str(&e.to_string());
-        }
-
-        dialog.meta.append(http::header::HeaderName
-                           ::from_lowercase(META_RES_DECODED).unwrap(),
-                           joined.parse()?);
-    }
     Ok(decoded)
 }
 
 /// Decompress the provided body of any supported compression `Encoding`,
 /// using `Tunables` for buffering and the final returned `BodyImage`. If the
-/// encoding is not supported (e.g. `Chunked` or `Brotli` without the feature
+/// encoding is not supported (e.g. `Chunked` or `Brotli`, without the feature
 /// enabled), returns `None`.
 pub fn decompress(body: &BodyImage, compression: Encoding, tune: &Tunables)
     -> Result<Option<BodyImage>, BodyError>
@@ -347,8 +334,9 @@ struct InDialog {
 }
 
 impl InDialog {
-    /// Prepare the response body for reading and generate meta
-    /// headers.
+    // Convert to `Dialog` by preparing the response body and adding an
+    // initial res_decoded for Chunked, if hyper handled chunked transfer
+    // encoding.
     fn prepare(self) -> Result<Dialog, Flare> {
         let res_decoded = if find_chunked(&self.res_headers) {
             vec![Encoding::Chunked]
@@ -357,7 +345,6 @@ impl InDialog {
         };
 
         Ok(Dialog {
-            meta:        self.derive_meta()?,
             prolog:      self.prolog,
             version:     self.version,
             status:      self.status,
@@ -365,27 +352,6 @@ impl InDialog {
             res_decoded,
             res_body:    self.res_body.prepare()?,
         })
-    }
-
-    fn derive_meta(&self) -> Result<http::HeaderMap, Flare> {
-        let mut hs = http::HeaderMap::with_capacity(6);
-        use http::header::HeaderName;
-
-        hs.append(HeaderName::from_lowercase(META_URL).unwrap(),
-                  self.prolog.url.to_string().parse()?);
-        hs.append(HeaderName::from_lowercase(META_METHOD).unwrap(),
-                  self.prolog.method.to_string().parse()?);
-
-        // FIXME: This relies on the debug format of version,  e.g. "HTTP/1.1"
-        // which might not be stable, but http::Version doesn't offer an enum
-        // to match on, only constants.
-        let v = format!("{:?}", self.version);
-        hs.append(HeaderName::from_lowercase(META_RES_VERSION).unwrap(),
-                  v.parse()?);
-
-        hs.append(HeaderName::from_lowercase(META_RES_STATUS).unwrap(),
-                  self.status.to_string().parse()?);
-        Ok(hs)
     }
 }
 

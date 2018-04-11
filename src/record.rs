@@ -1,6 +1,6 @@
 use failure::Error as Flare;
 use body_image::Tunables;
-use body_image::barc::{BarcFile, CompressStrategy};
+use body_image::barc::{BarcFile, CompressStrategy, Record};
 use body_image::client::{ACCEPT_ENCODINGS, BROWSE_ACCEPT,
                          decode_res_body, fetch,
                          user_agent, RequestRecordable};
@@ -25,14 +25,17 @@ pub(crate) fn record(
         .record()?;
 
     let tune = Tunables::new();
-    let mut dl = fetch(req, &tune)?;
+    let mut dialog = fetch(req, &tune)?;
 
     if decode {
-        decode_res_body(&mut dl, &tune)?;
+        decode_res_body(&mut dialog, &tune)?;
     }
 
     let bfile = BarcFile::new(barc_path);
     let mut bw = bfile.writer()?;
-    bw.write(&dl, strategy)?;
+
+    let record = Record::try_from(dialog)?;
+
+    bw.write(&record, strategy)?;
     Ok(())
 }
