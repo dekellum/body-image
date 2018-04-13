@@ -798,6 +798,17 @@ pub trait Recorded: RequestRecorded {
     fn res_body(&self)    -> &BodyImage;
 }
 
+impl Prolog {
+    fn try_clone(&self) -> Result<Prolog, BodyError> {
+        Ok(Prolog {
+            method: self.method.clone(),
+            url: self.url.clone(),
+            req_headers: self.req_headers.clone(),
+            req_body: self.req_body.try_clone()?,
+        })
+    }
+}
+
 impl Dialog {
     /// The HTTP method (verb), e.g. `GET`, `POST`, etc.
     pub fn method(&self)      -> &http::Method         { &self.prolog.method }
@@ -824,6 +835,20 @@ impl Dialog {
     /// A mutable reference to the response body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.
     pub fn res_body_mut(&mut self) -> &mut BodyImage   { &mut self.res_body }
+
+    /// Attempt to clone self and return a new `Dialog`. See
+    /// [`BodyImage::try_clone`](struct.BodyImage.html#method.try_clone) for
+    /// details of fallibility and other nuances.
+    pub fn try_clone(&self) -> Result<Dialog, BodyError> {
+        Ok(Dialog {
+            prolog:      self.prolog.try_clone()?,
+            version:     self.version,
+            status:      self.status,
+            res_headers: self.res_headers.clone(),
+            res_decoded: self.res_decoded.clone(),
+            res_body:    self.res_body.try_clone()?,
+        })
+    }
 }
 
 impl RequestRecorded for Dialog {

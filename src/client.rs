@@ -478,6 +478,7 @@ mod tests {
         let req = create_request("https://www.usa.gov").unwrap();
 
         let dl = fetch(req, &tune).unwrap();
+        let dl = dl.try_clone().unwrap();
         println!("Response {:#?}", dl);
 
         assert!(dl.res_body.is_ram());
