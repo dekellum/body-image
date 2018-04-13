@@ -39,7 +39,7 @@ software. This is exacerbated by all of the following:
   than our development environments, as do mobile devices. Swap space is
   frequently not configured, or if used, results in poor performance.
 
-Note there are different opinions and implementations on this topic. For
+Note there are different opinions on this topic, and implementations. For
 example, HAProxy which is a RAM-only proxy by design, recently [introduced a
 "small object cache"][HAProxy] limited by default to 16 KiB complete
 responses. Nginx by comparison offers a hybrid RAM and disk design. When
@@ -47,7 +47,7 @@ buffering proxied responses, by current defaults on x86_64 it will keep 64 KiB
 in RAM before buffering to disk, where the response is finally limited to 1
 GiB.
 
-This author thinks the operational trends toward denser virtual allocatioN
+This author thinks the operational trends toward denser virtual allocation
 instead of growth in per-instance RAM, in combination with increasing
 availability of fast solid state disk (e.g. NVMe SSDs) make hybrid approaches
 more favorable to more applications than was the case in the recent past.
