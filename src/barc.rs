@@ -44,6 +44,27 @@ pub const V2_MAX_HBLOCK: usize =        0xff_fff;
 /// 2<sup>40</sup> (1 TiB) - 1.
 pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
 
+/// Meta `HeaderName` for the complete URL used in the request.
+pub static META_URL: &[u8]             = b"url";
+
+/// Meta `HeaderName` for the HTTP method used in the request, e.g. "GET",
+/// "POST", etc.
+pub static META_METHOD: &[u8]          = b"method";
+
+/// Meta `HeaderName` for the response version, e.g. "HTTP/1.1", "HTTP/2.0",
+/// etc.
+pub static META_RES_VERSION: &[u8]     = b"response-version";
+
+/// Meta `HeaderName` for the response numeric status code, SPACE, and then a
+/// standardized _reason phrase_, e.g. "200 OK". The later is intended only
+/// for human readers.
+pub static META_RES_STATUS: &[u8]      = b"response-status";
+
+/// Meta `HeaderName` for a list of content or transfer encodings decoded for
+/// the current response body. The value is in HTTP content-encoding header
+/// format, e.g. "chunked, gzip".
+pub static META_RES_DECODED: &[u8]     = b"response-decoded";
+
 /// Reference to a BARC File by `Path`, supporting up to 1 writer and N
 /// readers concurrently.
 pub struct BarcFile {
@@ -92,8 +113,8 @@ pub enum BarcError {
     /// Read an invalid record head hex digit.
     ReadInvalidRecHeadHex(u8),
 
-    /// Error reading and parsing header name, value or block (with cause)
-    ReadInvalidHeader(Flare),
+    /// Error parsing header name, value or block (with cause)
+    InvalidHeader(Flare),
 
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
@@ -119,7 +140,7 @@ impl fmt::Display for BarcError {
                 write!(f, "Invalid record head suffix"),
             BarcError::ReadInvalidRecHeadHex(b) =>
                 write!(f, "Invalid record head hex digit [{}]", b),
-            BarcError::ReadInvalidHeader(ref flare) =>
+            BarcError::InvalidHeader(ref flare) =>
                 write!(f, "Invalid header; {}", flare),
             BarcError::_FutureProof => unreachable!()
         }
@@ -127,14 +148,14 @@ impl fmt::Display for BarcError {
 }
 
 // Fail is implemented manually because we currently can't specify
-// ReadInvalidHeader's Flare type as #[cause], see:
+// InvalidHeader's Flare type as #[cause], see:
 // https://github.com/rust-lang-nursery/failure/issues/176
 impl Fail for BarcError {
     fn cause(&self) -> Option<&Fail> {
         match *self {
             BarcError::Body(ref be)               => Some(be),
             BarcError::Io(ref e)                  => Some(e),
-            BarcError::ReadInvalidHeader(ref flr) => Some(flr.cause()),
+            BarcError::InvalidHeader(ref flr) => Some(flr.cause()),
             _ => None
         }
     }
@@ -188,11 +209,15 @@ pub struct Record {
     pub res_body:         BodyImage,
 }
 
-/// Access to BARC record-like objects by reference. Extends
-/// `Recorded`.
-pub trait RecordedType: Recorded {
+/// Access to BARC `Record` compatible objects by reference, extending
+/// `Recorded` with meta-headers and a record type.
+pub trait MetaRecorded: Recorded {
     /// Record type.
     fn rec_type(&self)    -> RecordType;
+
+    /// Map of _meta_-headers for values which are not strictly part of the
+    /// HTTP request or response headers.
+    fn meta(&self)        -> &http::HeaderMap;
 }
 
 impl RequestRecorded for Record {
@@ -201,17 +226,71 @@ impl RequestRecorded for Record {
 }
 
 impl Recorded for Record {
-    fn meta(&self)        -> &http::HeaderMap  { &self.meta }
     fn res_headers(&self) -> &http::HeaderMap  { &self.res_headers }
     fn res_body(&self)    -> &BodyImage        { &self.res_body }
 }
 
-impl RecordedType for Record {
+impl MetaRecorded for Record {
     fn rec_type(&self)    -> RecordType        { self.rec_type }
+    fn meta(&self)        -> &http::HeaderMap  { &self.meta }
 }
 
-impl RecordedType for Dialog {
-    fn rec_type(&self)    -> RecordType        { RecordType::Dialog }
+impl Record {
+
+    /// Attempt to convert Dialog to Record. This derives meta headers from
+    /// various dialog components, and could potentially fail when parsing
+    /// these values as header values.  Once TryFrom stabilizes, this should
+    /// use that instead.
+    pub fn try_from(dialog: Dialog) -> Result<Record, BarcError> {
+        use http::header::HeaderName;
+
+        let mut meta = http::HeaderMap::with_capacity(6);
+        let efn = &|e| BarcError::InvalidHeader(Flare::from(e));
+
+        meta.append(
+            HeaderName::from_lowercase(META_URL).unwrap(),
+            dialog.prolog.url.to_string().parse().map_err(efn)?
+        );
+        meta.append(
+            HeaderName::from_lowercase(META_METHOD).unwrap(),
+            dialog.prolog.method.to_string().parse().map_err(efn)?
+        );
+
+        // FIXME: This relies on the debug format of version, e.g. "HTTP/1.1"
+        // which might not be stable, but http::Version doesn't offer an enum
+        // to match on, only constants.
+        let v = format!("{:?}", dialog.version);
+        meta.append(
+            HeaderName::from_lowercase(META_RES_VERSION).unwrap(),
+            v.parse().map_err(efn)?
+        );
+
+        meta.append(
+            HeaderName::from_lowercase(META_RES_STATUS).unwrap(),
+            dialog.status.to_string().parse().map_err(efn)?
+        );
+
+        if !dialog.res_decoded.is_empty() {
+            let mut joined = String::with_capacity(20);
+            for e in dialog.res_decoded {
+                if !joined.is_empty() { joined.push_str(", "); }
+                joined.push_str(&e.to_string());
+            }
+            meta.append(
+                HeaderName::from_lowercase(META_RES_DECODED).unwrap(),
+                joined.parse().map_err(efn)?
+            );
+        }
+
+        Ok(Record {
+            rec_type: RecordType::Dialog,
+            meta,
+            req_headers: dialog.prolog.req_headers,
+            req_body:    dialog.prolog.req_body,
+            res_headers: dialog.res_headers,
+            res_body:    dialog.res_body,
+        })
+    }
 }
 
 /// BARC record type.
@@ -286,8 +365,8 @@ impl Compression {
 /// Strategies for BARC record compression encoding on write.
 pub trait CompressStrategy {
     /// Return an `EncodeWrapper` for `File` by evaluating the
-    /// `RecordedType` for compression worthiness.
-    fn wrap_encoder<'a>(&self, rec: &'a RecordedType, file: &'a File)
+    /// `MetaRecorded` for compression worthiness.
+    fn wrap_encoder<'a>(&self, rec: &'a MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>;
 }
 
@@ -302,7 +381,7 @@ impl Default for NoCompressStrategy {
 impl CompressStrategy for NoCompressStrategy {
     /// Return an `EncodeWrapper` for `File`. This implementation
     /// always returns a `Plain` wrapper.
-    fn wrap_encoder<'a>(&self, _rec: &'a RecordedType, file: &'a File)
+    fn wrap_encoder<'a>(&self, _rec: &'a MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         Ok(EncodeWrapper::Plain(file))
@@ -342,7 +421,7 @@ impl Default for GzipCompressStrategy {
 }
 
 impl CompressStrategy for GzipCompressStrategy {
-    fn wrap_encoder<'a>(&self, rec: &'a RecordedType, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &'a MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
@@ -394,7 +473,7 @@ impl Default for BrotliCompressStrategy {
 
 #[cfg(feature = "brotli")]
 impl CompressStrategy for BrotliCompressStrategy {
-    fn wrap_encoder<'a>(&self, rec: &'a RecordedType, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &'a MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
@@ -525,7 +604,7 @@ impl<'a> BarcWriter<'a> {
     /// Write a new record, returning the record's offset from the
     /// start of the BARC file. The writer position is then advanced
     /// to the end of the file, for the next `write`.
-    pub fn write(&mut self, rec: &RecordedType, strategy: &CompressStrategy)
+    pub fn write(&mut self, rec: &MetaRecorded, strategy: &CompressStrategy)
         -> Result<u64, BarcError>
     {
         // BarcFile::writer() guarantees Some(File)
@@ -566,7 +645,7 @@ impl<'a> BarcWriter<'a> {
 
 // Write the record, returning a preliminary `RecordHead` with
 // observed (not compressed) lengths.
-fn write_record(file: &mut File, rec: &RecordedType, strategy: &CompressStrategy)
+fn write_record(file: &mut File, rec: &MetaRecorded, strategy: &CompressStrategy)
     -> Result<RecordHead, BarcError>
 {
     let mut wrapper = strategy.wrap_encoder(rec, file)?;
@@ -932,19 +1011,19 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, BarcError> {
             assert_eq!(size, buf.len());
             for h in heads {
                 let name = h.name.parse::<HeaderName>()
-                    .map_err(|e| BarcError::ReadInvalidHeader(Flare::from(e)))?;
+                    .map_err(|e| BarcError::InvalidHeader(Flare::from(e)))?;
                 let value = HeaderValue::from_bytes(h.value)
-                    .map_err(|e| BarcError::ReadInvalidHeader(Flare::from(e)))?;
+                    .map_err(|e| BarcError::InvalidHeader(Flare::from(e)))?;
                 hmap.append(name, value);
             }
             Ok(hmap)
         }
         Ok(httparse::Status::Partial) => {
-            Err(BarcError::ReadInvalidHeader(
+            Err(BarcError::InvalidHeader(
                 err_msg("Header block not CRLF terminated")
             ))
         }
-        Err(e) => Err(BarcError::ReadInvalidHeader(Flare::from(e)))
+        Err(e) => Err(BarcError::InvalidHeader(Flare::from(e)))
     }
 }
 

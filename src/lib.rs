@@ -28,27 +28,6 @@ use tempfile::tempfile_in;
 /// The crate version string.
 pub static VERSION: &str               = env!("CARGO_PKG_VERSION");
 
-/// Meta `HeaderName` for the complete URL used in the request.
-pub static META_URL: &[u8]             = b"url";
-
-/// Meta `HeaderName` for the HTTP method used in the request, e.g. "GET",
-/// "POST", etc.
-pub static META_METHOD: &[u8]          = b"method";
-
-/// Meta `HeaderName` for the response version, e.g. "HTTP/1.1", "HTTP/2.0",
-/// etc.
-pub static META_RES_VERSION: &[u8]     = b"response-version";
-
-/// Meta `HeaderName` for the response numeric status code, SPACE, and then a
-/// standardized _reason phrase_, e.g. "200 OK". The later is intended only
-/// for human readers.
-pub static META_RES_STATUS: &[u8]      = b"response-status";
-
-/// Meta `HeaderName` for a list of content or transfer encodings decoded for
-/// the current response body. The value is in HTTP content-encoding header
-/// format, e.g. "chunked, gzip".
-pub static META_RES_DECODED: &[u8]     = b"response-decoded";
-
 /// Error enumeration for `BodyImage` and `BodySink` types.  This may be
 /// extended in the future so exhaustive matching is gently discouraged with
 /// an unused variant.
@@ -706,13 +685,34 @@ struct Prolog {
     req_body:     BodyImage,
 }
 
+/// A subset of supported HTTP Transfer or Content-Encoding values. The
+/// `Display`/`ToString` representation is as per the HTTP header value.
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub enum Encoding {
+    Chunked,
+    Deflate,
+    Gzip,
+    Brotli,
+}
+
+impl fmt::Display for Encoding {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match *self {
+            Encoding::Chunked => "chunked",
+            Encoding::Deflate => "deflate",
+            Encoding::Gzip    => "gzip",
+            Encoding::Brotli  => "br",
+        })
+    }
+}
+
 /// An HTTP request and response recording.
 #[derive(Debug)]
 pub struct Dialog {
-    meta:         http::HeaderMap,
     prolog:       Prolog,
     version:      http::Version,
     status:       http::StatusCode,
+    res_decoded:  Vec<Encoding>,
     res_headers:  http::HeaderMap,
     res_body:     BodyImage,
 }
@@ -727,12 +727,9 @@ pub trait RequestRecorded {
     fn req_body(&self)    -> &BodyImage;
 }
 
-/// Access by reference for HTTP request and response recording types.
+/// Access by reference for HTTP request (via `RequestRecorded`) and response
+/// recording types.
 pub trait Recorded: RequestRecorded {
-    /// Map of _meta_-headers for values which are not strictly part of the
-    /// HTTP request or response headers.
-    fn meta(&self)        -> &http::HeaderMap;
-
     /// Map of HTTP response headers.
     fn res_headers(&self) -> &http::HeaderMap;
 
@@ -741,19 +738,10 @@ pub trait Recorded: RequestRecorded {
 }
 
 impl Dialog {
-    /// A mutable reference to the _meta_-headers for values not strictly
-    /// part of the HTTP request or response headers. This is provided to
-    /// allow appending with application specific name/value pairs prior to
-    /// usage or serializing.
-    pub fn meta_mut(&mut self) -> &mut http::HeaderMap { &mut self.meta }
-
-    /// The HTTP method (verb), e.g. `GET`, `POST`, etc.  This is
-    /// also available in the `meta` headers, via the `META_METHOD`
-    /// name.
+    /// The HTTP method (verb), e.g. `GET`, `POST`, etc.
     pub fn method(&self)      -> &http::Method         { &self.prolog.method }
 
-    /// The complete URL as used in the request. This is also made available
-    /// in the `meta` headers, via the `META_URL` name.
+    /// The complete URL as used in the request.
     pub fn url(&self)         -> &http::Uri            { &self.prolog.url }
 
     /// A mutable reference to the request body. This is primarly provided
@@ -762,13 +750,15 @@ impl Dialog {
         &mut self.prolog.req_body
     }
 
-    /// The response status code. This is also made available in the `meta`
-    /// headers, via the `META_RES_STATUS` name.
+    /// The response status code.
     pub fn res_status(&self)  -> http::StatusCode      { self.status }
 
-    /// The response HTTP version. This is also made available in the `meta`
-    /// headers, via the `META_RES_VERSION` name.
+    /// The response HTTP version.
     pub fn res_version(&self) -> http::Version         { self.version }
+
+    /// A list of encodings that were removed (decoded) to provide this
+    /// representation of the response body (`res_body`). May be empty.
+    pub fn res_decoded(&self) -> &Vec<Encoding>        { &self.res_decoded }
 
     /// A mutable reference to the response body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.
@@ -781,7 +771,6 @@ impl RequestRecorded for Dialog {
 }
 
 impl Recorded for Dialog {
-    fn meta(&self)        -> &http::HeaderMap      { &self.meta }
     fn res_headers(&self) -> &http::HeaderMap      { &self.res_headers }
     fn res_body(&self)    -> &BodyImage            { &self.res_body }
 }
