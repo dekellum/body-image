@@ -80,6 +80,9 @@ pub enum BodyError {
     #[fail(display = "{}", _0)]
     Io(#[cause] io::Error),
 
+    #[fail(display = "Can't clone BodyImage in MemMap state")]
+    NoMemMapClone,
+
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
     #[fail(display = "The future!")]
@@ -451,6 +454,27 @@ impl BodyImage {
             }
         }
         self
+    }
+
+    pub fn try_clone(&self) -> Result<BodyImage, BodyError> {
+        match self.state {
+            ImageState::Ram(ref v) => {
+                Ok(BodyImage {
+                    state: ImageState::Ram(v.clone()),
+                    len: self.len
+                })
+            }
+            ImageState::FsRead(ref f) => {
+                let map = unsafe { Mmap::map(f) }?;
+                Ok(BodyImage {
+                    state: ImageState::MemMap(map),
+                    len: self.len
+                })
+            }
+            ImageState::MemMap(_) => {
+                Err(BodyError::NoMemMapClone)
+            }
+        }
     }
 
     /// Return a new `BodyReader` enum over self. The enum provides a
