@@ -1080,7 +1080,9 @@ mod tests {
         body.write_all("hello").unwrap();
         body.write_all(" ").unwrap();
         body.write_all("world").unwrap();
-        let body = body.prepare().unwrap();
+        let mut body = body.prepare().unwrap();
+        let body_clone = body.try_clone().unwrap();
+        body.gather();
 
         let mut body_reader = body.reader();
         let br = body_reader.as_read();
@@ -1088,9 +1090,7 @@ mod tests {
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
 
-        let body = body.try_clone().unwrap();
-
-        let mut body_reader = body.reader();
+        let mut body_reader = body_clone.reader();
         let br = body_reader.as_read();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
