@@ -58,6 +58,7 @@ use std::io;
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use bytes::{Bytes, BytesMut, BufMut};
 use memmap::Mmap;
 use tempfile::tempfile_in;
@@ -79,9 +80,6 @@ pub enum BodyError {
     /// `FsRead`, or memory mapping.
     #[fail(display = "{}", _0)]
     Io(#[cause] io::Error),
-
-    #[fail(display = "Can't clone BodyImage in MemMap state")]
-    NoMemMapClone,
 
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
@@ -126,7 +124,7 @@ pub struct BodyImage {
 enum ImageState {
     Ram(Vec<Bytes>),
     FsRead(File),
-    MemMap(Mmap),
+    MemMap(Arc<Mmap>),
 }
 
 /// A logical buffer of bytes, which may or may not be RAM resident, in the
@@ -366,7 +364,7 @@ impl BodyImage {
     fn with_map(map: Mmap) -> BodyImage {
         let len = map.len() as u64;
         BodyImage {
-            state: ImageState::MemMap(map),
+            state: ImageState::MemMap(Arc::new(map)),
             len
         }
     }
@@ -407,8 +405,9 @@ impl BodyImage {
         Ok(self)
     }
 
-    /// If `FsRead`, convert to `MemMap` by memory mapping the file.
-    /// No-op for other states.
+    /// If `FsRead`, convert to `MemMap` by memory mapping the file.  No-op
+    /// for other states. See also [`try_clone`](#method.try_clone) as a means
+    /// of preserving the original `FsRead`.
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
         if let ImageState::FsRead(_) = self.state {
             assert!(self.len > 0);
@@ -416,7 +415,7 @@ impl BodyImage {
             if let ImageState::FsRead(file) = self.state.cut() {
                 match unsafe { Mmap::map(&file) } {
                     Ok(map) => {
-                        self.state = ImageState::MemMap(map);
+                        self.state = ImageState::MemMap(Arc::new(map));
                     }
                     Err(e) => {
                         // Restore FsRead on failure
@@ -456,6 +455,20 @@ impl BodyImage {
         self
     }
 
+    /// Attempt to clone self and return a new `BodyImage`. If self is `Ram`
+    /// or `MemMap`, this returns a shallow copy, and will not fail. If self
+    /// is `FsRead` the returned clone will be a new `MemMap` (see rationale
+    /// below) or will fail with `BodyError::Io`.
+    ///
+    /// ### Rationale
+    ///
+    /// `FsRead` currently uses an un-linked temporary file, so we can't
+    /// create an independent (i.e. having its own offset or `Seek` position)
+    /// file handle by independently opening a path. Rather than sharing the
+    /// same offset in the clone (via File::try_clone), which would be very
+    /// surprising for independent reads, we _promote_ the clone to `MemMap`.
+    /// The original `BodyImage` as `FsRead`, isn't modified by the clone and
+    /// can still be read normally.
     pub fn try_clone(&self) -> Result<BodyImage, BodyError> {
         match self.state {
             ImageState::Ram(ref v) => {
@@ -467,12 +480,15 @@ impl BodyImage {
             ImageState::FsRead(ref f) => {
                 let map = unsafe { Mmap::map(f) }?;
                 Ok(BodyImage {
-                    state: ImageState::MemMap(map),
+                    state: ImageState::MemMap(Arc::new(map)),
                     len: self.len
                 })
             }
-            ImageState::MemMap(_) => {
-                Err(BodyError::NoMemMapClone)
+            ImageState::MemMap(ref m) => {
+                Ok(BodyImage {
+                    state: ImageState::MemMap(m.clone()),
+                    len: self.len
+                })
             }
         }
     }
@@ -495,7 +511,7 @@ impl BodyImage {
                 BodyReader::File(f)
             }
             ImageState::MemMap(ref m) => {
-                BodyReader::Contiguous(Cursor::new(&m))
+                BodyReader::Contiguous(Cursor::new(m))
             }
         }
     }
@@ -572,7 +588,7 @@ impl BodyImage {
                 }
             }
             ImageState::MemMap(ref m) => {
-                out.write_all(&m)?;
+                out.write_all(m)?;
             }
             ImageState::FsRead(ref f) => {
                 assert!(self.len > 0);
@@ -1032,6 +1048,30 @@ mod tests {
         assert_eq!("hello world", &obuf[..]);
     }
 
+
+    #[test]
+    fn test_body_scattered_read_clone() {
+        let mut body = BodySink::with_ram_buffers(2);
+        body.write_all("hello").unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        let body = body.prepare().unwrap();
+
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+
+        let body = body.try_clone().unwrap();
+
+        let mut body_reader = body.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+    }
+
     #[test]
     fn test_body_scattered_gather() {
         let mut body = BodySink::with_ram_buffers(2);
@@ -1158,6 +1198,82 @@ mod tests {
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
+    }
+
+    #[test]
+    fn test_body_fs_back_read_clone() {
+        let tune = Tunables::new();
+        let mut body = BodySink::with_ram_buffers(2);
+        body.write_all("hello").unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        body.write_back(tune.temp_dir()).unwrap();
+        let mut body = body.prepare().unwrap();
+
+        {
+            let mut body_reader = body.reader();
+            let br = body_reader.as_read();
+            let mut obuf = String::new();
+            br.read_to_string(&mut obuf).unwrap();
+            assert_eq!("hello world", &obuf[..]);
+        }
+
+        let body_clone_1 = body.try_clone().unwrap();
+        let body_clone_2 = body_clone_1.try_clone().unwrap();
+
+        body.prepare().unwrap();
+
+        let mut body_reader = body_clone_1.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+
+        let mut body_reader = body.reader(); // read original (prepared) body
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+
+        let mut body_reader = body_clone_2.reader();
+        let br = body_reader.as_read();
+        let mut obuf = String::new();
+        br.read_to_string(&mut obuf).unwrap();
+        assert_eq!("hello world", &obuf[..]);
+    }
+
+    #[test]
+    fn test_body_fs_clone_shared() {
+        let tune = Tunables::new();
+        let mut body = BodySink::with_ram_buffers(2);
+        body.write_all("hello").unwrap();
+        body.write_all(" ").unwrap();
+        body.write_all("world").unwrap();
+        body.write_back(tune.temp_dir()).unwrap();
+        let mut body = body.prepare().unwrap();
+        body.mem_map().unwrap();
+        println!("{:?}", body);
+
+        let ptr1 = if let BodyReader::Contiguous(cursor) = body.reader() {
+            let bslice = cursor.into_inner();
+            assert_eq!(b"hello world", bslice);
+            format!("{:p}", bslice)
+        } else {
+            panic!("not contiguous?!");
+        };
+
+        let body_clone = body.try_clone().unwrap();
+        println!("{:?}", body_clone);
+
+        let ptr2 = if let BodyReader::Contiguous(cursor) = body_clone.reader() {
+            let bslice = cursor.into_inner();
+            assert_eq!(b"hello world", bslice);
+            format!("{:p}", bslice)
+        } else {
+            panic!("not contiguous?!");
+        };
+
+        assert_eq!(ptr1, ptr2);
     }
 
     #[test]
