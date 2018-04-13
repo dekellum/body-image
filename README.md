@@ -1,59 +1,71 @@
-## BodyImage
+# Body Image
 
-HTTP sets no limits on request or response body payload sizes, and in
-general purpose libraries or services, we are reluctant to enforce the
-potentially low maximum size constraints necessary to *guarantee*
-sufficient RAM and reliable software. This is exacerbated by all of the
-following:
+A rust crate providing a few separately usable but closely related HTTP
+ecosystem components:
+
+* `BodyImage` and supporting types (_root_ module) provide uniform access to
+   HTTP body payloads which may be scattered across multiple allocations in
+   RAM, or buffered to a temporary file and optionally memory mapped.  This
+   effectively enables trading some file I/O cost in return for supporting
+   significantly larger bodies without risk of exhausting RAM.
+
+* The BARC container file format, reader and writer is implemented in the
+  _barc_ sub-module.  This supports high fidelity serialization of complete
+  HTTP request/response dialogs with additional meta-data and has broad use
+  cases as test fixtures or for caching and web crawling.  A `barc` command
+  line tool is also available.
+
+See the rustdoc for more details.
+
+## Rationale
+
+HTTP sets no limits on request or response body payload sizes, and in general
+purpose libraries or services, we are reluctant to enforce the low maximum
+size constraints necessary to *guarantee* sufficient RAM and reliable
+software. This is exacerbated by all of the following:
 
 * The concurrent processing potential afforded by both threads and Rust's
-  asynchronous facilities: Divide the available RAM by the maximum number
-  of request/response bodies in memory at any one point in time.
+  asynchronous facilities: Divide the available RAM by the maximum number of
+  request/response bodies in memory at any one point in time.
 
 * With chunked transfer encoding, we frequently don't know the size of the
   body until it is fully downloaded (no Content-Length header).
 
-* Transfer or Content-Encoding compression: Even if the compressed body
-  fits in memory, the decompressed version may not, and in most cases we
-  don't even know the final size in advance.
+* Transfer or Content-Encoding compression: Even if the compressed body fits
+  in memory, the decompressed version may not, and its final size is not known
+  in advance.
 
-* Constrained memory: Virtual hosts and containers tend to have less RAM
-  than our development environments, as do mobile devices. Swap is
-  frequently not even configured, or if used, results in poor performance.
+* Constrained memory: Virtual machines and containers tend to have less RAM
+  than our development environments, as do mobile devices. Swap space is
+  frequently not configured, or if used, results in poor performance.
 
-`BodySink` and `BodyImage` provide logical buffers of bytes which may
-not be RAM resident, or may be scattered (discontinuous) in RAM across
-separate allocations. `BodySink` is used for accumulating (writing) a
-body, and may start or later transition to a temporary file based on
-size. `BodyImage` provides consistent access (reading) to a body and
-includes support for memory-mapping a file based body.
+Note there are different opinions and implementations on this topic. For
+example, HAProxy which is a RAM-only proxy by design, recently [introduced a
+"small object cache"][HAProxy] limited by default to 16 KiB complete
+responses. Nginx by comparison offers a hybrid RAM and disk design. When
+buffering proxied responses, by current defaults on x86_64 it will keep 64 KiB
+in RAM before buffering to disk, where the response is finally limited to 1
+GiB.
 
-## BARC container format
+This author thinks the operational trends toward denser virtual allocatioN
+instead of growth in per-instance RAM, in combination with increasing
+availability of fast solid state disk (e.g. NVMe SSDs) make hybrid approaches
+more favorable to more applications than was the case in the recent past.
 
-BARC is a minimal container file format for the storage of one or many
-HTTP request and response dialogs. A fixed length ASCII-limited record
-head specifies lengths of a subsequent series of request and response
-header blocks and bodies which are stored as raw (unencoded)
-bytes. When not using the internal compression feature, the format is
-easily human readable, which makes it ideal as debug output or for
-integration tests that need HTTP request/response bodies with headers
-as test fixtures or examples.
+[HAProxy]: https://www.haproxy.com/blog/whats-new-haproxy-1-8/
 
-See the source /sample/*.barc files. (FIXME link)
+## License
 
-Other features:
+This project is dual licensed under either of following:
 
-* An additional *meta*-headers block provides more recording details
-  and can also be used to store application-specific names/values.
+* The Apache license, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE)
+  or http://www.apache.org/licenses/LICENSE-2.0)
 
-* Concurrent, and sequential or random-access reads by record offset
-  (using an external index, such as a database).
+* The MIT license ([LICENSE-MIT](LICENSE-MIT) or
+  or http://opensource.org/licenses/MIT)
 
-* Single-writer sessions are guaranteed safe with N concurrent readers
-  (in or out of process).
+### Contribution
 
-* Optional per-record gzip or Brotli compression (headers and bodies)
-
-## Dialog
-
-TBD...
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in body-image by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

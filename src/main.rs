@@ -1,3 +1,5 @@
+//! The `barc` command line tool
+
              extern crate body_image;
 #[macro_use] extern crate clap;
 #[macro_use] extern crate failure;

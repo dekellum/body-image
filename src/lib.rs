@@ -1,5 +1,42 @@
-#![feature(external_doc)]
-#![doc(include = "../README.md")]
+//! This crate provides a few separately usable but closely related HTTP
+//! ecosystem components.
+//!
+//! In the _root_ module, the namesake [`BodyImage`](struct.BodyImage.html)
+//! and supporting types provides a strategy for safely handling
+//! potentially large HTTP request or response bodies without risk of
+//! allocation failure, or the need to impose awkwardly low size limits in the
+//! face of high concurrency. `Tunables` size thresholds can be used to decide
+//! when to accumulate the body in RAM vs the filesystem, including when the
+//! length is unknown in advance.
+//!
+//! See the top level README for additional rationale.
+//!
+//! A [`Dialog`](struct.Dialog.html) defines a complete HTTP request and
+//! response recording, using `BodyImage` for the request and response bodies
+//! and _http_ crate types for the headers and other components.
+//!
+//! The [_barc_ module](barc/index.html) defines a container file format, reader
+//! and writer for dialog records. This has broad use cases, from convenient
+//! test fixtures for web applications, to caching and web crawling.
+//!
+//! ## Optional Features
+//!
+//! The following features may be enabled or disabled at build time:
+//!
+//! _client (non-default):_ The [client module](client/index.html) for
+//! recording of HTTP `Dialog`s, currently via a basic integration of the
+//! _hyper_ 0.11.x crate.
+//!
+//! _cli (default):_ The `barc` command line tool for viewing
+//! (e.g. compressed) records and copying records across BARC files. If the
+//! _client_ feature is enabled, than a `record` command is also provided for
+//! live BARC recording from the network.
+//!
+//! _brotli (default):_ Brotli transfer/content decoding in the _client_, and
+//! Brotli BARC record compression, via the native-rust _brotli_ crate. (Gzip,
+//! via the _flate2_ crate, is standard.)
+//!
+//! For complete functionally, build or install with `--all-features`.
 
 #[cfg(feature = "brotli")] extern crate brotli;
                            extern crate bytes;
@@ -57,6 +94,10 @@ impl From<io::Error> for BodyError {
 
 /// A logical buffer of bytes, which may or may not be RAM resident.
 ///
+/// Besides a few immediate/convenience constructors found here, use
+/// [`BodySink`](struct.BodySink.html) for the incremental or stream-oriented
+/// collection of bytes to produce a `BodyImage`.
+///
 /// A `BodyImage` is always in one of the following states, as a buffering
 /// strategy:
 ///
@@ -72,7 +113,6 @@ impl From<io::Error> for BodyError {
 /// `MemMap`
 /// : Body in a memory mapped file, ready for efficient and potentially
 ///   concurrent and random access reading.
-///
 #[derive(Debug)]
 pub struct BodyImage {
     state: ImageState,
@@ -87,7 +127,8 @@ enum ImageState {
 }
 
 /// A logical buffer of bytes, which may or may not be RAM resident, in the
-/// process of being written. This is the write-side corollary to `BodyImage`.
+/// process of being written. This is the write-side corollary to
+/// [`BodyImage`](struct.BodyImage.html).
 ///
 /// A `BodySink` is always in one of the following states, as a buffering
 /// strategy:
@@ -707,6 +748,10 @@ impl fmt::Display for Encoding {
 }
 
 /// An HTTP request and response recording.
+///
+/// Note that several important getter methods for `Dialog` are found in trait
+/// implementations [`RequestRecorded`](#impl-RequestRecorded) and
+/// [`Recorded`](#impl-Recorded).
 #[derive(Debug)]
 pub struct Dialog {
     prolog:       Prolog,

@@ -1,4 +1,34 @@
 //! HTTP client integration and utilities.
+//!
+//! This optional module (via non-default _client_ feature) provides
+//! additional integration with the _http_ crate and _hyper_ 0.11.x (with the
+//! _compat_ feature, and its other dependencies.).  Thus far, its primary
+//! motivation has been to support the `barc record` command line, though some
+//! methods may have more general utility:
+//!
+//! * Trait [`RequestRecordable`](trait.RequestRecordable.html) extends
+//!   `http::request::Builder` for recording a
+//!   [`RequestRecord`](struct.RequestRecord.html), which can then be passed
+//!   to `fetch`.
+//!
+//! * The [`fetch` function](fn.fetch.html) runs a `RequestRecord` and returns a
+//!   completed [`Dialog`](../struct.Dialog.html).
+//!
+//! * The [`decode_res_body` function](fn.decode_res_body.html) and some
+//!   related functions will decompress any supported Transfer/Content-Encoding
+//!   of the response body and update the `Dialog` accordingly.
+//!
+//! Starting with the significant expected changes for _hyper_ 0.12 and its
+//! dependencies, the intent is to evolve this module into a more general
+//! purpose _middleware_ type facility, including:
+//!
+//! * More flexible integration of the recorded `Dialog` into more complete
+//!   _hyper_ applications or downstream crate and frameworks.
+//!
+//! * Symmetric support for `BodySink`/`BodyImage` request bodies.
+//!
+//! * Asynchronous I/O adaptions for file-based bodies where appropriate and
+//!   beneficial.
 
 extern crate futures;
 extern crate hyper;
@@ -47,7 +77,10 @@ pub static BROWSE_ACCEPT: &str =
      application/xml;q=0.9, \
      */*;q=0.8";
 
-/// Run an HTTP request to completion, returning the full `Dialog`.
+/// Run an HTTP request to completion, returning the full `Dialog`. This
+/// function constructs all the necesarry _hyper_ and _tokio_ components in a
+/// simplistic form internally, and is currently not recommended for anything
+/// but one-time use.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
     // FIXME: State of the Core (v Reactor), incl. construction,
     // use from multiple threads is under flux:

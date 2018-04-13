@@ -1,4 +1,27 @@
-//! **B**ody **Arc**hive (BARC) file format reader and writer.
+//! **B**ody **Arc**hive container file format, reader and writer.
+//!
+//! BARC is a minimal container file format for the storage or one to many
+//! HTTP request/response dialog records. A fixed length ASCII-limited record
+//! head specifies lengths of a subsequent series of request and response
+//! header blocks and bodies which are stored as raw (unencoded) bytes. When
+//! not using the internal compression feature, the format is easily human
+//! readable.  With compression, the `barc` CLI tool can be used to view
+//! records.
+//!
+//! See some sample files in source sample/*.barc.
+//!
+//! ## Other features:
+//!
+//! * An additional *meta*-headers block provides more recording details
+//!   and can also be used to store application-specific values.
+//!
+//! * Sequential or random-access reads by record offset (which could be
+//!   stored in an external index or database).
+//!
+//! * Single-writer sessions are guaranteed safe with N concurrent readers
+//!   (in or out of process).
+//!
+//! * Optional per-record gzip or Brotli compression (headers and bodies)
 
 use std::cmp;
 use std::fs::{File, OpenOptions};
@@ -186,6 +209,10 @@ struct RecordHead {
 }
 
 /// An owned BARC record with public fields.
+///
+/// Additonal getter methods are found in trait implementations
+/// [`RequestRecorded`](#impl-RequestRecorded), [`Recorded`](#impl-Recorded),
+/// and [`MetaRecorded`](#impl-MetaRecorded).
 #[derive(Debug, Default)]
 pub struct Record {
     /// Record type.
@@ -239,8 +266,8 @@ impl Record {
 
     /// Attempt to convert Dialog to Record. This derives meta headers from
     /// various dialog components, and could potentially fail when parsing
-    /// these values as header values.  Once TryFrom stabilizes, this should
-    /// use that instead.
+    /// these values as header values.  Once rust `TryFrom` stabilizes, this
+    /// should be implemented as that trait instead.
     pub fn try_from(dialog: Dialog) -> Result<Record, BarcError> {
         use http::header::HeaderName;
 
