@@ -123,7 +123,7 @@ pub struct BodyImage {
 enum ImageState {
     Ram(Vec<Bytes>),
     FsRead(File),
-    MemMap(Mapped),
+    MemMap(Mmap),
 }
 
 /// A logical buffer of bytes, which may or may not be RAM resident, in the
@@ -150,16 +150,6 @@ pub struct BodySink {
 enum SinkState {
     Ram(Vec<Bytes>),
     FsWrite(File),
-}
-
-/// A memory map handle with its underlying `File` as a RAII guard.
-#[derive(Debug)]
-pub struct Mapped {
-    map: Mmap,
-    file: File,
-    // This ordering has `munmap` called before close on destruction,
-    // which seems best, though it may not actually be a requirement
-    // to keep the File open, at least on Linux.
 }
 
 impl SinkState {
@@ -369,11 +359,11 @@ impl BodyImage {
         }
     }
 
-    /// Create new instance based on an existing `Mapped` file.
-    fn with_map(mapped: Mapped) -> BodyImage {
-        let len = mapped.map.len() as u64;
+    /// Create new instance based on an existing `Mmap` region.
+    fn with_map(map: Mmap) -> BodyImage {
+        let len = map.len() as u64;
         BodyImage {
-            state: ImageState::MemMap(mapped),
+            state: ImageState::MemMap(map),
             len
         }
     }
@@ -423,9 +413,7 @@ impl BodyImage {
             if let ImageState::FsRead(file) = self.state.cut() {
                 match unsafe { Mmap::map(&file) } {
                     Ok(map) => {
-                        self.state = ImageState::MemMap(
-                            Mapped { map, file }
-                        );
+                        self.state = ImageState::MemMap(map);
                     }
                     Err(e) => {
                         // Restore FsRead on failure
@@ -483,7 +471,7 @@ impl BodyImage {
                 BodyReader::File(f)
             }
             ImageState::MemMap(ref m) => {
-                BodyReader::Contiguous(Cursor::new(&m.map))
+                BodyReader::Contiguous(Cursor::new(&m))
             }
         }
     }
@@ -560,8 +548,7 @@ impl BodyImage {
                 }
             }
             ImageState::MemMap(ref m) => {
-                let map = &m.map;
-                out.write_all(map)?;
+                out.write_all(&m)?;
             }
             ImageState::FsRead(ref f) => {
                 assert!(self.len > 0);

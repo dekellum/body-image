@@ -45,7 +45,7 @@ use memmap::MmapOptions;
 #[cfg(feature = "brotli")]
 use brotli;
 
-use {BodyError, BodyImage, BodySink, Dialog, Mapped,
+use {BodyError, BodyImage, BodySink, Dialog,
      Recorded, RequestRecorded, Tunables};
 
 /// Fixed record head size including CRLF terminator:
@@ -1132,16 +1132,14 @@ fn map_body(file: &mut File, offset: u64, len: u64)
     let end = file.seek(SeekFrom::Current(len as i64))?;
     assert_eq!(offset + len, end);
 
-    let dup_file = file.try_clone()?;
-
     let map = unsafe {
         MmapOptions::new()
             .offset(offset as usize)
             .len((len - 2) as usize) // Exclude final CRLF
-            .map(&dup_file)?
+            .map(file)?
     };
 
-    Ok(BodyImage::with_map(Mapped { map, file: dup_file }))
+    Ok(BodyImage::with_map(map))
 }
 
 #[cfg(test)]
