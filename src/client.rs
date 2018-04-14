@@ -331,7 +331,12 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
     Ok(l)
 }
 
-/// An `http::Request` and recording.
+/// An `http::Request` and recording. Note that other important getter
+/// methods for `RequestRecord` are found in trait implementation
+/// [`RequestRecorded`](#impl-RequestRecorded).
+///
+/// _Limitations:_ This can't be `Clone`, because
+/// `http::Request<client::hyper::Body>` isn't `Clone`.
 #[derive(Debug)]
 pub struct RequestRecord {
     request:      HyRequest,
@@ -339,6 +344,12 @@ pub struct RequestRecord {
 }
 
 impl RequestRecord {
+    /// The HTTP method (verb), e.g. `GET`, `POST`, etc.
+    pub fn method(&self)  -> &http::Method         { &self.prolog.method }
+
+    /// The complete URL as used in the request.
+    pub fn url(&self)     -> &http::Uri            { &self.prolog.url }
+
     /// Return the HTTP request.
     pub fn request(&self) -> &HyRequest            { &self.request }
 }
