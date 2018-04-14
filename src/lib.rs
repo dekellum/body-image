@@ -1037,6 +1037,21 @@ impl Default for Tuner {
 mod tests {
     use super::*;
 
+    fn is_send<T: Send>() -> bool { true }
+    fn is_sync<T: Sync>() -> bool { true }
+
+    #[test]
+    fn test_send_sync() {
+        assert!(is_send::<BodyImage>());
+        assert!(is_sync::<BodyImage>());
+
+        assert!(is_send::<Tunables>());
+        assert!(is_sync::<Tunables>());
+
+        assert!(is_send::<Dialog>());
+        assert!(is_sync::<Dialog>());
+    }
+
     #[test]
     fn test_body_empty_read() {
         let body = BodyImage::empty();
