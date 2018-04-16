@@ -1,7 +1,27 @@
 [package]
-name = "body-image"
-version = "0.1.0"
-authors = ["David Kellum <dek-oss@gravitext.com>"]
+name          = "body-image"
+version       = "0.1.0"
+authors       = ["David Kellum <dek-oss@gravitext.com>"]
+license       = "MIT/Apache-2.0"
+description   = "Adaptive RAM/file-backed HTTP bodies and BARC serialization."
+documentation = "https://docs.rs/body-image"
+repository    = "https://github.com/dekellum/body-image"
+readme        = "README.md"
+keywords      = [
+    "buffer", "io", "bytes", "compression",
+    "http", "serialization", "hyper",
+]
+categories    = [
+    "network-programming",
+    "web-programming::http-client",
+    "web-programming::http-server",
+]
+exclude       = [
+    ".gitignore",
+    ".travis.yml",
+    "deploy.sh",
+    "barc/*",
+]
 
 [dependencies]
 brotli     = { version = ">=1.2.0, <2", optional = true }

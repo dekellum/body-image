@@ -1,7 +1,7 @@
 //! This crate provides a few separately usable but closely related HTTP
 //! ecosystem components.
 //!
-//! In the _root_ module, the namesake [`BodyImage`](struct.BodyImage.html)
+//! In the _root_ module, the [`BodyImage`](struct.BodyImage.html) struct
 //! and supporting types provides a strategy for safely handling
 //! potentially large HTTP request or response bodies without risk of
 //! allocation failure, or the need to impose awkwardly low size limits in the
@@ -141,7 +141,6 @@ enum ImageState {
 ///
 /// `FsWrite`
 /// : Body being written to a (temporary) file.
-///
 #[derive(Debug)]
 pub struct BodySink {
     state: SinkState,
@@ -1087,7 +1086,6 @@ mod tests {
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
     }
-
 
     #[test]
     fn test_body_scattered_read_clone() {
