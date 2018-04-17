@@ -12,7 +12,6 @@ keywords      = [
     "http", "serialization", "hyper",
 ]
 categories    = [
-    "network-programming",
     "web-programming::http-client",
     "web-programming::http-server",
 ]
@@ -22,6 +21,7 @@ exclude       = [
     "deploy.sh",
     "barc/*",
 ]
+
 [badges]
 travis-ci = { repository = "dekellum/body-image" }
 
