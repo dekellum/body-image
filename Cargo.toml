@@ -8,7 +8,7 @@ documentation = "https://docs.rs/body-image"
 repository    = "https://github.com/dekellum/body-image"
 readme        = "README.md"
 keywords      = [
-    "buffer", "io", "bytes", "compression",
+    "buffer", "compression",
     "http", "serialization", "hyper",
 ]
 categories    = [
