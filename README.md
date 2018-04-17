@@ -1,5 +1,7 @@
 # Body Image
 
+[![Crates.io](https://img.shields.io/crates/v/body-image.svg?maxAge=2592000)](https://crates.io/crates/body-image)
+[![Rustdoc](https://docs.rs/body-image/badge.svg)](https://docs.rs/body-image)
 [![Build Status](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
 
 A rust crate providing a few separately usable but closely related HTTP
