@@ -192,7 +192,7 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool
         }
     }
 
-    return false;
+    false
 }
 
 /// Decode the response body of the provided `Dialog` compressed with any
