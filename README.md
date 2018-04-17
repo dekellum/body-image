@@ -1,5 +1,7 @@
 # Body Image
 
+[![Build Status](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
+
 A rust crate providing a few separately usable but closely related HTTP
 ecosystem components:
 
