@@ -1,0 +1,15 @@
+language: rust
+sudo: false
+script: cargo test --all-features
+
+matrix:
+  include:
+    - os: osx
+    - rust: stable
+      script:
+        - cargo test --all-features
+        - cargo test
+    - rust: nightly
+      script:
+        - cargo test --all-features
+        - cargo test --no-default-features
