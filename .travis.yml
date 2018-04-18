@@ -1,15 +1,13 @@
 language: rust
 sudo: false
-script: cargo test --all-features
+script:
+  - cargo test
+  - cargo test --all-features
 
 env: # important!
 matrix:
   include:
     - os: osx
-    - rust: stable
-      script:
-        - cargo test
-        - cargo test --all-features
     - rust: nightly
       script:
         - cargo test --no-default-features
