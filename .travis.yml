@@ -2,14 +2,23 @@ language: rust
 sudo: false
 script: cargo test --all-features
 
+env: # important!
 matrix:
   include:
     - os: osx
     - rust: stable
       script:
-        - cargo test --all-features
         - cargo test
+        - cargo test --all-features
     - rust: nightly
       script:
-        - cargo test --all-features
         - cargo test --no-default-features
+        - cargo test --all-features
+    - rust: nightly
+      script:
+        - rm -f Cargo.lock
+        - cargo test --no-default-features
+        - cargo test --all-features
+      env: MAY_FAIL=true
+  allow_failures:
+    - env: MAY_FAIL=true
