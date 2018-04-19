@@ -51,6 +51,8 @@
                            pub mod barc;
 #[cfg(feature = "client")] pub mod client;
 
+mod read_pos;
+
 use std::env;
 use std::fmt;
 use std::fs::File;
