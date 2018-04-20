@@ -1,5 +1,6 @@
 //! Utility for independent `Read` instances of `FsRead`.
 
+use std::fs::File;
 use std::io;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
 use std::sync::Arc;
@@ -10,11 +11,15 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
-/// Implements `Seek` and `Read` for a `FileExt` reference (platform specific
-/// `read_at`/`seek_read` for `File`) by maintaining an instance independent
-/// position.
+/// Re-implements `Seek` and `Read` over a `File` reference using only
+/// `FileExt` (platform specific) `read_at`/`seek_read`, and by maintaining an
+/// instance independent position.
 ///
 /// ### Current Limitations
+///
+/// * On some platforms (e.g. Windows) the underlying file position will be
+/// modified as `ReadPos` is read. This will not effect this or other
+/// `ReadPos` instances however.
 ///
 /// * A (file) length is arbitrarily passed in and used solely for handling
 /// SeekFrom::End. Seeking past end of file is allowed by the platforms and
@@ -22,28 +27,28 @@ use std::os::windows::fs::FileExt;
 /// metadata, and could result in surprising behavior under concurrent
 /// updates.
 #[derive(Debug)]
-pub struct ReadPos<T: FileExt + Sync + Send> {
+pub struct ReadPos {
     pos: u64,
     length: u64,
-    file: Arc<T>,
+    file: Arc<File>,
 }
 
 // Manual implementation of clone required, apparently due to:
 // https://github.com/rust-lang/rust/issues/26925
 // We also throw away any position for the clone.
-impl<T: FileExt + Sync + Send> Clone for ReadPos<T> {
+impl Clone for ReadPos {
     /// Return a new, independent `ReadPos` with the same length and file
     /// reference as self, and with position 0 (ignore self's current
     /// position).
-    fn clone(&self) -> ReadPos<T> {
+    fn clone(&self) -> ReadPos {
         ReadPos { pos: 0, length: self.length, file: self.file.clone() }
     }
 }
 
-impl<T: FileExt + Sync + Send> ReadPos<T>
+impl ReadPos
 {
     /// New instance given a `FileExt` reference and (file) length.
-    pub(crate) fn new(file: Arc<T>, length: u64) -> ReadPos<T> {
+    pub(crate) fn new(file: Arc<File>, length: u64) -> ReadPos {
         ReadPos { pos: 0, length, file }
     }
 
@@ -72,7 +77,7 @@ impl<T: FileExt + Sync + Send> ReadPos<T>
     }
 }
 
-impl<T: FileExt + Sync + Send> Read for ReadPos<T>
+impl Read for ReadPos
 {
     #[cfg(unix)]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -89,7 +94,7 @@ impl<T: FileExt + Sync + Send> Read for ReadPos<T>
     }
 }
 
-impl<T: FileExt + Sync + Send> Seek for ReadPos<T>
+impl Seek for ReadPos
 {
     fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
         match from {
@@ -111,7 +116,6 @@ impl<T: FileExt + Sync + Send> Seek for ReadPos<T>
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
     use std::io::{Read, Write};
     use std::thread;
     use ::tempfile::tempfile;
@@ -194,8 +198,8 @@ mod tests {
 
     #[test]
     fn test_send_sync() {
-        assert!(is_send::<ReadPos<File>>());
-        assert!(is_sync::<ReadPos<File>>());
+        assert!(is_send::<ReadPos>());
+        assert!(is_sync::<ReadPos>());
     }
 
 }

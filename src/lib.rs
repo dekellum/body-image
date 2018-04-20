@@ -647,8 +647,9 @@ pub enum BodyReader<'a> {
     /// buffers.
     Scattered(GatheringReader<'a>),
 
-    /// `ReadPos` independent `Read` and `Seek` for BodyImage `FsRead` state.
-    File(ReadPos<File>),
+    /// `ReadPos` providing instance independent `Read` and `Seek` for
+    /// BodyImage `FsRead` state.
+    File(ReadPos),
 }
 
 impl<'a> BodyReader<'a> {
