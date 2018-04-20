@@ -213,7 +213,7 @@ struct RecordHead {
 /// Additonal getter methods are found in trait implementations
 /// [`RequestRecorded`](#impl-RequestRecorded), [`Recorded`](#impl-Recorded),
 /// and [`MetaRecorded`](#impl-MetaRecorded).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Record {
     /// Record type.
     pub rec_type:         RecordType,
