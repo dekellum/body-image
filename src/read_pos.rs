@@ -1,4 +1,4 @@
-//! Experimental
+//! Utility for independent `Read` instances of `FsRead`.
 
 use std::io;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
@@ -11,44 +11,40 @@ use std::os::unix::fs::FileExt;
 use std::os::windows::fs::FileExt;
 
 /// Implements `Seek` and `Read` for a `FileExt` reference (platform specific
-/// `read_at`/`seek_read` for `File`) by maintaining an instance specific
-/// position. This effectively enables independent offsets for a single `File`
-/// handle.
+/// `read_at`/`seek_read` for `File`) by maintaining an instance independent
+/// position.
+///
+/// ### Current Limitations
+///
+/// * A (file) length is arbitrarily passed in and used solely for handling
+/// SeekFrom::End. Seeking past end of file is allowed by the platforms and
+/// `File` in any case.  This size is not checked or updated via `File`
+/// metadata, and could result in surprising behavior under concurrent
+/// updates.
 #[derive(Debug)]
-pub struct ReadPos<T: FileExt + Sync + Send>
-{
+pub struct ReadPos<T: FileExt + Sync + Send> {
     pos: u64,
-    size: u64,
+    length: u64,
     file: Arc<T>,
 }
 
 // Manual implementation of clone required, apparently due to:
 // https://github.com/rust-lang/rust/issues/26925
+// We also throw away any position for the clone.
 impl<T: FileExt + Sync + Send> Clone for ReadPos<T> {
-    /// Return a new instance of self with position 0 (throws away
-    /// any original position).
+    /// Return a new, independent `ReadPos` with the same length and file
+    /// reference as self, and with position 0 (ignore self's current
+    /// position).
     fn clone(&self) -> ReadPos<T> {
-        ReadPos { pos: 0, size: self.size, file: self.file.clone() }
+        ReadPos { pos: 0, length: self.length, file: self.file.clone() }
     }
 }
 
 impl<T: FileExt + Sync + Send> ReadPos<T>
 {
-    fn new(file: T, size: u64) -> ReadPos<T> {
-        ReadPos { pos: 0, size, file: Arc::new(file) }
-    }
-
-    /// Consume self and return the original T, or if there are more than one
-    /// strong reference oustanding (via clone), return self.
-    fn try_unwrap(self) -> Result<T, Self> {
-        match Arc::try_unwrap(self.file) {
-            Ok(t) => Ok(t),
-            Err(arc_t) => Err(ReadPos {
-                pos: self.pos,
-                size: self.size,
-                file: arc_t
-            })
-        }
+    /// New instance given a `FileExt` reference and (file) length.
+    pub(crate) fn new(file: Arc<T>, length: u64) -> ReadPos<T> {
+        ReadPos { pos: 0, length, file }
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(collapsible_if))]
@@ -102,7 +98,7 @@ impl<T: FileExt + Sync + Send> Seek for ReadPos<T>
                 Ok(p)
             }
             SeekFrom::End(offset) => {
-                let origin = self.size;
+                let origin = self.length;
                 self.seek_from(origin, offset)
             }
             SeekFrom::Current(offset) => {
@@ -126,7 +122,7 @@ mod tests {
         let mut f = tempfile().unwrap();
         f.write_all(b"1234567890").unwrap();
 
-        let mut r1 = ReadPos::new(f, 10);
+        let mut r1 = ReadPos::new(Arc::new(f), 10);
         let mut buf = [0u8; 5];
 
         let p = r1.seek(SeekFrom::Current(0)).unwrap();
@@ -149,25 +145,21 @@ mod tests {
         let mut f = tempfile().unwrap();
         f.write_all(b"1234567890").unwrap();
 
-        let mut r1 = ReadPos::new(f, 10);
+        let mut r1 = ReadPos::new(Arc::new(f), 10);
 
-        {
-            let mut buf = [0u8; 5];
-            r1.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, b"12345");
+        let mut buf = [0u8; 5];
+        r1.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"12345");
 
-            let mut r2 = r1.clone();
-            r2.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, b"12345");
+        let mut r2 = r1.clone();
+        r2.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"12345");
 
-            r1.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, b"67890");
+        r1.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"67890");
 
-            r2.read_exact(&mut buf).unwrap();
-            assert_eq!(&buf, b"67890");
-        }
-
-        assert!(r1.try_unwrap().is_ok())
+        r2.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"67890");
     }
 
     #[test]
@@ -175,11 +167,11 @@ mod tests {
         let mut f = tempfile().unwrap();
         let rule = b"1234567890";
         f.write_all(rule).unwrap();
-        let rp = ReadPos::new(f, rule.len() as u64);
+        let f = Arc::new(f);
 
         let mut threads = Vec::with_capacity(30);
         for i in 0..50 {
-            let mut rpc = rp.clone();
+            let mut rpc = ReadPos::new(f.clone(), rule.len() as u64);
             threads.push(thread::spawn( move || {
                 let p = i % rule.len();
                 rpc.seek(SeekFrom::Start(p as u64)).expect("seek");
