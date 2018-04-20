@@ -917,7 +917,7 @@ fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
 
     // When compressed, we don't actually know the final size of the
     // response body, so start small and use read_to_body. This may
-    // return `Ram` or `FsWrite` states.
+    // return `Ram` or `FsRead` states.
     let res_body = BodyImage::read_from(fin, 4096, tune)?;
 
     Ok(Record { rec_type, meta, req_headers, req_body, res_headers, res_body })
@@ -1074,7 +1074,7 @@ fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
     Ok(BodyImage::from_slice(buf.freeze()))
 }
 
-// Read into `BodyImage` state `FsWrite`. Assumes no CRLF terminator
+// Read into `BodyImage` state `FsRead`. Assumes no CRLF terminator
 // (only used for compressed records).
 fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
     -> Result<BodyImage, BarcError>

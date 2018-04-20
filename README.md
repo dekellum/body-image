@@ -10,7 +10,7 @@ ecosystem components:
 
 * `BodyImage` and supporting types (_root_ module) provide uniform access to
    HTTP body payloads which may be scattered across multiple allocations in
-   RAM, or buffered to a temporary file and optionally memory mapped.  This
+   RAM, or buffered to a temporary file, and optionally memory mapped.  This
    effectively enables trading some file I/O cost in return for supporting
    significantly larger bodies without risk of exhausting RAM.
 
