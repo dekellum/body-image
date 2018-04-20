@@ -11,7 +11,7 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
-/// Re-implements `Seek` and `Read` over a `File` reference using only
+/// Re-implements `Read` and `Seek` over a shared `File` reference using only
 /// `FileExt` (platform specific) `read_at`/`seek_read`, and by maintaining an
 /// instance independent position.
 ///
@@ -201,5 +201,4 @@ mod tests {
         assert!(is_send::<ReadPos>());
         assert!(is_sync::<ReadPos>());
     }
-
 }
