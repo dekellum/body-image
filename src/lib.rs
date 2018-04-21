@@ -401,16 +401,16 @@ impl BodyImage {
         self.len
     }
 
-    /// Prepare for re-reading. This is no longer necessary and is currently a
-    /// No-op. The `reader` method always returns a `Read` from the start of
-    /// the `BodyImage` for all states.
+    /// Formerly, this rewound 'FsRead', but now is an unnecessary no-op. The
+    /// `reader` method always returns a `Read` from the start of the
+    /// `BodyImage` for all states.
     #[deprecated]
     pub fn prepare(&mut self) -> Result<&mut Self, BodyError> {
         Ok(self)
     }
 
-    /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op
-    /// for other states.
+    /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
+    /// other states.
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
         if let ImageState::FsRead(_) = self.state {
             assert!(self.len > 0);
@@ -458,9 +458,8 @@ impl BodyImage {
         self
     }
 
-    /// Attempt to clone self by shallow copy, returning a new
-    /// `BodyImage`. This is currently infallible and deprecated in favor of
-    /// `clone`.
+    /// Clone self by shallow copy, returning a new `BodyImage`. This is
+    /// currently infallible and deprecated in favor of `clone`.
     #[deprecated]
     pub fn try_clone(&self) -> Result<BodyImage, BodyError> {
         Ok(self.clone())
