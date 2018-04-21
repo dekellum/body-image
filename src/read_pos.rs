@@ -116,7 +116,7 @@ impl Seek for ReadPos
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Read, Write};
+    use std::io::{BufReader, Read, Write};
     use std::thread;
     use ::tempfile::tempfile;
     use super::*;
@@ -142,6 +142,28 @@ mod tests {
         assert_eq!(5, p);
         r1.read_exact(&mut buf).unwrap();
         assert_eq!(&buf, b"67890");
+    }
+
+    #[test]
+    fn test_with_buf_reader() {
+        let mut f = tempfile().unwrap();
+        f.write_all(b"1234567890").unwrap();
+
+        let r0 = ReadPos::new(Arc::new(f), 10);
+        let mut r1 = BufReader::with_capacity(0x2000, r0);
+        let mut buf = [0u8; 5];
+
+        let p = r1.seek(SeekFrom::Start(1)).unwrap();
+        assert_eq!(1, p);
+        r1.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"23456");
+
+        let mut r0 = r1.into_inner();
+        let p = r0.seek(SeekFrom::Current(0)).unwrap();
+        assert_eq!(10, p);
+
+        let l = r0.read(&mut buf).unwrap();
+        assert_eq!(0, l);
     }
 
     #[test]
