@@ -646,8 +646,9 @@ pub enum BodyReader<'a> {
     /// buffers.
     Scattered(GatheringReader<'a>),
 
-    /// `ReadPos` providing instance independent `Read` and `Seek` for
-    /// BodyImage `FsRead` state.
+    /// `ReadPos` providing instance independent, unbuffered `Read` and `Seek`
+    /// for BodyImage `FsRead` state. Consider wrapping this in
+    /// `std::io::BufReader` if performing many small reads.
     File(ReadPos),
 }
 

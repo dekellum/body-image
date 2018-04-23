@@ -11,9 +11,16 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
-/// Re-implements `Read` and `Seek` over a shared `File` reference using only
-/// `FileExt` (platform specific) `read_at`/`seek_read`, and by maintaining an
-/// instance independent position.
+/// Re-implements `Read` and `Seek` over a shared `File` reference using
+/// _only_ positioned reads via `FileExt` (platform specific)
+/// `read_at`/`seek_read`, and by maintaining an instance independent
+/// position.
+///
+/// `ReadPos` supports independent instances on the same `File` (and handle)
+/// without needing a path to open an independent `File`.  Thus it is
+/// compatible with "unnamed" (not linked) temporary files. Note that unix
+/// `dup`/`dup2` and `File::try_clone` do not provide independent file
+/// positions.
 ///
 /// ### Current Limitations
 ///
@@ -24,8 +31,8 @@ use std::os::windows::fs::FileExt;
 /// * A (file) length is arbitrarily passed in and used solely for handling
 /// SeekFrom::End. Seeking past end of file is allowed by the platforms and
 /// `File` in any case.  This size is not checked or updated via `File`
-/// metadata, and could result in surprising behavior under concurrent
-/// updates.
+/// metadata, which could result in surprising behavior if concurrent updates
+/// were possible.
 #[derive(Debug)]
 pub struct ReadPos {
     pos: u64,
@@ -33,9 +40,6 @@ pub struct ReadPos {
     file: Arc<File>,
 }
 
-// Manual implementation of clone required, apparently due to:
-// https://github.com/rust-lang/rust/issues/26925
-// We also throw away any position for the clone.
 impl Clone for ReadPos {
     /// Return a new, independent `ReadPos` with the same length and file
     /// reference as self, and with position 0 (ignore self's current
@@ -47,11 +51,13 @@ impl Clone for ReadPos {
 
 impl ReadPos
 {
-    /// New instance given a `FileExt` reference and (file) length.
+    /// New instance by `File` reference and fixed file length.
     pub(crate) fn new(file: Arc<File>, length: u64) -> ReadPos {
         ReadPos { pos: 0, length, file }
     }
 
+    /// Seek by signed offset from an origin, checking for underflow and
+    /// overflow.
     #[cfg_attr(feature = "cargo-clippy", allow(collapsible_if))]
     fn seek_from(&mut self, origin: u64, offset: i64) -> io::Result<u64> {
         if offset < 0 {
