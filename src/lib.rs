@@ -815,7 +815,7 @@ impl Recorded for Dialog {
 }
 
 /// A collection of size limits and performance tuning constants. Setters are
-/// available via the `Tuner` class.
+/// available via [`Tuner`](struct.Tuner.html)
 #[derive(Debug, Clone)]
 pub struct Tunables {
     max_body_ram:            u64,
@@ -905,7 +905,6 @@ pub struct Tuner {
 }
 
 impl Tuner {
-
     /// New `Tuner` with all `Tunables` defaults.
     pub fn new() -> Tuner {
         Tuner { template: Tunables::new() }
