@@ -1,3 +1,6 @@
+//! This was copied from src/barc.rs unit tests with minimal changes and only
+//! serves as a rough compression performance sanity check.
+
 #![feature(test)]
 extern crate test;
 extern crate body_image;
@@ -12,22 +15,8 @@ use failure::Error as Flare;
 use body_image::{BodySink, Tunables};
 use body_image::barc::*;
 
-// FIXME: This was copied near-verbatim from src/barc.rs unit tests and only
-// serves as a rough compression performance sanity check.
-
-fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
-    let tpath = Path::new("target/testmp");
-    fs::create_dir_all(tpath)?;
-
-    let fname = tpath.join(name);
-    if fname.exists() {
-        fs::remove_file(&fname)?;
-    }
-    Ok(fname)
-}
-
 #[bench]
-fn test_write_read_large(b: &mut Bencher) {
+fn write_read_large_plain(b: &mut Bencher) {
     b.iter(|| {
         let fname = barc_test_file("large.barc").unwrap();
         let strategy = NoCompressStrategy::default();
@@ -36,7 +25,7 @@ fn test_write_read_large(b: &mut Bencher) {
 }
 
 #[bench]
-fn test_write_read_large_gzip(b: &mut Bencher) {
+fn write_read_large_gzip(b: &mut Bencher) {
     b.iter(|| {
         let fname = barc_test_file("large_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default();
@@ -45,7 +34,7 @@ fn test_write_read_large_gzip(b: &mut Bencher) {
 }
 
 #[bench]
-fn test_write_read_large_gzip_0(b: &mut Bencher) {
+fn write_read_large_gzip_0(b: &mut Bencher) {
     b.iter(|| {
         let fname = barc_test_file("large_gzip_0.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_compression_level(0);
@@ -55,7 +44,7 @@ fn test_write_read_large_gzip_0(b: &mut Bencher) {
 
 #[cfg(feature = "brotli")]
 #[bench]
-fn test_write_read_large_brotli(b: &mut Bencher) {
+fn write_read_large_brotli(b: &mut Bencher) {
     b.iter(|| {
         let fname = barc_test_file("large_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default();
@@ -65,7 +54,7 @@ fn test_write_read_large_brotli(b: &mut Bencher) {
 
 #[cfg(feature = "brotli")]
 #[bench]
-fn test_write_read_large_brotli_0(b: &mut Bencher) {
+fn write_read_large_brotli_0(b: &mut Bencher) {
     b.iter(|| {
         let fname = barc_test_file("large_brotli_0.barc").unwrap();
         let strategy = BrotliCompressStrategy::default()
@@ -116,4 +105,15 @@ fn write_read_large(fname: &PathBuf, strategy: &CompressStrategy)
     assert_eq!(record.rec_type, RecordType::Dialog);
 
     Ok(())
+}
+
+fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
+    let tpath = Path::new("target/testmp");
+    fs::create_dir_all(tpath)?;
+
+    let fname = tpath.join(name);
+    if fname.exists() {
+        fs::remove_file(&fname)?;
+    }
+    Ok(fname)
 }
