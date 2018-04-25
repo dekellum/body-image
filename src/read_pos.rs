@@ -11,6 +11,18 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
+/// Trait offering a uniform `pread` for positioned reads, with platform
+/// dependent side-effects.
+pub trait PosRead {
+    /// Read some bytes, starting at the specified offset, into the specified
+    /// buffer and return the number of bytes read. The offset is absolute,
+    /// from the beginning of the underlying file.  The position of the
+    /// underlying file pointer (aka cursor) is not used. It is platform
+    /// dependent whether the underlying file pointer is modified by this
+    /// operation.
+    fn pread(&self, buf: &mut [u8], offset: u64) -> io::Result<usize>;
+}
+
 /// Re-implements `Read` and `Seek` over a shared `File` reference using
 /// _only_ positioned reads via `FileExt` (platform specific)
 /// `read_at`/`seek_read`, and by maintaining an instance independent
@@ -38,6 +50,20 @@ pub struct ReadPos {
     pos: u64,
     length: u64,
     file: Arc<File>,
+}
+
+impl PosRead for File {
+    #[cfg(unix)]
+    #[inline]
+    fn pread(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        self.read_at(buf, offset)
+    }
+
+    #[cfg(windows)]
+    #[inline]
+    fn pread(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        self.seek_read(buf, offset)
+    }
 }
 
 impl ReadPos {
@@ -81,17 +107,16 @@ impl Clone for ReadPos {
     }
 }
 
-impl Read for ReadPos {
-    #[cfg(unix)]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = self.file.read_at(buf, self.pos)?;
-        self.pos += len as u64;
-        Ok(len)
+impl PosRead for ReadPos {
+    #[inline]
+    fn pread(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        self.file.pread(buf, offset)
     }
+}
 
-    #[cfg(windows)]
+impl Read for ReadPos {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = self.file.seek_read(buf, self.pos)?;
+        let len = self.pread(buf, self.pos)?;
         self.pos += len as u64;
         Ok(len)
     }
