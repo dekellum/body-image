@@ -58,6 +58,28 @@ fn gather_upfront(b: &mut Bencher) {
     })
 }
 
+#[bench]
+fn gather_upfront_read_only(b: &mut Bencher) {
+    let body = {
+        let buffers = create_buffers();
+        let mut bsink = BodySink::with_ram_buffers(CHUNK_COUNT);
+        for b in buffers {
+            bsink.save(b).expect("save");
+        }
+        let mut b = bsink.prepare().expect("prep");
+        b.gather();
+        b
+    };
+    b.iter( || {
+        if let BodyReader::Contiguous(cur) = body.reader() {
+            let len = read_to_end(cur).expect("read");
+            assert_eq!(CHUNK_SIZE * CHUNK_COUNT, len);
+        } else {
+            panic!("not contiguous?!");
+        }
+    })
+}
+
 fn create_buffers() -> Vec<Bytes> {
     let chunk = vec![65u8; CHUNK_SIZE];
     let mut v = Vec::new();
