@@ -40,17 +40,7 @@ pub struct ReadPos {
     file: Arc<File>,
 }
 
-impl Clone for ReadPos {
-    /// Return a new, independent `ReadPos` with the same length and file
-    /// reference as self, and with position 0 (ignore self's current
-    /// position).
-    fn clone(&self) -> ReadPos {
-        ReadPos { pos: 0, length: self.length, file: self.file.clone() }
-    }
-}
-
-impl ReadPos
-{
+impl ReadPos {
     /// New instance by `File` reference and fixed file length.
     pub(crate) fn new(file: Arc<File>, length: u64) -> ReadPos {
         ReadPos { pos: 0, length, file }
@@ -83,8 +73,16 @@ impl ReadPos
     }
 }
 
-impl Read for ReadPos
-{
+impl Clone for ReadPos {
+    /// Return a new, independent `ReadPos` with the same length and file
+    /// reference as self, and with position 0 (ignore self's current
+    /// position).
+    fn clone(&self) -> ReadPos {
+        ReadPos { pos: 0, length: self.length, file: self.file.clone() }
+    }
+}
+
+impl Read for ReadPos {
     #[cfg(unix)]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let len = self.file.read_at(buf, self.pos)?;
@@ -100,8 +98,7 @@ impl Read for ReadPos
     }
 }
 
-impl Seek for ReadPos
-{
+impl Seek for ReadPos {
     fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
         match from {
             SeekFrom::Start(p) => {
