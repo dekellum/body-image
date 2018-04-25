@@ -1,12 +1,14 @@
-//! These benchmarks compare a chained cursor approach to the custom built
-//! GatheringReader, for reading a typical scattered vector of byte buffers.
+//! These benchmarks compare the custom built `GatheringReader`, to a chained
+//! cursor approach from `std`, for reading a typical scattered vector of byte
+//! buffers. For another comparison, use upfront gather and read directly from
+//! a contiguous `Cursor`.
 
 #![feature(test)]
 extern crate test;
 extern crate body_image;
 extern crate bytes;
 
-use body_image::GatheringReader;
+use body_image::{BodySink, BodyReader, GatheringReader};
 use bytes::Bytes;
 use test::Bencher;
 use std::io;
@@ -31,6 +33,28 @@ fn gather_chained_cursors(b: &mut Bencher) {
     b.iter( move || {
         let len = read_chained(&buffers).expect("read");
         assert_eq!(CHUNK_SIZE * CHUNK_COUNT, len);
+    })
+}
+
+#[bench]
+fn gather_upfront(b: &mut Bencher) {
+    let body = {
+        let buffers = create_buffers();
+        let mut bsink = BodySink::with_ram_buffers(CHUNK_COUNT);
+        for b in buffers {
+            bsink.save(b).expect("save");
+        }
+        bsink.prepare().expect("prep")
+    };
+    b.iter( || {
+        let mut body = body.clone(); // shallow
+        body.gather();
+        if let BodyReader::Contiguous(cur) = body.reader() {
+            let len = read_to_end(cur).expect("read");
+            assert_eq!(CHUNK_SIZE * CHUNK_COUNT, len);
+        } else {
+            panic!("not contiguous?!");
+        }
     })
 }
 
