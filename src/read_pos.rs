@@ -24,9 +24,8 @@ pub trait PosRead {
 }
 
 /// Re-implements `Read` and `Seek` over a shared `File` reference using
-/// _only_ positioned reads via `FileExt` (platform specific)
-/// `read_at`/`seek_read`, and by maintaining an instance independent
-/// position.
+/// _only_ positioned reads via `PosRead`, and by maintaining an instance
+/// independent position.
 ///
 /// `ReadPos` supports independent instances on the same `File` (and handle)
 /// without needing a path to open an independent `File`.  Thus it is
@@ -36,11 +35,7 @@ pub trait PosRead {
 ///
 /// ### Current Limitations
 ///
-/// * On some platforms (e.g. Windows) the underlying file position will be
-/// modified as `ReadPos` is read. This will not effect this or other
-/// `ReadPos` instances however.
-///
-/// * A (file) length is arbitrarily passed in and used solely for handling
+/// A (file) length is arbitrarily passed in and used solely for handling
 /// SeekFrom::End. Seeking past end of file is allowed by the platforms and
 /// `File` in any case.  This size is not checked or updated via `File`
 /// metadata, which could result in surprising behavior if concurrent updates
