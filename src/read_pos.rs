@@ -48,28 +48,27 @@ impl ReadPos {
 
     /// Seek by signed offset from an origin, checking for underflow and
     /// overflow.
-    #[cfg_attr(feature = "cargo-clippy", allow(collapsible_if))]
     fn seek_from(&mut self, origin: u64, offset: i64) -> io::Result<u64> {
-        if offset < 0 {
-            if let Some(p) = origin.checked_sub((-offset) as u64) {
-                self.pos = p;
-            } else {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Invalid attempt to seek to a negative absolute position"
-                ));
-            }
+        let checked_pos = if offset < 0 {
+            origin.checked_sub((-offset) as u64)
         } else {
-            if let Some(p) = origin.checked_add(offset as u64) {
-                self.pos = p;
-            } else {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Attempted seek would overflow u64 position"
-                ));
-            }
+            origin.checked_add(offset as u64)
+        };
+
+        if let Some(p) = checked_pos {
+            self.pos = p;
+            Ok(p)
+        } else if offset < 0 {
+            Err(Error::new(
+                ErrorKind::Other,
+                "Attempted seek to a negative absolute position"
+            ))
+        } else {
+            Err(Error::new(
+                ErrorKind::Other,
+                "Attempted seek would overflow u64 position"
+            ))
         }
-        Ok(self.pos)
     }
 }
 
