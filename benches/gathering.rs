@@ -89,12 +89,12 @@ fn create_buffers() -> Vec<Bytes> {
     v
 }
 
-fn read_gathered(buffers: &[Bytes]) -> Result<usize,io::Error> {
+fn read_gathered(buffers: &[Bytes]) -> Result<usize, io::Error> {
     let r = GatheringReader::new(buffers);
     read_to_end(r)
 }
 
-fn read_chained(buffers: &[Bytes]) -> Result<usize,io::Error> {
+fn read_chained(buffers: &[Bytes]) -> Result<usize, io::Error> {
     let mut r: Box<Read> = Box::new(Cursor::new(&buffers[0]));
     for b in &buffers[1..] {
         r = Box::new(r.chain(Cursor::new(b)));
@@ -102,7 +102,7 @@ fn read_chained(buffers: &[Bytes]) -> Result<usize,io::Error> {
     read_to_end(r)
 }
 
-fn read_to_end<R: Read>(mut r: R) -> Result<usize,io::Error> {
+fn read_to_end<R: Read>(mut r: R) -> Result<usize, io::Error> {
     let mut buf = [0u8; READ_BUFF_SIZE];
     let mut total = 0;
     loop {
