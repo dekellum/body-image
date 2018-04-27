@@ -60,7 +60,7 @@ impl ReadPos {
             Ok(p)
         } else if offset < 0 {
             Err(Error::new(
-                ErrorKind::Other,
+                ErrorKind::InvalidInput,
                 "Attempted seek to a negative absolute position"
             ))
         } else {
