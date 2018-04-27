@@ -47,6 +47,14 @@ pub struct ReadPos {
     file: Arc<File>,
 }
 
+#[derive(Debug)]
+pub struct ReadSlice {
+    start: u64,
+    pos: u64,
+    end: u64,
+    file: Arc<File>,
+}
+
 impl PosRead for File {
     #[cfg(unix)]
     #[inline]
@@ -126,6 +134,103 @@ impl Seek for ReadPos {
             }
             SeekFrom::End(offset) => {
                 let origin = self.length;
+                self.seek_from(origin, offset)
+            }
+            SeekFrom::Current(offset) => {
+                let origin = self.pos;
+                self.seek_from(origin, offset)
+            }
+        }
+    }
+}
+
+impl ReadSlice {
+    /// New instance by `File` reference and fixed file length.
+    pub(crate) fn new(file: Arc<File>, start: u64, end: u64) -> ReadSlice {
+        assert!( start <= end );
+        ReadSlice { start, pos: start, end, file }
+    }
+
+    /// Seek by signed offset from an (absolute) origin, checking for
+    /// underflow and overflow.
+    fn seek_from(&mut self, origin: u64, offset: i64) -> io::Result<u64> {
+        let checked_pos = if offset < 0 {
+            origin.checked_sub((-offset) as u64)
+        } else {
+            origin.checked_add(offset as u64)
+        };
+
+        if let Some(p) = checked_pos {
+            self.seek_to(p)
+        } else if offset < 0 {
+            Err(Error::new(
+                ErrorKind::InvalidInput,
+                "Attempted seek to a negative absolute position"
+            ))
+        } else {
+            Err(Error::new(
+                ErrorKind::Other,
+                "Attempted seek would overflow u64 position"
+            ))
+        }
+    }
+
+    /// Seek to abspos and return relative position within slice. Return Error
+    /// if abspos is before start. Positions beyond end are allowed.
+    fn seek_to(&mut self, abspos: u64) -> io::Result<u64> {
+        if abspos < self.start {
+            Err(Error::new(
+                ErrorKind::InvalidInput,
+                "Attempted seek to a negative position"
+            ))
+        } else {
+            self.pos = abspos;
+            Ok(abspos - self.start)
+        }
+    }
+}
+
+impl PosRead for ReadSlice {
+    #[inline]
+    fn pread(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+        let pos = self.start.saturating_add(offset);
+        if pos < self.end {
+            let mlen = self.end - pos; // positive/no-underflow per above
+            if (buf.len() as u64) <= mlen {
+                self.file.pread(buf, pos)
+            } else {
+                // safe cast: mlen < buf.len which is already usize
+                self.file.pread(&mut buf[..(mlen as usize)], pos)
+            }
+        } else {
+            Ok(0)
+        }
+    }
+}
+
+impl Read for ReadSlice {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let len = self.pread(buf, self.pos)?;
+        self.pos += len as u64;
+        Ok(len)
+    }
+}
+
+impl Seek for ReadSlice {
+    fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
+        match from {
+            SeekFrom::Start(p)        => {
+                if let Some(p) = self.start.checked_add(p) {
+                    self.seek_to(p)
+                } else {
+                    Err(Error::new(
+                        ErrorKind::Other,
+                        "Attempted seek would overflow u64 position"
+                    ))
+                }
+            },
+            SeekFrom::End(offset)     => {
+                let origin = self.end;
                 self.seek_from(origin, offset)
             }
             SeekFrom::Current(offset) => {
