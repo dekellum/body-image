@@ -644,7 +644,7 @@ pub enum BodyReader<'a> {
 
     /// `GatheringReader` providing `Read` over 2 or more scattered RAM
     /// buffers.
-    Scattered(GatheringReader<'a>),
+    Scattered(GatheringReader<'a, Bytes>),
 
     /// `ReadPos` providing instance independent, unbuffered `Read` and `Seek`
     /// for BodyImage `FsRead` state. Consider wrapping this in
@@ -665,16 +665,16 @@ impl<'a> BodyReader<'a> {
 
 /// A specialized reader for `BodyImage` in `Ram`, presenting a continuous
 /// (gathered) `Read` interface over N non-contiguous byte buffers.
-pub struct GatheringReader<'a> {
+pub struct GatheringReader<'a, T: AsRef<[u8]> + 'a> {
     current: Cursor<&'a [u8]>,
-    remainder: &'a [Bytes]
+    remainder: &'a [T]
 }
 
-impl<'a> GatheringReader<'a> {
-    pub fn new(buffers: &'a [Bytes]) -> Self {
+impl<'a, T: AsRef<[u8]> + 'a> GatheringReader<'a, T> {
+    pub fn new(buffers: &'a [T]) -> Self {
         match buffers.split_first() {
             Some((b, remainder)) => {
-                GatheringReader { current: Cursor::new(b), remainder }
+                GatheringReader { current: Cursor::new(b.as_ref()), remainder }
             }
             None => {
                 GatheringReader { current: Cursor::new(&[]), remainder: &[] }
@@ -685,7 +685,7 @@ impl<'a> GatheringReader<'a> {
     fn pop(&mut self) -> bool {
         match self.remainder.split_first() {
             Some((c, rem)) => {
-                self.current = Cursor::new(c);
+                self.current = Cursor::new(c.as_ref());
                 self.remainder = rem;
                 true
             }
@@ -694,7 +694,7 @@ impl<'a> GatheringReader<'a> {
     }
 }
 
-impl<'a> Read for GatheringReader<'a> {
+impl<'a, T: AsRef<[u8]> + 'a> Read for GatheringReader<'a, T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let n = self.current.read(buf)?;
         if n == 0 && !buf.is_empty() && self.pop() {
