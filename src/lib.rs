@@ -391,14 +391,14 @@ impl BodyImage {
         }
     }
 
-    /// Return true if body is empty.
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
     /// Return the current length of body in bytes.
     pub fn len(&self) -> u64 {
         self.len
+    }
+
+    /// Return true if body is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     /// Formerly, this rewound 'FsRead', but now is an unnecessary no-op. The
