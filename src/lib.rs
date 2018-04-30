@@ -52,7 +52,7 @@
 #[cfg(feature = "client")] pub mod client;
 
 mod read_pos;
-pub use read_pos::ReadPos;
+pub use read_pos::{ReadPos, ReadSlice};
 
 use std::env;
 use std::fmt;
@@ -63,7 +63,7 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use bytes::{Bytes, BytesMut, BufMut};
-use memmap::Mmap;
+use memmap::{Mmap, MmapOptions};
 use tempfile::tempfile_in;
 
 /// The crate version string.
@@ -130,6 +130,7 @@ pub struct BodyImage {
 enum ImageState {
     Ram(Vec<Bytes>),
     FsRead(Arc<File>),
+    FsReadSlice(ReadSlice),
     MemMap(Arc<Mmap>),
 }
 
@@ -365,13 +366,10 @@ impl BodyImage {
         }
     }
 
-    /// Create new instance based on an existing `Mmap` region.
-    fn with_map(map: Mmap) -> BodyImage {
-        let len = map.len() as u64;
-        BodyImage {
-            state: ImageState::MemMap(Arc::new(map)),
-            len
-        }
+    /// Create a new instance based on a `ReadSlice`.
+    fn with_read_slice(rslice: ReadSlice) -> BodyImage {
+        let len = rslice.len();
+        BodyImage { state: ImageState::FsReadSlice(rslice), len }
     }
 
     /// Create new instance from a single byte slice.
@@ -416,6 +414,20 @@ impl BodyImage {
             ImageState::FsRead(ref file) => {
                 assert!(self.len > 0);
                 unsafe { Mmap::map(&file) }?
+            }
+            ImageState::FsReadSlice(ref rslice) => {
+                unsafe {
+                    let offset = rslice.start();
+                    let len = rslice.len();
+                    // See: https://github.com/danburkert/memmap-rs/pull/65
+                    assert!(offset <= usize::max_value() as u64);
+                    assert!(len    <= usize::max_value() as u64);
+                    assert!(len > 0);
+                    MmapOptions::new()
+                        .offset(offset as usize)
+                        .len(len as usize)
+                        .map(rslice.file_ref())?
+                }
             }
             _ => return Ok(self)
         };
@@ -474,6 +486,9 @@ impl BodyImage {
             }
             ImageState::FsRead(ref f) => {
                 BodyReader::File(ReadPos::new(f.clone(), self.len))
+            }
+            ImageState::FsReadSlice(ref rslice) => {
+                BodyReader::FileSlice(rslice.clone())
             }
             ImageState::MemMap(ref m) => {
                 BodyReader::Contiguous(Cursor::new(m))
@@ -558,6 +573,10 @@ impl BodyImage {
                 let mut rp = ReadPos::new(f.clone(), self.len);
                 io::copy(&mut rp, out)?;
             }
+            ImageState::FsReadSlice(ref rslice) => {
+                let mut rs = rslice.clone();
+                io::copy(&mut rs, out)?;
+            }
         }
         Ok(self.len)
     }
@@ -619,6 +638,11 @@ impl fmt::Debug for ImageState {
                     .field(file)
                     .finish()
             }
+            ImageState::FsReadSlice(ref rslice) => {
+                f.debug_tuple("FsReadSlice")
+                    .field(rslice)
+                    .finish()
+            }
             ImageState::MemMap(ref m) => {
                 f.debug_tuple("MemMap")
                     .field(m)
@@ -643,6 +667,12 @@ pub enum BodyReader<'a> {
     /// for BodyImage `FsRead` state. Consider wrapping this in
     /// `std::io::BufReader` if performing many small reads.
     File(ReadPos),
+
+    /// `ReadSlice` providing instance independent, unbuffered `Read` and
+    /// `Seek` for BodyImage `FsRead` state, limited to a range within an
+    /// underlying file. Consider wrapping this in `std::io::BufReader` if
+    /// performing many small reads.
+    FileSlice(ReadSlice),
 }
 
 impl<'a> BodyReader<'a> {
@@ -652,6 +682,7 @@ impl<'a> BodyReader<'a> {
             BodyReader::Contiguous(ref mut cursor) => cursor,
             BodyReader::Scattered(ref mut gatherer) => gatherer,
             BodyReader::File(ref mut rpos) => rpos,
+            BodyReader::FileSlice(ref mut rslice) => rslice,
         }
     }
 }
