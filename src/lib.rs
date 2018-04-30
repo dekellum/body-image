@@ -412,22 +412,15 @@ impl BodyImage {
     /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
     /// other states.
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
-        if let ImageState::FsRead(_) = self.state {
-            assert!(self.len > 0);
-            // Swap with empty, to move file out of FsRead
-            if let ImageState::FsRead(file) = self.state.cut() {
-                match unsafe { Mmap::map(&file) } {
-                    Ok(map) => {
-                        self.state = ImageState::MemMap(Arc::new(map));
-                    }
-                    Err(e) => {
-                        // Restore FsRead on failure
-                        self.state = ImageState::FsRead(file);
-                        return Err(BodyError::from(e));
-                    }
-                }
+        let map = match self.state {
+            ImageState::FsRead(ref file) => {
+                assert!(self.len > 0);
+                unsafe { Mmap::map(&file) }?
             }
-        }
+            _ => return Ok(self)
+        };
+
+        self.state = ImageState::MemMap(Arc::new(map));
         Ok(self)
     }
 
