@@ -86,7 +86,7 @@ impl PosRead for File {
 
 impl ReadPos {
     /// New instance by `File` reference and fixed file length.
-    pub(crate) fn new(file: Arc<File>, length: u64) -> ReadPos {
+    pub fn new(file: Arc<File>, length: u64) -> ReadPos {
         ReadPos { pos: 0, length, file }
     }
 
@@ -109,7 +109,7 @@ impl ReadPos {
     /// Return a new and independent `ReadSlice` for the same file, for the
     /// range of byte offsets `start..end`. Panics if start is greater than
     /// end. Note that end is not checked against the constructed length.
-    pub(crate) fn subslice(&self, start: u64, end: u64) -> ReadSlice {
+    pub fn subslice(&self, start: u64, end: u64) -> ReadSlice {
         ReadSlice::new(self.file.clone(), start, end)
     }
 
@@ -190,8 +190,8 @@ impl Seek for ReadPos {
 }
 
 impl ReadSlice {
-    /// New instance by `File` reference, and fixed start and end offsets.
-    pub(crate) fn new(file: Arc<File>, start: u64, end: u64) -> ReadSlice {
+    /// New instance by `File` reference, fixed start and end offsets.
+    pub fn new(file: Arc<File>, start: u64, end: u64) -> ReadSlice {
         assert!(start <= end);
         ReadSlice { start, pos: start, end, file }
     }
@@ -221,8 +221,7 @@ impl ReadSlice {
     /// range of byte offsets `start..end` which are relative and must be
     /// fully contained by self. Panics on overflow, if start..end is not
     /// fully contained by self, or if start is greater-than end.
-    #[allow(dead_code)]
-    pub(crate) fn subslice(&self, start: u64, end: u64) -> ReadSlice {
+    pub fn subslice(&self, start: u64, end: u64) -> ReadSlice {
         let abs_start = self.start.checked_add(start)
             .expect("ReadSlice::subslice start overflow");
         let abs_end = self.start.checked_add(end)
