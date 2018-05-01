@@ -209,6 +209,10 @@ impl ReadSlice {
         self.len() == 0
     }
 
+    // FIXME: BodyImage needs this for `mem_map`, but we don't want to expose
+    // the underlying BARC file from a BARC read of a large body to a
+    // `ReadSlice`. A possible alternative would be offering the `mem_map`
+    // operation here, at the cost of the dependency.
     pub(crate) fn file_ref(&self) -> &File {
         &self.file
     }
