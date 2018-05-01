@@ -54,7 +54,7 @@ pub struct ReadPos {
 /// As compared with [`ReadPos`](struct.ReadPos.html), `ReadSlice` adds a
 /// general start offset, and limits access to the start..end range. Seeks are
 /// relative, so a seek to `SeekFrom::Start(0)` is always the first byte of
-/// the slice, including when the absolute start index is greater-than 0.
+/// the slice.
 ///
 /// Fixed `start` and `end` offsets are passed on construction and used to
 /// constrain reads and interpret `SeekFrom::End`. Seeking past end of file is
@@ -337,7 +337,7 @@ impl Seek for ReadSlice {
     /// a seek to `SeekFrom::Start(0)` is always the first byte of the slice.
     fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
         match from {
-            SeekFrom::Start(p)        => {
+            SeekFrom::Start(p) => {
                 if let Some(p) = self.start.checked_add(p) {
                     self.seek_to(p)
                 } else {
@@ -347,7 +347,7 @@ impl Seek for ReadSlice {
                     ))
                 }
             },
-            SeekFrom::End(offset)     => {
+            SeekFrom::End(offset) => {
                 let origin = self.end;
                 self.seek_from(origin, offset)
             }
