@@ -1032,7 +1032,7 @@ impl Default for Tuner {
 }
 
 #[cfg(test)]
-mod tests {
+mod root {
     use super::*;
 
     fn is_send<T: Send>() -> bool { true }
