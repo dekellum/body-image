@@ -219,9 +219,9 @@ impl ReadSlice {
     }
 
     /// Return a new and independent `ReadSlice` for the same file, for the
-    /// range of byte offsets `start..end` which are relative and must be
-    /// fully contained by self. Panics on overflow, if start..end is not
-    /// fully contained by self, or if start is greater-than end.
+    /// range of byte offsets `start..end` which are relative to, and must be
+    /// fully contained by self. Checks for and panics on overflow, if
+    /// start..end is not fully contained, or if start is greater-than end.
     pub fn subslice(&self, start: u64, end: u64) -> ReadSlice {
         let abs_start = self.start.checked_add(start)
             .expect("ReadSlice::subslice start overflow");
@@ -271,7 +271,7 @@ impl ReadSlice {
         } else if offset < 0 {
             Err(Error::new(
                 ErrorKind::InvalidInput,
-                "Attempted seek to a negative absolute position"
+                "Attempted seek to a negative position"
             ))
         } else {
             Err(Error::new(
