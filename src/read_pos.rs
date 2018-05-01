@@ -163,6 +163,7 @@ impl PosRead for ReadPos {
 }
 
 impl Read for ReadPos {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let len = self.pread(buf, self.pos)?;
         self.pos += len as u64;
@@ -310,6 +311,7 @@ impl Clone for ReadSlice {
 }
 
 impl PosRead for ReadSlice {
+    #[inline]
     fn pread(&self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
         let pos = self.start.saturating_add(offset);
         if pos < self.end {
@@ -321,6 +323,7 @@ impl PosRead for ReadSlice {
 }
 
 impl Read for ReadSlice {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let len = self.pread_abs(buf, self.pos)?;
         self.pos += len as u64;
