@@ -33,7 +33,8 @@
 extern crate futures;
 extern crate hyper;
 extern crate hyper_tls;
-extern crate tokio_core;
+extern crate hyperx;
+extern crate tokio;
 
 #[cfg(feature = "brotli")]
 use brotli;
@@ -48,11 +49,9 @@ use flate2::read::{DeflateDecoder, GzDecoder};
 use self::futures::{future, Future, Stream};
 use http;
 use self::hyper::Client;
-use self::hyper::client::compat::CompatFutureResponse;
-use self::hyper::header::{ContentEncoding, ContentLength,
-                          Encoding as HyEncoding,
-                          Header, TransferEncoding, Raw};
-use self::tokio_core::reactor::Core;
+use self::hyperx::header::{ContentEncoding, ContentLength,
+                           Encoding as HyEncoding,
+                           Header, TransferEncoding, Raw};
 
 use {BodyImage, BodySink, BodyError, Encoding,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
@@ -77,41 +76,49 @@ pub static BROWSE_ACCEPT: &str =
      application/xml;q=0.9, \
      */*;q=0.8";
 
+use std::sync::{Arc, Mutex};
+
 /// Run an HTTP request to completion, returning the full `Dialog`. This
 /// function constructs all the necesarry _hyper_ and _tokio_ components in a
 /// simplistic form internally, and is currently not recommended for anything
 /// but one-time use.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
-    // FIXME: State of the Core (v Reactor), incl. construction,
-    // use from multiple threads is under flux:
-    // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
-    //
-    // But hyper, as of 0.11.18 still depends on tokio-core, io,
-    // service:
-    // https://crates.io/crates/hyper
-    let mut core = Core::new()?;
-    let client = Client::configure()
-        .connector(hyper_tls::HttpsConnector::new(4, &core.handle())?)
-        // FIXME: threads ------------------------^
-        .build(&core.handle());
+    let connector = hyper_tls::HttpsConnector::new(2 /*DNS threads*/)?;
 
-    // FIXME: What about Timeouts? Appears to also be under flux:
-    // https://github.com/hyperium/hyper/issues/1234
-    // https://hyper.rs/guides/client/timeout/
+    let tune = tune.clone();
 
-    let prolog = rr.prolog;
+    let res = Arc::new(Mutex::new(None));
+    let res_c1 = res.clone();
+    let res_c2 = res.clone();
 
-    let fr: CompatFutureResponse = client.request_compat(rr.request);
+    let work = future::lazy(move || {
+        let client = Client::builder()
+            .build::<_, hyper::Body>(connector);
 
-    let work = fr
-        .map(|response| Monolog { prolog, response } )
-        .map_err(Flare::from)
-        .and_then(|monolog| resp_future(monolog, tune))
-        .and_then(|idialog| future::result(idialog.prepare()));
+        // FIXME: What about Timeouts? Appears to also be under flux:
+        // https://github.com/hyperium/hyper/issues/1234
+        // https://hyper.rs/guides/client/timeout/
 
-    // Run until completion
-    core.run(work)
-        .map_err(Flare::from)
+        let prolog = rr.prolog;
+
+        client.request(rr.request)
+            .map(|response| Monolog { prolog, response } )
+            .map_err(Flare::from)
+            .and_then(move |monolog| resp_future(monolog, &tune))
+            .and_then(|idialog| future::result(idialog.prepare()))
+            .map(move |dialog| {
+                *res_c1.lock().unwrap() = Some(Ok(dialog));
+            })
+            .map_err(move |err| {
+                *res_c2.lock().unwrap() = Some(Err(err));
+            })
+    });
+
+    self::tokio::run(work);
+
+    Arc::try_unwrap(res).expect("solo Arc ref")
+        .into_inner().expect("not poisoned")
+        .expect("some")
 }
 
 /// Return a list of supported encodings from the headers Transfer-Encoding
