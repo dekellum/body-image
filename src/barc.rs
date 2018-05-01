@@ -103,7 +103,6 @@ pub struct BarcWriter<'a> {
 /// and position.
 pub struct BarcReader {
     file: ReadPos,
-    offset: u64
 }
 
 /// Error enumeration for all barc module errors.  This may be extended in the
@@ -615,14 +614,13 @@ impl BarcFile {
         Ok(BarcWriter { guard })
     }
 
-    /// Get a reader for this file. Errors if the file does not
-    /// exist.
+    /// Get a reader for this file. Errors if the file does not exist.
     pub fn reader(&self) -> Result<BarcReader, BarcError> {
         let file = OpenOptions::new()
             .read(true)
             .open(&self.path)?;
         // FIXME: Use fs2 crate for: file.try_lock_shared()?
-        Ok(BarcReader { file: ReadPos::new(Arc::new(file), 0), offset: 0 })
+        Ok(BarcReader { file: ReadPos::new(Arc::new(file), 0) })
     }
 }
 
@@ -775,11 +773,12 @@ impl BarcReader {
     /// Read and return the next Record or None if EOF. The provided Tunables
     /// `max_body_ram` controls, depending on record sizes and compression,
     /// whether the request and response bodies are read directly into RAM,
-    /// mapped or buffered in a file.
+    /// buffered in a file, or deferred via a `ReadSlice`.
     pub fn read(&mut self, tune: &Tunables)
         -> Result<Option<Record>, BarcError>
     {
         let fin = &mut self.file;
+        let start = fin.tell();
 
         let rhead = match read_record_head(fin) {
             Ok(Some(rh)) => rh,
@@ -789,48 +788,40 @@ impl BarcReader {
 
         let rec_type = rhead.rec_type;
 
-        // With a concurrent writer, its possible to see an
-        // incomplete, Reserved record head, followed by an empty or
-        // partial record payload.  In this case, seek back to start
-        // and return None.
+        // With a concurrent writer, its possible to see an incomplete,
+        // Reserved record head, followed by an empty or partial record
+        // payload.  In this case, seek back to start and return None.
         if rec_type == RecordType::Reserved {
-            fin.seek(SeekFrom::Start(self.offset))?;
+            fin.seek(SeekFrom::Start(start))?;
             return Ok(None);
         }
 
         if rhead.compress != Compression::Plain {
-            let offset = fin.seek(SeekFrom::Current(0))?;
-            let rslice = fin.as_read_slice(offset, offset + rhead.len);
-            let rec = read_compressed(rslice, &rhead, tune)?;
-            self.offset = fin.seek(SeekFrom::Start(offset + rhead.len))?;
+            let end = fin.tell() + rhead.len;
+            let rec = read_compressed(
+                fin.subslice(fin.tell(), end), &rhead, tune
+            )?;
+            fin.seek(SeekFrom::Start(end))?;
             return Ok(Some(rec))
         }
 
         let meta = read_headers(fin, WITH_CRLF, rhead.meta)?;
-
         let req_headers = read_headers(fin, WITH_CRLF, rhead.req_h)?;
-        let mut total: u64 = (rhead.meta + rhead.req_h) as u64;
 
         let req_body = if rhead.req_b <= tune.max_body_ram() {
             read_body_ram(fin, WITH_CRLF, rhead.req_b as usize)
         } else {
-            let offset = self.offset + (V2_HEAD_SIZE as u64) + total;
-            slice_body(fin, offset, rhead.req_b)
+            slice_body(fin, rhead.req_b)
         }?;
-
         let res_headers = read_headers(fin, WITH_CRLF, rhead.res_h)?;
-        total += rhead.req_b;
-        total += rhead.res_h as u64;
-        let body_len = rhead.len - total;
+
+        let body_len = rhead.len - (fin.tell() - start - (V2_HEAD_SIZE as u64));
 
         let res_body = if body_len <= tune.max_body_ram() {
             read_body_ram(fin, WITH_CRLF, body_len as usize)
         } else {
-            let offset = self.offset + (V2_HEAD_SIZE as u64) + total;
-            slice_body(fin, offset, body_len)
+            slice_body(fin, body_len)
         }?;
-
-        self.offset = fin.seek(SeekFrom::Current(0))?;
 
         Ok(Some(Record { rec_type, meta, req_headers, req_body,
                          res_headers, res_body }))
@@ -840,7 +831,7 @@ impl BarcReader {
     /// and is advanced by each succesful return from `read` or updated via
     /// `seek`.
     pub fn offset(&self) -> u64 {
-        self.offset
+        self.file.tell()
     }
 
     /// Seek to a known byte offset (e.g. 0 or as returned from
@@ -848,7 +839,7 @@ impl BarcReader {
     /// effects subsequent calls to `read`, which may error if the position is
     /// not to a valid record head.
     pub fn seek(&mut self, offset: u64) -> Result<(), BarcError> {
-        self.offset = self.file.seek(SeekFrom::Start(offset))?;
+        self.file.seek(SeekFrom::Start(offset))?;
         Ok(())
     }
 }
@@ -1124,16 +1115,17 @@ fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
 // Return `BodyImage::FsReadSlice` for an uncompressed body in file, at offset
 // and length. Assumes (and asserts that) current is positioned at offset, and
 // seeks file past the body len.
-fn slice_body(rp: &mut ReadPos, offset: u64, len: u64)
+fn slice_body(rp: &mut ReadPos, len: u64)
     -> Result<BodyImage, BarcError>
 {
     assert!(len > 2);
+    let offset = rp.tell();
 
     // Seek past the body, as if read.
     let end = rp.seek(SeekFrom::Current(len as i64))?;
     assert_eq!(offset + len, end);
 
-    let rslice = rp.as_read_slice(offset, offset + len - 2);
+    let rslice = rp.subslice(offset, offset + len - 2);
     Ok(BodyImage::with_read_slice(rslice))
 }
 
