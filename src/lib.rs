@@ -52,7 +52,7 @@
 #[cfg(feature = "client")] pub mod client;
 
 mod read_pos;
-pub use read_pos::{ReadPos, ReadSlice};
+pub use read_pos::{PosRead, ReadPos, ReadSlice};
 
 use std::env;
 use std::fmt;

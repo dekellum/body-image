@@ -15,8 +15,8 @@ use std::os::windows::fs::FileExt;
 /// dependent side-effects.
 pub trait PosRead {
     /// Read some bytes, starting at the specified offset, into the specified
-    /// buffer and return the number of bytes read. The offset is absolute,
-    /// from the beginning of the underlying file.  The position of the
+    /// buffer and return the number of bytes read. The offset is from the
+    /// start of the underlying file or file range.  The position of the
     /// underlying file pointer (aka cursor) is not used. It is platform
     /// dependent whether the underlying file pointer is modified by this
     /// operation.
