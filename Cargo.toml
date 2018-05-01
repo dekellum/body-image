@@ -32,7 +32,7 @@ clap       = { version = ">=2.31.2, <3", optional = true, default-features = fal
 failure    = ">=0.1.0, <2"
 fern       = { version = ">=0.5.5, <2", optional = true }
 flate2     = ">=1.0.1, <2"
-futures    = { version = ">=0.1.18, <0.2", optional = true }
+futures    = { version = ">=0.1.20, <0.2", optional = true }
 http       = ">=0.1.4, <2"
 httparse   = ">=1.2.4, <2"
 hyper      = { version = ">=0.11.22, <0.12.0", optional = true, features = ["compat"] }
@@ -41,11 +41,11 @@ log        = ">=0.4.0, <2"
 olio       = { version = ">=0.2.0, <2", default-features = false }
 memmap     = { version = ">=0.6.2, <2", optional = true }
 tempfile   = ">=2.2.0, <4"
-tokio-core = { version = ">=0.1.13, <2", optional = true }
+tokio      = { version = ">=0.1.5, <0.2", optional = true }
 
 [features]
 default = ["mmap", "brotli", "cli"]
-client = ["futures", "hyper", "hyper-tls", "tokio-core"]
+client = ["futures", "hyper", "hyper-tls", "tokio"]
 cli = ["fern", "clap"]
 mmap = ["memmap", "olio/mmap"]
 
