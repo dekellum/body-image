@@ -684,8 +684,8 @@ impl<'a, T: AsRef<[u8]> + 'a> GatheringReader<'a, T> {
 
     fn pop(&mut self) -> bool {
         match self.remainder.split_first() {
-            Some((c, rem)) => {
-                self.current = Cursor::new(c.as_ref());
+            Some((b, rem)) => {
+                self.current = Cursor::new(b.as_ref());
                 self.remainder = rem;
                 true
             }
