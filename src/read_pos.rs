@@ -101,11 +101,6 @@ impl ReadPos {
         self.length == 0
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn file_ref(&self) -> &File {
-        &self.file
-    }
-
     /// Return a new and independent `ReadSlice` for the same file, for the
     /// range of byte offsets `start..end`. Panics if start is greater than
     /// end. Note that end is not checked against the constructed length.
