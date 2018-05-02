@@ -20,6 +20,9 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
+#[cfg(feature = "memmap")]
+use memmap::{Mmap, MmapOptions};
+
 /// Trait offering a uniform `pread` for positioned reads, with platform
 /// dependent side-effects.
 pub trait PosRead {
@@ -209,12 +212,22 @@ impl ReadSlice {
         self.len() == 0
     }
 
-    // FIXME: BodyImage needs this for `mem_map`, but we don't want to expose
-    // the underlying BARC file from a BARC read of a large body to a
-    // `ReadSlice`. A possible alternative would be offering the `mem_map`
-    // operation here, at the cost of the dependency.
-    pub(crate) fn file_ref(&self) -> &File {
-        &self.file
+    /// Return a new read-only memory map handle `Mmap` for the complete
+    /// region of the underlying file, from start to end.
+    #[cfg(feature = "memmap")]
+    pub(crate) fn mem_map(&self) -> Result<Mmap, io::Error> {
+        let offset = self.start();
+        let len = self.len();
+        // See: https://github.com/danburkert/memmap-rs/pull/65
+        assert!(offset <= usize::max_value() as u64);
+        assert!(len    <= usize::max_value() as u64);
+        assert!(len > 0);
+        unsafe {
+            MmapOptions::new()
+                .offset(offset as usize)
+                .len(len as usize)
+                .map(&self.file)
+        }
     }
 
     /// Return a new and independent `ReadSlice` for the same file, for the

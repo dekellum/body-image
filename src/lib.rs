@@ -68,7 +68,7 @@ use std::sync::Arc;
 use bytes::{Bytes, BytesMut, BufMut};
 
 #[cfg(feature = "memmap")]
-use memmap::{Mmap, MmapOptions};
+use memmap::{Mmap};
 
 use tempfile::tempfile_in;
 
@@ -447,18 +447,7 @@ impl BodyImage {
                 unsafe { Mmap::map(&file) }?
             }
             ImageState::FsReadSlice(ref rslice) => {
-                unsafe {
-                    let offset = rslice.start();
-                    let len = rslice.len();
-                    // See: https://github.com/danburkert/memmap-rs/pull/65
-                    assert!(offset <= usize::max_value() as u64);
-                    assert!(len    <= usize::max_value() as u64);
-                    assert!(len > 0);
-                    MmapOptions::new()
-                        .offset(offset as usize)
-                        .len(len as usize)
-                        .map(rslice.file_ref())?
-                }
+                rslice.mem_map()?
             }
             _ => return Ok(self)
         };
