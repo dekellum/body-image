@@ -36,6 +36,9 @@
 //! Brotli BARC record compression, via the native-rust _brotli_ crate. (Gzip,
 //! via the _flate2_ crate, is standard.)
 //!
+//! _memmap (default):_ Adds `BodyImage::mem_map` support for memory mapping
+//! from `FsRead` state.
+//!
 //! For complete functionally, build or install with `--all-features`.
 
 #[cfg(feature = "brotli")] extern crate brotli;
@@ -45,7 +48,7 @@
                            extern crate http;
                            extern crate httparse;
 #[macro_use]               extern crate log;
-                           extern crate memmap;
+#[cfg(feature = "memmap")] extern crate memmap;
                            extern crate tempfile;
 
                            pub mod barc;
@@ -63,7 +66,10 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use bytes::{Bytes, BytesMut, BufMut};
+
+#[cfg(feature = "memmap")]
 use memmap::{Mmap, MmapOptions};
+
 use tempfile::tempfile_in;
 
 /// The crate version string.
@@ -114,7 +120,8 @@ impl From<io::Error> for BodyError {
 /// : Body in a (temporary) file, ready for position based, sequential read.
 ///
 /// `MemMap`
-/// : Body in a memory mapped file, ready for random access read.
+/// : Body in a memory mapped file, ready for random access read (optional
+///   feature _memmap_)
 ///
 /// All states support concurrent reads. `BodyImage` is `Sync` and `Send`, and
 /// supports low-cost shallow `Clone` via internal (atomic) reference
@@ -131,6 +138,7 @@ enum ImageState {
     Ram(Vec<Bytes>),
     FsRead(Arc<File>),
     FsReadSlice(ReadSlice),
+    #[cfg(feature = "memmap")]
     MemMap(Arc<Mmap>),
 }
 
@@ -431,6 +439,7 @@ impl BodyImage {
 
     /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
     /// other states.
+    #[cfg(feature = "memmap")]
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
         let map = match self.state {
             ImageState::FsRead(ref file) => {
@@ -512,6 +521,7 @@ impl BodyImage {
             ImageState::FsReadSlice(ref rslice) => {
                 BodyReader::FileSlice(rslice.clone())
             }
+            #[cfg(feature = "memmap")]
             ImageState::MemMap(ref m) => {
                 BodyReader::Contiguous(Cursor::new(m))
             }
@@ -588,6 +598,7 @@ impl BodyImage {
                     out.write_all(b)?;
                 }
             }
+            #[cfg(feature = "memmap")]
             ImageState::MemMap(ref m) => {
                 out.write_all(m)?;
             }
@@ -665,6 +676,7 @@ impl fmt::Debug for ImageState {
                     .field(rslice)
                     .finish()
             }
+            #[cfg(feature = "memmap")]
             ImageState::MemMap(ref m) => {
                 f.debug_tuple("MemMap")
                     .field(m)
@@ -1224,6 +1236,7 @@ mod root {
         }
     }
 
+    #[cfg(feature = "memmap")]
     #[test]
     fn test_body_fs_map_read() {
         let tune = Tunables::new();
@@ -1280,8 +1293,9 @@ mod root {
         assert_eq!("hello world", &obuf[..]);
     }
 
+    #[cfg(feature = "memmap")]
     #[test]
-    fn test_body_fs_clone_shared() {
+    fn test_body_fs_map_clone_shared() {
         let tune = Tunables::new();
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello").unwrap();
@@ -1318,9 +1332,16 @@ mod root {
     fn test_body_fs_empty() {
         let tune = Tunables::new();
         let body = BodySink::with_fs(tune.temp_dir()).unwrap();
-        let mut body = body.prepare().unwrap();
+        let body = body.prepare().unwrap();
         assert!(body.is_empty());
+    }
 
+    #[cfg(feature = "memmap")]
+    #[test]
+    fn test_body_fs_map_empty() {
+        let tune = Tunables::new();
+        let body = BodySink::with_fs(tune.temp_dir()).unwrap();
+        let mut body = body.prepare().unwrap();
         body.mem_map().unwrap();
         assert!(body.is_empty());
     }

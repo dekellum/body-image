@@ -1456,6 +1456,7 @@ mod tests {
         assert_eq!(&buf[(buf.len()-8)..], b"</html>\n");
     }
 
+    #[cfg(feature = "memmap")]
     #[test]
     fn test_read_sample_mapped() {
         let mut record = {
