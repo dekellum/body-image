@@ -195,11 +195,6 @@ impl ReadSlice {
         ReadSlice { start, pos: start, end, file }
     }
 
-    /// Returns the start offset into the underlying file as constructed.
-    pub fn start(&self) -> u64 {
-        self.start
-    }
-
     /// Return the total size of the slice in bytes. This is based on the
     /// start and end offsets as constructed and can differ from the
     /// underlying file length.
@@ -216,7 +211,7 @@ impl ReadSlice {
     /// region of the underlying file, from start to end.
     #[cfg(feature = "memmap")]
     pub(crate) fn mem_map(&self) -> Result<Mmap, io::Error> {
-        let offset = self.start();
+        let offset = self.start;
         let len = self.len();
         // See: https://github.com/danburkert/memmap-rs/pull/65
         assert!(offset <= usize::max_value() as u64);
