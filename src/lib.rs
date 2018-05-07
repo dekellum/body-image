@@ -48,14 +48,12 @@
                            extern crate http;
                            extern crate httparse;
 #[macro_use]               extern crate log;
+                           extern crate olio;
 #[cfg(feature = "memmap")] extern crate memmap;
                            extern crate tempfile;
 
                            pub mod barc;
 #[cfg(feature = "client")] pub mod client;
-
-mod read_pos;
-pub use read_pos::{PosRead, ReadPos, ReadSlice};
 
 use std::env;
 use std::fmt;
@@ -66,6 +64,8 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use bytes::{Bytes, BytesMut, BufMut};
+use olio::io::GatheringReader;
+use olio::fs::rc::{ReadPos, ReadSlice};
 
 #[cfg(feature = "memmap")]
 use memmap::{Mmap};
@@ -707,47 +707,6 @@ impl<'a> BodyReader<'a> {
             BodyReader::File(ref mut rpos) => rpos,
             BodyReader::FileSlice(ref mut rslice) => rslice,
         }
-    }
-}
-
-/// A specialized reader for `BodyImage` in `Ram`, presenting a continuous
-/// (gathered) `Read` interface over N non-contiguous byte buffers.
-pub struct GatheringReader<'a, T: AsRef<[u8]> + 'a> {
-    current: Cursor<&'a [u8]>,
-    remainder: &'a [T]
-}
-
-impl<'a, T: AsRef<[u8]> + 'a> GatheringReader<'a, T> {
-    pub fn new(buffers: &'a [T]) -> Self {
-        match buffers.split_first() {
-            Some((b, remainder)) => {
-                GatheringReader { current: Cursor::new(b.as_ref()), remainder }
-            }
-            None => {
-                GatheringReader { current: Cursor::new(&[]), remainder: &[] }
-            }
-        }
-    }
-
-    fn pop(&mut self) -> bool {
-        match self.remainder.split_first() {
-            Some((b, rem)) => {
-                self.current = Cursor::new(b.as_ref());
-                self.remainder = rem;
-                true
-            }
-            None => false
-        }
-    }
-}
-
-impl<'a, T: AsRef<[u8]> + 'a> Read for GatheringReader<'a, T> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let n = self.current.read(buf)?;
-        if n == 0 && !buf.is_empty() && self.pop() {
-            return self.read(buf); // recurse
-        }
-        Ok(n)
     }
 }
 
