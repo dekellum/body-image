@@ -1,14 +1,23 @@
 ## 0.2.0 (TBD)
-* Concurrent `FsRead` and infallible `BodyImage::clone` support (#1):
-  * No mandatory memory mapping. Previously `try_clone` _upgraded_ to
-    `MemMap`, and `write_to` created a temporary mapping, to avoid
-    (concurrent) mutation of `FsRead`.
-  * `BodyReader` uses new `ReadPos` for the `FsRead` state.  `ReadPos`
-    re-implements `Read` and `Seek` over a shared `File` using _only_
-    positioned reads and an instance-specific position.
+* Concurrent `FsRead` readers and infallible `BodyImage::clone`
+  support (#1):
+  * `BodyReader` uses new `ReadPos` for the `FsRead` state. `ReadPos`
+     re-implements `Read` and `Seek` over a shared `File` using _only_
+     positioned reads and an instance-specific position.
   * `BodyImage`, `Dialog` and `Record` now implement infallible
     `Clone::clone`. The `try_clone` methods are deprecated.
   * `BodyImage::prepare` is now no-op, deprecated
+
+* Memory mapping is now an entirely optional, explicitly called,
+  feature:
+  * Previously `try_clone` automaticly _upgraded_ clones to `MemMap`,
+    and `write_to` created a temporary mapping, both to avoid
+    concurrent mutation of `FsRead`. Now `ReadPos` makes this
+    unnecessary.
+  * The `BarcReader` previously mapped large (per
+    `Tunables::max_body_ram`), uncompressed bodies, now it uses the
+    new `ReadSlice` for concurrent, direct positioned read access in
+    this case.
 
 * Add benchmarks of reads from `GatheringReader`, chained
   `std::io::Cursor` and upfront `BodyImage::gather` with single

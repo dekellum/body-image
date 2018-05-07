@@ -36,6 +36,9 @@
 //! Brotli BARC record compression, via the native-rust _brotli_ crate. (Gzip,
 //! via the _flate2_ crate, is standard.)
 //!
+//! _memmap (default):_ Adds `BodyImage::mem_map` support for memory mapping
+//! from `FsRead` state.
+//!
 //! For complete functionally, build or install with `--all-features`.
 
 #[cfg(feature = "brotli")] extern crate brotli;
@@ -45,14 +48,14 @@
                            extern crate http;
                            extern crate httparse;
 #[macro_use]               extern crate log;
-                           extern crate memmap;
+#[cfg(feature = "memmap")] extern crate memmap;
                            extern crate tempfile;
 
                            pub mod barc;
 #[cfg(feature = "client")] pub mod client;
 
 mod read_pos;
-pub use read_pos::ReadPos;
+pub use read_pos::{PosRead, ReadPos, ReadSlice};
 
 use std::env;
 use std::fmt;
@@ -63,7 +66,10 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use bytes::{Bytes, BytesMut, BufMut};
-use memmap::Mmap;
+
+#[cfg(feature = "memmap")]
+use memmap::{Mmap};
+
 use tempfile::tempfile_in;
 
 /// The crate version string.
@@ -114,7 +120,8 @@ impl From<io::Error> for BodyError {
 /// : Body in a (temporary) file, ready for position based, sequential read.
 ///
 /// `MemMap`
-/// : Body in a memory mapped file, ready for random access read.
+/// : Body in a memory mapped file, ready for random access read (optional
+///   feature _memmap_)
 ///
 /// All states support concurrent reads. `BodyImage` is `Sync` and `Send`, and
 /// supports low-cost shallow `Clone` via internal (atomic) reference
@@ -130,6 +137,8 @@ pub struct BodyImage {
 enum ImageState {
     Ram(Vec<Bytes>),
     FsRead(Arc<File>),
+    FsReadSlice(ReadSlice),
+    #[cfg(feature = "memmap")]
     MemMap(Arc<Mmap>),
 }
 
@@ -365,12 +374,31 @@ impl BodyImage {
         }
     }
 
-    /// Create new instance based on an existing `Mmap` region.
-    fn with_map(map: Mmap) -> BodyImage {
-        let len = map.len() as u64;
-        BodyImage {
-            state: ImageState::MemMap(Arc::new(map)),
-            len
+    /// Create a new `FsRead` instance based on an existing `File`
+    /// reference. The fixed length is used to report `BodyImage::len` and may
+    /// be obtained using `File::metadata`. If the provided length is zero,
+    /// this returns as per `BodyImage::empty()` instead. Attempts to read
+    /// from or `mem_map` the returned `BodyImage` can fail if the file is not
+    /// open for read or is zero length.
+    pub fn with_file(file: Arc<File>, length: u64) -> BodyImage {
+        if length > 0 {
+            BodyImage { state: ImageState::FsRead(file), len: length }
+        } else {
+            BodyImage::empty()
+        }
+    }
+
+    /// Create a new instance based on a `ReadSlice`. The `BodyImage::len`
+    /// will be as per `ReadSlice::len`, and if zero, this returns as per
+    /// `BodyImage::empty()`. Attempts to read from or `mem_map` the returned
+    /// `BodyImage` can fail if the file is not open for read or is zero
+    /// length.
+    pub fn with_read_slice(rslice: ReadSlice) -> BodyImage {
+        let len = rslice.len();
+        if len > 0 {
+            BodyImage { state: ImageState::FsReadSlice(rslice), len }
+        } else {
+            BodyImage::empty()
         }
     }
 
@@ -391,14 +419,14 @@ impl BodyImage {
         }
     }
 
-    /// Return true if body is empty.
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
     /// Return the current length of body in bytes.
     pub fn len(&self) -> u64 {
         self.len
+    }
+
+    /// Return true if body is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     /// Formerly, this rewound 'FsRead', but now is an unnecessary no-op. The
@@ -411,23 +439,20 @@ impl BodyImage {
 
     /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
     /// other states.
+    #[cfg(feature = "memmap")]
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
-        if let ImageState::FsRead(_) = self.state {
-            assert!(self.len > 0);
-            // Swap with empty, to move file out of FsRead
-            if let ImageState::FsRead(file) = self.state.cut() {
-                match unsafe { Mmap::map(&file) } {
-                    Ok(map) => {
-                        self.state = ImageState::MemMap(Arc::new(map));
-                    }
-                    Err(e) => {
-                        // Restore FsRead on failure
-                        self.state = ImageState::FsRead(file);
-                        return Err(BodyError::from(e));
-                    }
-                }
+        let map = match self.state {
+            ImageState::FsRead(ref file) => {
+                assert!(self.len > 0);
+                unsafe { Mmap::map(&file) }?
             }
-        }
+            ImageState::FsReadSlice(ref rslice) => {
+                rslice.mem_map()?
+            }
+            _ => return Ok(self)
+        };
+
+        self.state = ImageState::MemMap(Arc::new(map));
         Ok(self)
     }
 
@@ -482,6 +507,10 @@ impl BodyImage {
             ImageState::FsRead(ref f) => {
                 BodyReader::File(ReadPos::new(f.clone(), self.len))
             }
+            ImageState::FsReadSlice(ref rslice) => {
+                BodyReader::FileSlice(rslice.clone())
+            }
+            #[cfg(feature = "memmap")]
             ImageState::MemMap(ref m) => {
                 BodyReader::Contiguous(Cursor::new(m))
             }
@@ -558,12 +587,17 @@ impl BodyImage {
                     out.write_all(b)?;
                 }
             }
+            #[cfg(feature = "memmap")]
             ImageState::MemMap(ref m) => {
                 out.write_all(m)?;
             }
             ImageState::FsRead(ref f) => {
                 let mut rp = ReadPos::new(f.clone(), self.len);
                 io::copy(&mut rp, out)?;
+            }
+            ImageState::FsReadSlice(ref rslice) => {
+                let mut rs = rslice.clone();
+                io::copy(&mut rs, out)?;
             }
         }
         Ok(self.len)
@@ -626,6 +660,12 @@ impl fmt::Debug for ImageState {
                     .field(file)
                     .finish()
             }
+            ImageState::FsReadSlice(ref rslice) => {
+                f.debug_tuple("FsReadSlice")
+                    .field(rslice)
+                    .finish()
+            }
+            #[cfg(feature = "memmap")]
             ImageState::MemMap(ref m) => {
                 f.debug_tuple("MemMap")
                     .field(m)
@@ -650,6 +690,12 @@ pub enum BodyReader<'a> {
     /// for BodyImage `FsRead` state. Consider wrapping this in
     /// `std::io::BufReader` if performing many small reads.
     File(ReadPos),
+
+    /// `ReadSlice` providing instance independent, unbuffered `Read` and
+    /// `Seek` for BodyImage `FsRead` state, limited to a range within an
+    /// underlying file. Consider wrapping this in `std::io::BufReader` if
+    /// performing many small reads.
+    FileSlice(ReadSlice),
 }
 
 impl<'a> BodyReader<'a> {
@@ -659,6 +705,7 @@ impl<'a> BodyReader<'a> {
             BodyReader::Contiguous(ref mut cursor) => cursor,
             BodyReader::Scattered(ref mut gatherer) => gatherer,
             BodyReader::File(ref mut rpos) => rpos,
+            BodyReader::FileSlice(ref mut rslice) => rslice,
         }
     }
 }
@@ -986,7 +1033,7 @@ impl Default for Tuner {
 }
 
 #[cfg(test)]
-mod tests {
+mod root {
     use super::*;
 
     fn is_send<T: Send>() -> bool { true }
@@ -1178,6 +1225,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "memmap")]
     #[test]
     fn test_body_fs_map_read() {
         let tune = Tunables::new();
@@ -1234,8 +1282,9 @@ mod tests {
         assert_eq!("hello world", &obuf[..]);
     }
 
+    #[cfg(feature = "memmap")]
     #[test]
-    fn test_body_fs_clone_shared() {
+    fn test_body_fs_map_clone_shared() {
         let tune = Tunables::new();
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello").unwrap();
@@ -1272,9 +1321,16 @@ mod tests {
     fn test_body_fs_empty() {
         let tune = Tunables::new();
         let body = BodySink::with_fs(tune.temp_dir()).unwrap();
-        let mut body = body.prepare().unwrap();
+        let body = body.prepare().unwrap();
         assert!(body.is_empty());
+    }
 
+    #[cfg(feature = "memmap")]
+    #[test]
+    fn test_body_fs_map_empty() {
+        let tune = Tunables::new();
+        let body = BodySink::with_fs(tune.temp_dir()).unwrap();
+        let mut body = body.prepare().unwrap();
         body.mem_map().unwrap();
         assert!(body.is_empty());
     }

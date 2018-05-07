@@ -38,12 +38,12 @@ httparse   = ">=1.2.4, <2"
 hyper      = { version = ">=0.11.22, <0.12.0", optional = true, features = ["compat"] }
 hyper-tls  = { version = ">=0.1.2, <0.2", optional = true }
 log        = ">=0.4.0, <2"
-memmap     = ">=0.6.2, <2"
+memmap     = { version = ">=0.6.2, <2", optional = true }
 tempfile   = ">=2.2.0, <4"
 tokio-core = { version = ">=0.1.13, <2", optional = true }
 
 [features]
-default = ["brotli", "cli"]
+default = ["memmap", "brotli", "cli"]
 client = ["futures", "hyper", "hyper-tls", "tokio-core"]
 cli = ["fern", "clap"]
 
@@ -60,4 +60,4 @@ doc = false
 required-features = ["cli"]
 
 [package.metadata.docs.rs]
-features = ["brotli", "client"]
+features = ["memmap", "brotli", "client"]

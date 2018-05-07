@@ -27,9 +27,9 @@ use std::cmp;
 use std::fs::{File, OpenOptions};
 use std::fmt;
 use std::io;
-use std::io::{ErrorKind, Read, Seek, SeekFrom, Take, Write};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 use std::ops::{AddAssign,ShlAssign};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::path::Path;
 
 use bytes::{BytesMut, BufMut};
@@ -40,13 +40,12 @@ use flate2::read::GzDecoder;
 use http;
 use httparse;
 use http::header::{HeaderName, HeaderValue};
-use memmap::MmapOptions;
 
 #[cfg(feature = "brotli")]
 use brotli;
 
 use {BodyError, BodyImage, BodySink, Dialog,
-     Recorded, RequestRecorded, Tunables};
+     ReadPos, ReadSlice, Recorded, RequestRecorded, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -103,8 +102,7 @@ pub struct BarcWriter<'a> {
 /// BARC file handle for read access. Each reader has its own file handle
 /// and position.
 pub struct BarcReader {
-    file: File,
-    offset: u64
+    file: ReadPos,
 }
 
 /// Error enumeration for all barc module errors.  This may be extended in the
@@ -616,14 +614,13 @@ impl BarcFile {
         Ok(BarcWriter { guard })
     }
 
-    /// Get a reader for this file. Errors if the file does not
-    /// exist.
+    /// Get a reader for this file. Errors if the file does not exist.
     pub fn reader(&self) -> Result<BarcReader, BarcError> {
         let file = OpenOptions::new()
             .read(true)
             .open(&self.path)?;
         // FIXME: Use fs2 crate for: file.try_lock_shared()?
-        Ok(BarcReader { file, offset: 0 })
+        Ok(BarcReader { file: ReadPos::new(Arc::new(file), 0) })
     }
 }
 
@@ -776,11 +773,12 @@ impl BarcReader {
     /// Read and return the next Record or None if EOF. The provided Tunables
     /// `max_body_ram` controls, depending on record sizes and compression,
     /// whether the request and response bodies are read directly into RAM,
-    /// mapped or buffered in a file.
+    /// buffered in a file, or deferred via a `ReadSlice`.
     pub fn read(&mut self, tune: &Tunables)
         -> Result<Option<Record>, BarcError>
     {
         let fin = &mut self.file;
+        let start = fin.tell();
 
         let rhead = match read_record_head(fin) {
             Ok(Some(rh)) => rh,
@@ -790,46 +788,40 @@ impl BarcReader {
 
         let rec_type = rhead.rec_type;
 
-        // With a concurrent writer, its possible to see an
-        // incomplete, Reserved record head, followed by an empty or
-        // partial record payload.  In this case, seek back to start
-        // and return None.
+        // With a concurrent writer, its possible to see an incomplete,
+        // Reserved record head, followed by an empty or partial record
+        // payload.  In this case, seek back to start and return None.
         if rec_type == RecordType::Reserved {
-            fin.seek(SeekFrom::Start(self.offset))?;
+            fin.seek(SeekFrom::Start(start))?;
             return Ok(None);
         }
 
         if rhead.compress != Compression::Plain {
-            let rec = read_compressed(fin, &rhead, tune)?;
-            self.offset = fin.seek(SeekFrom::Current(0))?;
+            let end = fin.tell() + rhead.len;
+            let rec = read_compressed(
+                fin.subslice(fin.tell(), end), &rhead, tune
+            )?;
+            fin.seek(SeekFrom::Start(end))?;
             return Ok(Some(rec))
         }
 
         let meta = read_headers(fin, WITH_CRLF, rhead.meta)?;
-
         let req_headers = read_headers(fin, WITH_CRLF, rhead.req_h)?;
-        let mut total: u64 = (rhead.meta + rhead.req_h) as u64;
 
         let req_body = if rhead.req_b <= tune.max_body_ram() {
             read_body_ram(fin, WITH_CRLF, rhead.req_b as usize)
         } else {
-            let offset = self.offset + (V2_HEAD_SIZE as u64) + total;
-            map_body(fin, offset, rhead.req_b)
+            slice_body(fin, rhead.req_b)
         }?;
-
         let res_headers = read_headers(fin, WITH_CRLF, rhead.res_h)?;
-        total += rhead.req_b;
-        total += rhead.res_h as u64;
-        let body_len = rhead.len - total;
+
+        let body_len = rhead.len - (fin.tell() - start - (V2_HEAD_SIZE as u64));
 
         let res_body = if body_len <= tune.max_body_ram() {
             read_body_ram(fin, WITH_CRLF, body_len as usize)
         } else {
-            let offset = self.offset + (V2_HEAD_SIZE as u64) + total;
-            map_body(fin, offset, body_len)
+            slice_body(fin, body_len)
         }?;
-
-        self.offset = fin.seek(SeekFrom::Current(0))?;
 
         Ok(Some(Record { rec_type, meta, req_headers, req_body,
                          res_headers, res_body }))
@@ -839,7 +831,7 @@ impl BarcReader {
     /// and is advanced by each succesful return from `read` or updated via
     /// `seek`.
     pub fn offset(&self) -> u64 {
-        self.offset
+        self.file.tell()
     }
 
     /// Seek to a known byte offset (e.g. 0 or as returned from
@@ -847,21 +839,21 @@ impl BarcReader {
     /// effects subsequent calls to `read`, which may error if the position is
     /// not to a valid record head.
     pub fn seek(&mut self, offset: u64) -> Result<(), BarcError> {
-        self.offset = self.file.seek(SeekFrom::Start(offset))?;
+        self.file.seek(SeekFrom::Start(offset))?;
         Ok(())
     }
 }
 
 /// Wrapper holding a decoder (providing `Read`) on a `Take` limited
 /// to a record of a BARC file.
-enum DecodeWrapper<'a> {
-    Gzip(Box<GzDecoder<Take<&'a mut File>>>),
+enum DecodeWrapper {
+    Gzip(Box<GzDecoder<ReadSlice>>),
     #[cfg(feature = "brotli")]
-    Brotli(Box<brotli::Decompressor<Take<&'a mut File>>>),
+    Brotli(Box<brotli::Decompressor<ReadSlice>>),
 }
 
-impl<'a> DecodeWrapper<'a> {
-    fn new(comp: Compression, r: Take<&'a mut File>, _buf_size: usize)
+impl DecodeWrapper {
+    fn new(comp: Compression, r: ReadSlice, _buf_size: usize)
         -> Result<DecodeWrapper, BarcError>
     {
         match comp {
@@ -890,13 +882,13 @@ impl<'a> DecodeWrapper<'a> {
 
 // Read and return a compressed `Record`. This is specialized for
 // NO_CRLF and since bodies can't be directly mapped from the file.
-fn read_compressed(file: &mut File, rhead: &RecordHead, tune: &Tunables)
+fn read_compressed(rslice: ReadSlice, rhead: &RecordHead, tune: &Tunables)
     -> Result<Record, BarcError>
 {
-    // Decoder over limited `Take` of compressed record len
+    // Decoder over limited `ReadSlice` of compressed record len
     let mut wrapper = DecodeWrapper::new(
         rhead.compress,
-        file.take(rhead.len),
+        rslice,
         tune.buffer_size_ram())?;
 
     let fin = wrapper.as_read();
@@ -1120,26 +1112,19 @@ fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
     Ok(body)
 }
 
-// Return `BodyImage::MemMap` for an uncompressed body in file, at
-// offset and length. Assumes (and asserts that) current is positioned
-// at offset, and seeks file past the body len.
-fn map_body(file: &mut File, offset: u64, len: u64)
+// Return `BodyImage::FsReadSlice` for an uncompressed body in file, at the
+// current offset of `ReadPos`, for the given length.
+fn slice_body(rp: &mut ReadPos, len: u64)
     -> Result<BodyImage, BarcError>
 {
     assert!(len > 2);
+    let offset = rp.tell();
 
     // Seek past the body, as if read.
-    let end = file.seek(SeekFrom::Current(len as i64))?;
-    assert_eq!(offset + len, end);
+    rp.seek(SeekFrom::Current(len as i64))?;
 
-    let map = unsafe {
-        MmapOptions::new()
-            .offset(offset as usize)
-            .len((len - 2) as usize) // Exclude final CRLF
-            .map(file)?
-    };
-
-    Ok(BodyImage::with_map(map))
+    let rslice = rp.subslice(offset, offset + len - 2); // - CRLF
+    Ok(BodyImage::with_read_slice(rslice))
 }
 
 #[cfg(test)]
@@ -1444,7 +1429,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_sample_mapped() {
+    fn test_read_sample_larger() {
         let record = {
             let mut tune = Tuner::new()
                 .set_max_body_ram(1024) // < 1270 expected length
@@ -1458,6 +1443,36 @@ mod tests {
             assert!(next.is_none());
             r
         };
+
+        println!("{:#?}", record);
+
+        assert!(!record.res_body.is_ram());
+        let mut body_reader = record.res_body.reader();
+        let br = body_reader.as_read();
+        let mut buf = Vec::with_capacity(2048);
+        br.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf.len(), 1270);
+        assert_eq!(&buf[0..15], b"<!doctype html>");
+        assert_eq!(&buf[(buf.len()-8)..], b"</html>\n");
+    }
+
+    #[cfg(feature = "memmap")]
+    #[test]
+    fn test_read_sample_mapped() {
+        let mut record = {
+            let mut tune = Tuner::new()
+                .set_max_body_ram(1024) // < 1270 expected length
+                .finish();
+
+            let bfile = BarcFile::new("sample/example.barc");
+            let mut reader = bfile.reader().unwrap();
+            let r = reader.read(&tune).unwrap().unwrap();
+
+            let next = reader.read(&tune).unwrap();
+            assert!(next.is_none());
+            r
+        };
+        record.res_body.mem_map().unwrap();
 
         println!("{:#?}", record);
 
