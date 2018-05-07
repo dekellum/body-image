@@ -39,10 +39,13 @@ pub trait PosRead {
 /// _only_ positioned reads, and by maintaining an instance independent
 /// position.
 ///
-/// A fixed `length` is passed on construction and used solely for handling
+/// A fixed `length` is passed on construction and used solely to interpret
 /// `SeekFrom::End`. Reads are not constrained by this length. The length is
 /// neither checked nor updated via file metadata, and could deviate from the
-/// underlying file length if concurrent writes or truncation is possible.
+/// underlying file length if concurrent writes or truncation is
+/// possible. Reads beyond the end of the underlying `File` will return 0
+/// length. Seeking past the end is allowed by the platforms for `File`, and
+/// is also allowed for `ReadPos`.
 #[derive(Debug)]
 pub struct ReadPos {
     pos: u64,
@@ -60,11 +63,12 @@ pub struct ReadPos {
 /// the slice.
 ///
 /// Fixed `start` and `end` offsets are passed on construction and used to
-/// constrain reads and interpret `SeekFrom::End`. Seeking past end of file is
-/// allowed by the platforms and `File` in any case.  These offsets are
-/// neither checked nor updated via file metadata, and the end offset could
-/// deviate from the underlying file length if concurrent writes or truncation
-/// is possible.
+/// constrain reads and interpret `SeekFrom::Start` and `SeekFrom::End`. These
+/// offsets are neither checked nor updated via file metadata, and the end
+/// offset could deviate from the underlying file length if concurrent writes
+/// or truncation is possible. Reads beyond `end` or the end of the underlying
+/// `File` will return 0 length. Seeking past the end is allowed by the
+/// platforms for `File`, and is also allowed for `ReadSlice`.
 #[derive(Debug)]
 pub struct ReadSlice {
     start: u64,
@@ -88,7 +92,8 @@ impl PosRead for File {
 }
 
 impl ReadPos {
-    /// New instance by `File` reference and fixed file length.
+    /// New instance by `File` reference and fixed file length. The initial
+    /// position is the start of the file.
     pub fn new(file: Arc<File>, length: u64) -> ReadPos {
         ReadPos { pos: 0, length, file }
     }
@@ -189,7 +194,8 @@ impl Seek for ReadPos {
 }
 
 impl ReadSlice {
-    /// New instance by `File` reference, fixed start and end offsets.
+    /// New instance by `File` reference, fixed start and end offsets. The
+    /// initial position is at the start (relative offset 0).
     pub fn new(file: Arc<File>, start: u64, end: u64) -> ReadSlice {
         assert!(start <= end);
         ReadSlice { start, pos: start, end, file }
@@ -225,7 +231,7 @@ impl ReadSlice {
         }
     }
 
-    /// Return a new and independent `ReadSlice` for the same file, for the
+    /// Return a new and independent `ReadSlice` on the same file, for the
     /// range of byte offsets `start..end` which are relative to, and must be
     /// fully contained by self. Checks for and panics on overflow, if
     /// start..end is not fully contained, or if start is greater-than end.
