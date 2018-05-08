@@ -18,5 +18,8 @@
     new `ReadSlice` for concurrent, direct positioned read access in
     this case.
 
+* Add `BodyImage::from_file` (and `from_read_slice`) conversion
+  constructors.
+
 ## 0.1.0 (2018-4-17)
 * Initial release

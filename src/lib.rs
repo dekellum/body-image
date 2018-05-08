@@ -374,15 +374,18 @@ impl BodyImage {
         }
     }
 
-    /// Create a new `FsRead` instance based on an existing `File`
-    /// reference. The fixed length is used to report `BodyImage::len` and may
-    /// be obtained using `File::metadata`. If the provided length is zero,
-    /// this returns as per `BodyImage::empty()` instead. Attempts to read
-    /// from or `mem_map` the returned `BodyImage` can fail if the file is not
-    /// open for read or is zero length.
-    pub fn with_file(file: Arc<File>, length: u64) -> BodyImage {
+    /// Create a new `FsRead` instance based on an existing `File`. The fixed
+    /// length is used to report `BodyImage::len` and may be obtained using
+    /// `File::metadata`. If the provided length is zero, this returns as per
+    /// `BodyImage::empty()` instead. Attempts to read from or `mem_map` the
+    /// returned `BodyImage` can fail if the file is not open for read or is
+    /// zero length.
+    pub fn from_file(file: File, length: u64) -> BodyImage {
         if length > 0 {
-            BodyImage { state: ImageState::FsRead(file), len: length }
+            BodyImage {
+                state: ImageState::FsRead(Arc::new(file)),
+                len: length
+            }
         } else {
             BodyImage::empty()
         }
