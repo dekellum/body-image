@@ -9,14 +9,14 @@
 
 * Memory mapping is now an entirely optional, explicitly called,
   default feature:
-  * Previously `try_clone` automaticly _upgraded_ clones to `MemMap`,
+  * Previously `try_clone` automatically _upgraded_ clones to `MemMap`,
     and `write_to` created a temporary mapping, both to avoid
     concurrent mutation of `FsRead`. Now `ReadPos` makes this
     unnecessary.
   * The `BarcReader` previously mapped large (per
-    `Tunables::max_body_ram`), uncompressed bodies, now it uses the
-    new `ReadSlice` for concurrent, direct positioned read access in
-    this case.
+    `Tunables::max_body_ram`), uncompressed bodies. Now it uses
+    `ReadSlice` for concurrent, direct positioned read access in this
+    case.
 
 * Add `BodyImage::from_file` (and `from_read_slice`) conversion
   constructors.
