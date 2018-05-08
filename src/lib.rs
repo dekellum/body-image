@@ -36,7 +36,7 @@
 //! Brotli BARC record compression, via the native-rust _brotli_ crate. (Gzip,
 //! via the _flate2_ crate, is standard.)
 //!
-//! _memmap (default):_ Adds `BodyImage::mem_map` support for memory mapping
+//! _mmap (default):_ Adds `BodyImage::mem_map` support for memory mapping
 //! from `FsRead` state.
 //!
 //! For complete functionally, build or install with `--all-features`.
@@ -48,14 +48,12 @@
                            extern crate http;
                            extern crate httparse;
 #[macro_use]               extern crate log;
-#[cfg(feature = "memmap")] extern crate memmap;
+                           extern crate olio;
+#[cfg(feature = "mmap")]   extern crate memmap;
                            extern crate tempfile;
 
                            pub mod barc;
 #[cfg(feature = "client")] pub mod client;
-
-mod read_pos;
-pub use read_pos::{PosRead, ReadPos, ReadSlice};
 
 use std::env;
 use std::fmt;
@@ -66,8 +64,10 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use bytes::{Bytes, BytesMut, BufMut};
+use olio::io::GatheringReader;
+use olio::fs::rc::{ReadPos, ReadSlice};
 
-#[cfg(feature = "memmap")]
+#[cfg(feature = "mmap")]
 use memmap::{Mmap};
 
 use tempfile::tempfile_in;
@@ -138,7 +138,7 @@ enum ImageState {
     Ram(Vec<Bytes>),
     FsRead(Arc<File>),
     FsReadSlice(ReadSlice),
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     MemMap(Arc<Mmap>),
 }
 
@@ -374,29 +374,18 @@ impl BodyImage {
         }
     }
 
-    /// Create a new `FsRead` instance based on an existing `File`
-    /// reference. The fixed length is used to report `BodyImage::len` and may
-    /// be obtained using `File::metadata`. If the provided length is zero,
-    /// this returns as per `BodyImage::empty()` instead. Attempts to read
-    /// from or `mem_map` the returned `BodyImage` can fail if the file is not
-    /// open for read or is zero length.
-    pub fn with_file(file: Arc<File>, length: u64) -> BodyImage {
+    /// Create a new `FsRead` instance based on an existing `File`. The fixed
+    /// length is used to report `BodyImage::len` and may be obtained using
+    /// `File::metadata`. If the provided length is zero, this returns as per
+    /// `BodyImage::empty()` instead. Attempts to read from or `mem_map` the
+    /// returned `BodyImage` can fail if the file is not open for read or is
+    /// zero length.
+    pub fn from_file(file: File, length: u64) -> BodyImage {
         if length > 0 {
-            BodyImage { state: ImageState::FsRead(file), len: length }
-        } else {
-            BodyImage::empty()
-        }
-    }
-
-    /// Create a new instance based on a `ReadSlice`. The `BodyImage::len`
-    /// will be as per `ReadSlice::len`, and if zero, this returns as per
-    /// `BodyImage::empty()`. Attempts to read from or `mem_map` the returned
-    /// `BodyImage` can fail if the file is not open for read or is zero
-    /// length.
-    pub fn with_read_slice(rslice: ReadSlice) -> BodyImage {
-        let len = rslice.len();
-        if len > 0 {
-            BodyImage { state: ImageState::FsReadSlice(rslice), len }
+            BodyImage {
+                state: ImageState::FsRead(Arc::new(file)),
+                len: length
+            }
         } else {
             BodyImage::empty()
         }
@@ -409,6 +398,20 @@ impl BodyImage {
         let mut bs = BodySink::with_ram_buffers(1);
         bs.save(bytes).expect("safe for Ram");
         bs.prepare().expect("safe for Ram")
+    }
+
+    /// Create a new instance based on a `ReadSlice`. The `BodyImage::len`
+    /// will be as per `ReadSlice::len`, and if zero, this returns as per
+    /// `BodyImage::empty()`. Attempts to read from or `mem_map` the returned
+    /// `BodyImage` can fail if the file is not open for read or is zero
+    /// length.
+    pub fn from_read_slice(rslice: ReadSlice) -> BodyImage {
+        let len = rslice.len();
+        if len > 0 {
+            BodyImage { state: ImageState::FsReadSlice(rslice), len }
+        } else {
+            BodyImage::empty()
+        }
     }
 
     /// Return true if in state `Ram`.
@@ -439,7 +442,7 @@ impl BodyImage {
 
     /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
     /// other states.
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
         let map = match self.state {
             ImageState::FsRead(ref file) => {
@@ -510,7 +513,7 @@ impl BodyImage {
             ImageState::FsReadSlice(ref rslice) => {
                 BodyReader::FileSlice(rslice.clone())
             }
-            #[cfg(feature = "memmap")]
+            #[cfg(feature = "mmap")]
             ImageState::MemMap(ref m) => {
                 BodyReader::Contiguous(Cursor::new(m))
             }
@@ -587,7 +590,7 @@ impl BodyImage {
                     out.write_all(b)?;
                 }
             }
-            #[cfg(feature = "memmap")]
+            #[cfg(feature = "mmap")]
             ImageState::MemMap(ref m) => {
                 out.write_all(m)?;
             }
@@ -665,7 +668,7 @@ impl fmt::Debug for ImageState {
                     .field(rslice)
                     .finish()
             }
-            #[cfg(feature = "memmap")]
+            #[cfg(feature = "mmap")]
             ImageState::MemMap(ref m) => {
                 f.debug_tuple("MemMap")
                     .field(m)
@@ -707,47 +710,6 @@ impl<'a> BodyReader<'a> {
             BodyReader::File(ref mut rpos) => rpos,
             BodyReader::FileSlice(ref mut rslice) => rslice,
         }
-    }
-}
-
-/// A specialized reader for `BodyImage` in `Ram`, presenting a continuous
-/// (gathered) `Read` interface over N non-contiguous byte buffers.
-pub struct GatheringReader<'a, T: AsRef<[u8]> + 'a> {
-    current: Cursor<&'a [u8]>,
-    remainder: &'a [T]
-}
-
-impl<'a, T: AsRef<[u8]> + 'a> GatheringReader<'a, T> {
-    pub fn new(buffers: &'a [T]) -> Self {
-        match buffers.split_first() {
-            Some((b, remainder)) => {
-                GatheringReader { current: Cursor::new(b.as_ref()), remainder }
-            }
-            None => {
-                GatheringReader { current: Cursor::new(&[]), remainder: &[] }
-            }
-        }
-    }
-
-    fn pop(&mut self) -> bool {
-        match self.remainder.split_first() {
-            Some((b, rem)) => {
-                self.current = Cursor::new(b.as_ref());
-                self.remainder = rem;
-                true
-            }
-            None => false
-        }
-    }
-}
-
-impl<'a, T: AsRef<[u8]> + 'a> Read for GatheringReader<'a, T> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let n = self.current.read(buf)?;
-        if n == 0 && !buf.is_empty() && self.pop() {
-            return self.read(buf); // recurse
-        }
-        Ok(n)
     }
 }
 
@@ -1225,7 +1187,7 @@ mod root {
         }
     }
 
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     #[test]
     fn test_body_fs_map_read() {
         let tune = Tunables::new();
@@ -1282,7 +1244,7 @@ mod root {
         assert_eq!("hello world", &obuf[..]);
     }
 
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     #[test]
     fn test_body_fs_map_clone_shared() {
         let tune = Tunables::new();
@@ -1325,7 +1287,7 @@ mod root {
         assert!(body.is_empty());
     }
 
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     #[test]
     fn test_body_fs_map_empty() {
         let tune = Tunables::new();
