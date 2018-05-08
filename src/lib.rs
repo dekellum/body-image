@@ -36,7 +36,7 @@
 //! Brotli BARC record compression, via the native-rust _brotli_ crate. (Gzip,
 //! via the _flate2_ crate, is standard.)
 //!
-//! _memmap (default):_ Adds `BodyImage::mem_map` support for memory mapping
+//! _mmap (default):_ Adds `BodyImage::mem_map` support for memory mapping
 //! from `FsRead` state.
 //!
 //! For complete functionally, build or install with `--all-features`.
@@ -49,7 +49,7 @@
                            extern crate httparse;
 #[macro_use]               extern crate log;
                            extern crate olio;
-#[cfg(feature = "memmap")] extern crate memmap;
+#[cfg(feature = "mmap")]   extern crate memmap;
                            extern crate tempfile;
 
                            pub mod barc;
@@ -67,7 +67,7 @@ use bytes::{Bytes, BytesMut, BufMut};
 use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
 
-#[cfg(feature = "memmap")]
+#[cfg(feature = "mmap")]
 use memmap::{Mmap};
 
 use tempfile::tempfile_in;
@@ -138,7 +138,7 @@ enum ImageState {
     Ram(Vec<Bytes>),
     FsRead(Arc<File>),
     FsReadSlice(ReadSlice),
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     MemMap(Arc<Mmap>),
 }
 
@@ -442,7 +442,7 @@ impl BodyImage {
 
     /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
     /// other states.
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
         let map = match self.state {
             ImageState::FsRead(ref file) => {
@@ -513,7 +513,7 @@ impl BodyImage {
             ImageState::FsReadSlice(ref rslice) => {
                 BodyReader::FileSlice(rslice.clone())
             }
-            #[cfg(feature = "memmap")]
+            #[cfg(feature = "mmap")]
             ImageState::MemMap(ref m) => {
                 BodyReader::Contiguous(Cursor::new(m))
             }
@@ -590,7 +590,7 @@ impl BodyImage {
                     out.write_all(b)?;
                 }
             }
-            #[cfg(feature = "memmap")]
+            #[cfg(feature = "mmap")]
             ImageState::MemMap(ref m) => {
                 out.write_all(m)?;
             }
@@ -668,7 +668,7 @@ impl fmt::Debug for ImageState {
                     .field(rslice)
                     .finish()
             }
-            #[cfg(feature = "memmap")]
+            #[cfg(feature = "mmap")]
             ImageState::MemMap(ref m) => {
                 f.debug_tuple("MemMap")
                     .field(m)
@@ -1187,7 +1187,7 @@ mod root {
         }
     }
 
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     #[test]
     fn test_body_fs_map_read() {
         let tune = Tunables::new();
@@ -1244,7 +1244,7 @@ mod root {
         assert_eq!("hello world", &obuf[..]);
     }
 
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     #[test]
     fn test_body_fs_map_clone_shared() {
         let tune = Tunables::new();
@@ -1287,7 +1287,7 @@ mod root {
         assert!(body.is_empty());
     }
 
-    #[cfg(feature = "memmap")]
+    #[cfg(feature = "mmap")]
     #[test]
     fn test_body_fs_map_empty() {
         let tune = Tunables::new();
