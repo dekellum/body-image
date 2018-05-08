@@ -1114,9 +1114,7 @@ fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
 
 // Return `BodyImage::FsReadSlice` for an uncompressed body in file, at the
 // current offset of `ReadPos`, for the given length.
-fn slice_body(rp: &mut ReadPos, len: u64)
-    -> Result<BodyImage, BarcError>
-{
+fn slice_body(rp: &mut ReadPos, len: u64) -> Result<BodyImage, BarcError> {
     assert!(len > 2);
     let offset = rp.tell();
 
@@ -1124,7 +1122,7 @@ fn slice_body(rp: &mut ReadPos, len: u64)
     rp.seek(SeekFrom::Current(len as i64))?;
 
     let rslice = rp.subslice(offset, offset + len - 2); // - CRLF
-    Ok(BodyImage::with_read_slice(rslice))
+    Ok(BodyImage::from_read_slice(rslice))
 }
 
 #[cfg(test)]

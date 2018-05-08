@@ -388,20 +388,6 @@ impl BodyImage {
         }
     }
 
-    /// Create a new instance based on a `ReadSlice`. The `BodyImage::len`
-    /// will be as per `ReadSlice::len`, and if zero, this returns as per
-    /// `BodyImage::empty()`. Attempts to read from or `mem_map` the returned
-    /// `BodyImage` can fail if the file is not open for read or is zero
-    /// length.
-    pub fn with_read_slice(rslice: ReadSlice) -> BodyImage {
-        let len = rslice.len();
-        if len > 0 {
-            BodyImage { state: ImageState::FsReadSlice(rslice), len }
-        } else {
-            BodyImage::empty()
-        }
-    }
-
     /// Create new instance from a single byte slice.
     pub fn from_slice<T>(bytes: T) -> BodyImage
         where T: Into<Bytes>
@@ -409,6 +395,20 @@ impl BodyImage {
         let mut bs = BodySink::with_ram_buffers(1);
         bs.save(bytes).expect("safe for Ram");
         bs.prepare().expect("safe for Ram")
+    }
+
+    /// Create a new instance based on a `ReadSlice`. The `BodyImage::len`
+    /// will be as per `ReadSlice::len`, and if zero, this returns as per
+    /// `BodyImage::empty()`. Attempts to read from or `mem_map` the returned
+    /// `BodyImage` can fail if the file is not open for read or is zero
+    /// length.
+    pub fn from_read_slice(rslice: ReadSlice) -> BodyImage {
+        let len = rslice.len();
+        if len > 0 {
+            BodyImage { state: ImageState::FsReadSlice(rslice), len }
+        } else {
+            BodyImage::empty()
+        }
     }
 
     /// Return true if in state `Ram`.
