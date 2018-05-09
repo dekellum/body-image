@@ -432,14 +432,6 @@ impl BodyImage {
         self.len == 0
     }
 
-    /// Formerly, this rewound 'FsRead', but now is an unnecessary no-op. The
-    /// `reader` method always returns a `Read` from the start of the
-    /// `BodyImage` for all states.
-    #[deprecated]
-    pub fn prepare(&mut self) -> Result<&mut Self, BodyError> {
-        Ok(self)
-    }
-
     /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
     /// other states.
     #[cfg(feature = "mmap")]
@@ -484,13 +476,6 @@ impl BodyImage {
             }
         }
         self
-    }
-
-    /// Clone self by shallow copy, returning a new `BodyImage`. This is
-    /// currently infallible and deprecated in favor of `clone`.
-    #[deprecated]
-    pub fn try_clone(&self) -> Result<BodyImage, BodyError> {
-        Ok(self.clone())
     }
 
     /// Return a new `BodyReader` enum over self. The enum provides a
@@ -804,13 +789,6 @@ impl Dialog {
     /// A mutable reference to the response body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.
     pub fn res_body_mut(&mut self) -> &mut BodyImage   { &mut self.res_body }
-
-    /// Clone self and return a new `Dialog`. This is currently infallible and
-    /// deprecated in favor of `clone`.
-    #[deprecated]
-    pub fn try_clone(&self) -> Result<Dialog, BodyError> {
-        Ok(self.clone())
-    }
 }
 
 impl RequestRecorded for Dialog {
