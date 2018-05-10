@@ -40,12 +40,13 @@ use flate2::read::GzDecoder;
 use http;
 use httparse;
 use http::header::{HeaderName, HeaderValue};
+use olio::fs::rc::{ReadPos, ReadSlice};
 
 #[cfg(feature = "brotli")]
 use brotli;
 
 use {BodyError, BodyImage, BodySink, Dialog,
-     ReadPos, ReadSlice, Recorded, RequestRecorded, Tunables};
+     Recorded, RequestRecorded, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
