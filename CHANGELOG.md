@@ -1,3 +1,5 @@
+## 0.3.0 (TBD)
+
 ## 0.2.0 (2018-5-8)
 * Concurrent `FsRead` readers and infallible `BodyImage::clone`
   support (#1):
