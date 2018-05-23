@@ -4,6 +4,7 @@
 [![Rustdoc](https://docs.rs/body-image/badge.svg)](https://docs.rs/body-image)
 [![Travis CI Build](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
 [![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
+[![deps status](https://deps.rs/repo/github/dekellum/body-image/status.svg)](https://deps.rs/repo/github/dekellum/body-image)
 
 A rust crate providing a few separately usable but closely related HTTP
 ecosystem components:
@@ -67,7 +68,7 @@ This project is dual licensed under either of following:
   or http://www.apache.org/licenses/LICENSE-2.0)
 
 * The MIT license ([LICENSE-MIT](LICENSE-MIT) or
-  or http://opensource.org/licenses/MIT)
+  http://opensource.org/licenses/MIT)
 
 ### Contribution
 
