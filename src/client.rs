@@ -117,8 +117,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
 /// Return a list of supported encodings from the headers Transfer-Encoding
 /// and Content-Encoding.  The `Chunked` encoding will be the first value if
 /// found. At most one compression encoding will be the last value if found.
-pub fn find_encodings(headers: &http::HeaderMap)-> Vec<Encoding>
-{
+pub fn find_encodings(headers: &http::HeaderMap)-> Vec<Encoding> {
     let encodings = headers
         .get_all(http::header::TRANSFER_ENCODING)
         .iter()
@@ -171,8 +170,7 @@ pub fn find_encodings(headers: &http::HeaderMap)-> Vec<Encoding>
 }
 
 /// Return true if the chunked Transfer-Encoding can be found in the headers.
-pub fn find_chunked(headers: &http::HeaderMap) -> bool
-{
+pub fn find_chunked(headers: &http::HeaderMap) -> bool {
     let encodings = headers.get_all(http::header::TRANSFER_ENCODING);
 
     'headers: for v in encodings {
