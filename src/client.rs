@@ -88,12 +88,11 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
     let tune = tune.clone();
 
     let res = Arc::new(Mutex::new(None));
-    let res_c1 = res.clone();
-    let res_c2 = res.clone();
+    let res_ok = res.clone();
+    let res_er = res.clone();
 
     let work = future::lazy(move || {
-        let client = Client::builder()
-            .build::<_, hyper::Body>(connector);
+        let client = Client::builder().build(connector);
 
         // FIXME: What about Timeouts? Appears to also be under flux:
         // https://github.com/hyperium/hyper/issues/1234
@@ -107,10 +106,10 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
             .and_then(move |monolog| resp_future(monolog, &tune))
             .and_then(|idialog| future::result(idialog.prepare()))
             .map(move |dialog| {
-                *res_c1.lock().unwrap() = Some(Ok(dialog));
+                *res_ok.lock().unwrap() = Some(Ok(dialog));
             })
             .map_err(move |err| {
-                *res_c2.lock().unwrap() = Some(Err(err));
+                *res_er.lock().unwrap() = Some(Err(err));
             })
     });
 
