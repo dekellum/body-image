@@ -97,6 +97,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
         // FIXME: What about Timeouts? Appears to also be under flux:
         // https://github.com/hyperium/hyper/issues/1234
         // https://hyper.rs/guides/client/timeout/
+        // tokio-timer?
 
         let prolog = rr.prolog;
 
