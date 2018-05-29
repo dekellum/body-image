@@ -79,9 +79,9 @@ pub static BROWSE_ACCEPT: &str =
 use std::sync::{Arc, Mutex};
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
-/// function constructs all the necesarry _hyper_ and _tokio_ components in a
+/// function constructs all the necessary _hyper_ and _tokio_ components in a
 /// simplistic form internally, and is currently not recommended for anything
-/// but one-time use.
+/// but one-time or test use.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
     let res = Arc::new(Mutex::new(None));
 
@@ -91,20 +91,9 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
         let connector = hyper_tls::HttpsConnector::new(2 /*DNS threads*/)?;
         let client = Client::builder().build(connector);
 
-        // FIXME: What about Timeouts? Appears to also be under flux:
-        // https://github.com/hyperium/hyper/issues/1234
-        // https://hyper.rs/guides/client/timeout/
-        // tokio-timer?
-
-        let prolog = rr.prolog;
-        let tune = tune.clone();
         let res_out = res.clone();
 
-        client.request(rr.request)
-            .from_err::<Flare>()
-            .map(|response| Monolog { prolog, response } )
-            .and_then(|monolog| resp_future(monolog, tune))
-            .and_then(|idialog| idialog.prepare())
+        request_dialog(&client, rr, tune)
             .then(move |result| {
                 *res_out.lock().expect("not poisoned") = Some(result);
                 Ok(())
@@ -117,6 +106,32 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
         .into_inner().expect("not poisoned")
         .expect("some")
 }
+
+/// Given a suitable `Client` and `RequestRecord`, return a `Future` with the
+/// full `Dialog`.
+pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
+                          rr: RequestRecord,
+                          tune: &Tunables)
+    -> Box<Future<Item=Dialog, Error=Flare> + Send>
+    where CN: hyper::client::connect::Connect + Sync + 'static
+{
+    let prolog = rr.prolog;
+    let tune = tune.clone();
+
+    // FIXME: What about Timeouts? Appears to also be under flux:
+    // https://github.com/hyperium/hyper/issues/1234
+    // https://hyper.rs/guides/client/timeout/
+    // tokio-timer?
+
+    let df = client.request(rr.request)
+        .from_err::<Flare>()
+        .map(|response| Monolog { prolog, response } )
+        .and_then(|monolog| resp_future(monolog, tune))
+        .and_then(|idialog| idialog.prepare());
+
+    Box::new(df)
+}
+
 
 /// Return a list of supported encodings from the headers Transfer-Encoding
 /// and Content-Encoding.  The `Chunked` encoding will be the first value if
