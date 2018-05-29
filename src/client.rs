@@ -102,8 +102,8 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
         let prolog = rr.prolog;
 
         client.request(rr.request)
+            .from_err::<Flare>()
             .map(|response| Monolog { prolog, response } )
-            .map_err(Flare::from)
             .and_then(move |monolog| resp_future(monolog, &tune))
             .and_then(|idialog| future::result(idialog.prepare()))
             .map(move |dialog| {
