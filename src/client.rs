@@ -101,7 +101,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
         client.request(rr.request)
             .from_err::<Flare>()
             .map(|response| Monolog { prolog, response } )
-            .and_then(move |monolog| resp_future(monolog, &tune))
+            .and_then(|monolog| resp_future(monolog, tune))
             .and_then(|idialog| future::result(idialog.prepare()))
             .then(move |result| {
                 *res_out.lock().unwrap() = Some(result);
@@ -269,7 +269,7 @@ pub fn user_agent() -> String {
             VERSION)
 }
 
-fn resp_future(monolog: Monolog, tune: &Tunables)
+fn resp_future(monolog: Monolog, tune: Tunables)
     -> Box<Future<Item=InDialog, Error=Flare> + Send>
 {
     let (resp_parts, body) = monolog.response.into_parts();
@@ -300,7 +300,6 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
         res_body:    bsink,
     };
 
-    let tune = tune.clone();
     let s = body
         .map_err(Flare::from)
         .fold(idialog, move |mut idialog, chunk| {
