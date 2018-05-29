@@ -102,7 +102,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
             .from_err::<Flare>()
             .map(|response| Monolog { prolog, response } )
             .and_then(|monolog| resp_future(monolog, tune))
-            .and_then(|idialog| future::result(idialog.prepare()))
+            .and_then(|idialog| idialog.prepare())
             .then(move |result| {
                 *res_out.lock().unwrap() = Some(result);
                 Ok(())
