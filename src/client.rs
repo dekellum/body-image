@@ -86,6 +86,8 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
     let res = Arc::new(Mutex::new(None));
 
     let work = {
+        // Note: constructed here, as client must be dropped before the below
+        // call to tokio::run() will return.
         let connector = hyper_tls::HttpsConnector::new(2 /*DNS threads*/)?;
         let client = Client::builder().build(connector);
 
