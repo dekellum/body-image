@@ -83,15 +83,10 @@ use std::sync::{Arc, Mutex};
 /// simplistic form internally, and is currently not recommended for anything
 /// but one-time use.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
-    let connector = hyper_tls::HttpsConnector::new(2 /*DNS threads*/)?;
-
-    let tune = tune.clone();
-
     let res = Arc::new(Mutex::new(None));
-    let res_ok = res.clone();
-    let res_er = res.clone();
 
     let work = {
+        let connector = hyper_tls::HttpsConnector::new(2 /*DNS threads*/)?;
         let client = Client::builder().build(connector);
 
         // FIXME: What about Timeouts? Appears to also be under flux:
@@ -100,17 +95,17 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
         // tokio-timer?
 
         let prolog = rr.prolog;
+        let tune = tune.clone();
+        let res_out = res.clone();
 
         client.request(rr.request)
             .from_err::<Flare>()
             .map(|response| Monolog { prolog, response } )
             .and_then(move |monolog| resp_future(monolog, &tune))
             .and_then(|idialog| future::result(idialog.prepare()))
-            .map(move |dialog| {
-                *res_ok.lock().unwrap() = Some(Ok(dialog));
-            })
-            .map_err(move |err| {
-                *res_er.lock().unwrap() = Some(Err(err));
+            .then(move |result| {
+                *res_out.lock().unwrap() = Some(result);
+                Ok(())
             })
     };
 
