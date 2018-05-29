@@ -91,7 +91,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
     let res_ok = res.clone();
     let res_er = res.clone();
 
-    let work = future::lazy(move || {
+    let work = {
         let client = Client::builder().build(connector);
 
         // FIXME: What about Timeouts? Appears to also be under flux:
@@ -112,7 +112,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
             .map_err(move |err| {
                 *res_er.lock().unwrap() = Some(Err(err));
             })
-    });
+    };
 
     self::tokio::run(work);
 
