@@ -112,7 +112,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
 pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
                           rr: RequestRecord,
                           tune: &Tunables)
-    -> Box<Future<Item=Dialog, Error=Flare> + Send>
+    -> impl Future<Item=Dialog, Error=Flare> + Send
     where CN: hyper::client::connect::Connect + Sync + 'static
 {
     let prolog = rr.prolog;
@@ -123,13 +123,11 @@ pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
     // https://hyper.rs/guides/client/timeout/
     // tokio-timer?
 
-    let df = client.request(rr.request)
+    client.request(rr.request)
         .from_err::<Flare>()
         .map(|response| Monolog { prolog, response } )
         .and_then(|monolog| resp_future(monolog, tune))
-        .and_then(|idialog| idialog.prepare());
-
-    Box::new(df)
+        .and_then(|idialog| idialog.prepare())
 }
 
 
