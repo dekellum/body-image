@@ -106,7 +106,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
             .and_then(|monolog| resp_future(monolog, tune))
             .and_then(|idialog| idialog.prepare())
             .then(move |result| {
-                *res_out.lock().unwrap() = Some(result);
+                *res_out.lock().expect("not poisoned") = Some(result);
                 Ok(())
             })
     };
