@@ -301,7 +301,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     };
 
     let s = body
-        .map_err(Flare::from)
+        .from_err::<Flare>()
         .fold(idialog, move |mut idialog, chunk| {
             let new_len = idialog.res_body.len() + (chunk.len() as u64);
             if new_len > tune.max_body() {
