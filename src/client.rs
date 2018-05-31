@@ -47,12 +47,12 @@ use failure::Error as Flare;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
 use self::futures::{future, Future, Stream};
-use self::futures::sync::oneshot;
 use http;
 use self::hyper::Client;
 use self::hyperx::header::{ContentEncoding, ContentLength,
                            Encoding as HyEncoding,
                            Header, TransferEncoding, Raw};
+use self::tokio::runtime::current_thread;
 
 use {BodyImage, BodySink, BodyError, Encoding,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
@@ -82,26 +82,14 @@ pub static BROWSE_ACCEPT: &str =
 /// simplistic form internally, and is currently not recommended for anything
 /// but one-time or test use.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
-    let (prodr, consr) = oneshot::channel::<Result<Dialog, Flare>>();
+    let mut rt = current_thread::Runtime::new()?;
     let work = {
-        // Note: constructed here, as client must be dropped before the below
-        // call to tokio::run() will return.
-        let connector = hyper_tls::HttpsConnector::new(2 /*DNS threads*/)?;
+        // scope the client to this work only
+        let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
         let client = Client::builder().build(connector);
-
         request_dialog(&client, rr, tune)
-            .then(move |result| {
-                match prodr.send(result) {
-                    Ok(()) => Ok(()),
-                    Err(_) => {
-                        warn!("fetch dialog consumer was dropped");
-                        Err(())
-                    }
-                }
-            })
     };
-    self::tokio::run(work);
-    consr.wait()?
+    rt.block_on(work)
 }
 
 /// Given a suitable `Client` and `RequestRecord`, return a `Future` with the
