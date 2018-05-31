@@ -91,14 +91,17 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
 
         request_dialog(&client, rr, tune)
             .then(move |result| {
-                prodr.send(result).expect("send");
-                Ok(())
+                match prodr.send(result) {
+                    Ok(()) => Ok(()),
+                    Err(_) => {
+                        warn!("fetch dialog consumer was dropped");
+                        Err(())
+                    }
+                }
             })
     };
-
     self::tokio::run(work);
-
-    consr.wait().expect("consume")
+    consr.wait()?
 }
 
 /// Given a suitable `Client` and `RequestRecord`, return a `Future` with the
