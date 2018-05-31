@@ -47,6 +47,7 @@ use failure::Error as Flare;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
 use self::futures::{future, Future, Stream};
+use self::futures::sync::oneshot;
 use http;
 use self::hyper::Client;
 use self::hyperx::header::{ContentEncoding, ContentLength,
@@ -76,35 +77,28 @@ pub static BROWSE_ACCEPT: &str =
      application/xml;q=0.9, \
      */*;q=0.8";
 
-use std::sync::{Arc, Mutex};
-
 /// Run an HTTP request to completion, returning the full `Dialog`. This
 /// function constructs all the necessary _hyper_ and _tokio_ components in a
 /// simplistic form internally, and is currently not recommended for anything
 /// but one-time or test use.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
-    let res = Arc::new(Mutex::new(None));
-
+    let (prodr, consr) = oneshot::channel::<Result<Dialog, Flare>>();
     let work = {
         // Note: constructed here, as client must be dropped before the below
         // call to tokio::run() will return.
         let connector = hyper_tls::HttpsConnector::new(2 /*DNS threads*/)?;
         let client = Client::builder().build(connector);
 
-        let res_out = res.clone();
-
         request_dialog(&client, rr, tune)
             .then(move |result| {
-                *res_out.lock().expect("not poisoned") = Some(result);
+                prodr.send(result).expect("send");
                 Ok(())
             })
     };
 
     self::tokio::run(work);
 
-    Arc::try_unwrap(res).expect("solo Arc ref")
-        .into_inner().expect("not poisoned")
-        .expect("some")
+    consr.wait().expect("consume")
 }
 
 /// Given a suitable `Client` and `RequestRecord`, return a `Future` with the
