@@ -110,7 +110,7 @@ pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
 
     client.request(rr.request)
         .from_err::<Flare>()
-        .map(|response| Monolog { prolog, response } )
+        .map(|response| Monolog { prolog, response })
         .and_then(|monolog| resp_future(monolog, tune))
         .and_then(|idialog| idialog.prepare())
 }
