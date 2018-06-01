@@ -115,7 +115,6 @@ pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
         .and_then(|idialog| idialog.prepare())
 }
 
-
 /// Return a list of supported encodings from the headers Transfer-Encoding
 /// and Content-Encoding.  The `Chunked` encoding will be the first value if
 /// found. At most one compression encoding will be the last value if found.
