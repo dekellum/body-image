@@ -63,6 +63,7 @@ use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use bytes::{Bytes, BytesMut, BufMut};
 use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
@@ -835,6 +836,8 @@ pub struct Tunables {
     size_estimate_gzip:      u16,
     size_estimate_brotli:    u16,
     temp_dir:                PathBuf,
+    res_timeout:             Duration,
+    body_timeout:            Duration,
 }
 
 impl Tunables {
@@ -848,7 +851,9 @@ impl Tunables {
             size_estimate_deflate:       4,
             size_estimate_gzip:          5,
             size_estimate_brotli:        6,
-            temp_dir:      env::temp_dir(),
+            temp_dir:     env::temp_dir(),
+            res_timeout:  Duration::from_secs(20),
+            body_timeout: Duration::from_secs(60),
         }
     }
 
@@ -899,6 +904,18 @@ impl Tunables {
     /// files.  Default: `std::env::temp_dir()`
     pub fn temp_dir(&self) -> &Path {
         &self.temp_dir
+    }
+
+    /// Return the maximum initial response timeout interval.
+    /// Default: 20 seconds
+    pub fn res_timeout(&self) -> Duration {
+        self.res_timeout
+    }
+
+    /// Return the maximum streaming body timeout interval.
+    /// Default: 60 seconds
+    pub fn body_timeout(&self) -> Duration {
+        self.body_timeout
     }
 }
 
@@ -980,12 +997,28 @@ impl Tuner {
         self
     }
 
+    /// Set the maximum initial response timeout interval.
+    pub fn set_res_timeout(&mut self, dur: Duration) -> &mut Tuner
+    {
+        self.template.res_timeout = dur;
+        self
+    }
+
+    /// Set the maximum streaming body timeout interval.
+    pub fn set_body_timeout(&mut self, dur: Duration) -> &mut Tuner
+    {
+        self.template.body_timeout = dur;
+        self
+    }
+
     /// Finish building, asserting any remaining invariants, and return a new
     /// `Tunables` instance.
     pub fn finish(&self) -> Tunables {
         let t = self.template.clone();
         assert!(t.max_body_ram <= t.max_body,
                 "max_body_ram can't be greater than max_body");
+        assert!(t.res_timeout <= t.body_timeout,
+                "res_timeout can't be greater than body_timeout");
         t
     }
 }

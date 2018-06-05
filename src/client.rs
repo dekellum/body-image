@@ -36,6 +36,8 @@ extern crate hyper_tls;
 extern crate hyperx;
 extern crate tokio;
 
+use std::time::Instant;
+
 #[cfg(feature = "brotli")]
 use brotli;
 
@@ -53,6 +55,8 @@ use self::hyperx::header::{ContentEncoding, ContentLength,
                            Encoding as HyEncoding,
                            Header, TransferEncoding, Raw};
 use self::tokio::runtime::current_thread;
+use self::tokio::timer::DeadlineError;
+use self::tokio::util::FutureExt;
 
 use {BodyImage, BodySink, BodyError, Encoding,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
@@ -103,16 +107,41 @@ pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
     let prolog = rr.prolog;
     let tune = tune.clone();
 
-    // FIXME: What about Timeouts? Appears to also be under flux:
-    // https://github.com/hyperium/hyper/issues/1234
-    // https://hyper.rs/guides/client/timeout/
-    // tokio-timer?
+    let res_timeout = tune.res_timeout();
+    let body_timeout = tune.body_timeout();
+    let now = Instant::now();
 
     client.request(rr.request)
         .from_err::<Flare>()
         .map(|response| Monolog { prolog, response })
+        .deadline(now + res_timeout)
+        .map_err(move |de| {
+            deadline_to_flare(de, || {
+                format_err!("timeout before initial response ({:?})",
+                            res_timeout)
+            })
+        })
         .and_then(|monolog| resp_future(monolog, tune))
+        .deadline(now + body_timeout)
+        .map_err(move |de| {
+            deadline_to_flare(de, || {
+                format_err!("timeout before streaming body complete ({:?})",
+                            body_timeout)
+            })
+        })
         .and_then(|idialog| idialog.prepare())
+}
+
+fn deadline_to_flare<F>(de: DeadlineError<Flare>, on_elapsed: F) -> Flare
+where F: FnOnce() -> Flare
+{
+    if de.is_elapsed() {
+        on_elapsed()
+    } else if de.is_timer() {
+        Flare::from(de.into_timer().unwrap())
+    } else {
+        de.into_inner().expect("inner")
+    }
 }
 
 /// Return a list of supported encodings from the headers Transfer-Encoding
