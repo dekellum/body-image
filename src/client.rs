@@ -1,29 +1,32 @@
 //! HTTP client integration and utilities.
 //!
 //! This optional module (via non-default _client_ feature) provides
-//! additional integration with the _http_ crate and _hyper_ 0.11.x (with the
-//! _compat_ feature, and its other dependencies.).  Thus far, its primary
-//! motivation has been to support the `barc record` command line, though some
-//! methods may have more general utility:
+//! additional integration with the _http_ crate and _hyper_ 0.12.x.
 //!
 //! * Trait [`RequestRecordable`](trait.RequestRecordable.html) extends
 //!   `http::request::Builder` for recording a
 //!   [`RequestRecord`](struct.RequestRecord.html), which can then be passed
-//!   to `fetch`.
+//!   to `request_dialog` or `fetch`.
 //!
-//! * The [`fetch` function](fn.fetch.html) runs a `RequestRecord` and returns a
-//!   completed [`Dialog`](../struct.Dialog.html).
+//! * The [`fetch`](fn.fetch.html) function runs a `RequestRecord` and returns
+//!   a completed [`Dialog`](../struct.Dialog.html) using a single-use client
+//!   and runtime for `request_dialog`.
 //!
-//! * The [`decode_res_body` function](fn.decode_res_body.html) and some
-//!   related functions will decompress any supported Transfer/Content-Encoding
-//!   of the response body and update the `Dialog` accordingly.
+//! * The [`request_dialog`](fn.request_dialog.html) function returns a
+//!   `Future<Item=Dialog>`, given a suitable Client reference and
+//!   `RequestRecord`. This function is thus more composable for complete
+//!   tokio applications.
 //!
-//! Starting with the significant expected changes for _hyper_ 0.12 and its
-//! dependencies, the intent is to evolve this module into a more general
-//! purpose _middleware_ type facility, including:
+//! * The [`decode_res_body`](fn.decode_res_body.html) and associated
+//!   functions will decompress any supported Transfer/Content-Encoding of the
+//!   response body and update the `Dialog` accordingly.
+//!
+//! With the release of _hyper_ 0.12 and tokio reform, the intent is to evolve
+//! this module into a more general purpose _middleware_ type facility,
+//! including:
 //!
 //! * More flexible integration of the recorded `Dialog` into more complete
-//!   _hyper_ applications or downstream crate and frameworks.
+//!   _tokio_ applications (partially complete).
 //!
 //! * Symmetric support for `BodySink`/`BodyImage` request bodies.
 //!
@@ -61,7 +64,7 @@ use self::tokio::util::FutureExt;
 use {BodyImage, BodySink, BodyError, Encoding,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
-/// The HTTP request (with body) type (as of hyper 0.11.x.)
+/// The HTTP request (with body) type
 type HyRequest = http::Request<hyper::Body>;
 
 /// Appropriate value for the HTTP accept-encoding request header, including
@@ -96,8 +99,7 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
     rt.block_on(work)
 }
 
-/// Given a suitable `Client` and `RequestRecord`, return a `Future` with the
-/// full `Dialog`.
+/// Given a suitable `Client` and `RequestRecord`, return a `Future<Item=Dialog>`.
 pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
                           rr: RequestRecord,
                           tune: &Tunables)

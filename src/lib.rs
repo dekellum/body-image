@@ -24,8 +24,7 @@
 //! The following features may be enabled or disabled at build time:
 //!
 //! _client (non-default):_ The [client module](client/index.html) for
-//! recording of HTTP `Dialog`s, currently via a basic integration of the
-//! _hyper_ 0.11.x crate.
+//! recording of HTTP `Dialog`s via _hyper_ 0.12.x and _tokio_.
 //!
 //! _cli (default):_ The `barc` command line tool for viewing
 //! (e.g. compressed) records and copying records across BARC files. If the
