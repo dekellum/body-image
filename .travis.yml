@@ -9,6 +9,7 @@ cache:
   directories:
     - target/debug/deps
     - target/debug/build
+    - target/debug/incremental
 
 rust: 1.26.2
 env: # important!
@@ -19,8 +20,6 @@ matrix:
       env: WITH_LOCK=true
     - rust: stable
       os: osx
-    - rust: 1.26.2
-      env: WITH_LOCK=true
     - rust: 1.26.2
       env: WITH_LOCK=true
     - rust: stable
