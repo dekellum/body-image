@@ -6,6 +6,7 @@ script:
      cargo test && \
      cargo test --all-features"
 cache:
+  cargo: true
   directories:
     - target/debug/deps
     - target/debug/build
