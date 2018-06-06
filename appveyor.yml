@@ -4,8 +4,6 @@ environment:
   matrix:
     - channel: 1.26.2
       target: x86_64-pc-windows-msvc
-    - channel: stable
-      target: x86_64-pc-windows-msvc
     - channel: nightly
       target: x86_64-pc-windows-msvc
 
