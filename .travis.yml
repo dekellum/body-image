@@ -2,9 +2,9 @@ language: rust
 sudo: false
 script:
   - 'if [ "$WITH_LOCK" != "true" ]; then rm -f Cargo.lock; fi'
-  - cargo test --verbose --no-default-features
-  - cargo test --verbose
-  - cargo test --verbose --all-features
+  - "cargo test --verbose --no-default-features && \
+     cargo test --verbose && \
+     cargo test --verbose --all-features"
 cache:
   directories:
     - target/debug/deps
@@ -13,18 +13,17 @@ cache:
 env: # important!
 matrix:
   include:
-    - rust: 1.26.1
+    - rust: 1.26.2
       os: osx
       env: WITH_LOCK=true
     - rust: stable
       os: osx
       env: WITH_LOCK=true
-    - rust: 1.26.1
+    - rust: 1.26.2
       env: WITH_LOCK=true
-    - rust: 1.26.1
+    - rust: 1.26.2
     - rust: stable
       env: WITH_LOCK=true
-    - rust: stable
     - rust: nightly
       env: WITH_LOCK=true
     - rust: beta
