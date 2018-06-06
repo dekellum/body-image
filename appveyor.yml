@@ -2,6 +2,8 @@ os: Visual Studio 2015
 
 environment:
   matrix:
+    - channel: 1.26.2
+      target: x86_64-pc-windows-msvc
     - channel: stable
       target: x86_64-pc-windows-msvc
     - channel: nightly
@@ -21,4 +23,6 @@ install:
 build: false
 
 test_script:
-  - cargo test --all-features
+  - cargo test --verbose --no-default-features
+  - cargo test --verbose
+  - cargo test --verbose --all-features
