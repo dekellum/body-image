@@ -5,12 +5,7 @@ script:
   - "cargo test --no-default-features && \
      cargo test && \
      cargo test --all-features"
-cache:
-  directories:
-    - target/debug/deps
-    - target/debug/build
-    - target/debug/incremental
-
+cache: cargo
 rust: 1.26.2
 env: # important!
 matrix:
