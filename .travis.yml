@@ -1,10 +1,11 @@
 language: rust
 sudo: false
 script:
-  - 'if [ "$WITH_LOCK" != "true" ]; then rm -f Cargo.lock; fi'
-  - "cargo test --no-default-features && \
-     cargo test && \
-     cargo test --all-features"
+  - 'set -e'
+  - 'if [ "$WITH_LOCK" != "true" ]; then cargo update; fi'
+  - 'cargo test --no-default-features'
+  - 'cargo test'
+  - 'cargo test --all-features'
 cache: cargo
 rust: 1.26.2
 env: # important!
