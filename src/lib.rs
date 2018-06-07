@@ -1296,4 +1296,9 @@ mod root {
         body.mem_map().unwrap();
         assert!(body.is_empty());
     }
+
+    #[test]
+    fn test_failure_ci() {
+        panic!("on purpose!");
+    }
 }
