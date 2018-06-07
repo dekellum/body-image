@@ -1297,6 +1297,7 @@ mod root {
         assert!(body.is_empty());
     }
 
+    #[cfg(not(feature = "client"))]
     #[test]
     fn test_failure_ci() {
         panic!("on purpose!");
