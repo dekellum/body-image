@@ -131,7 +131,7 @@ pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
 }
 
 fn deadline_to_flare<F>(de: DeadlineError<Flare>, on_elapsed: F) -> Flare
-where F: FnOnce() -> Flare
+    where F: FnOnce() -> Flare
 {
     if de.is_elapsed() {
         on_elapsed()
