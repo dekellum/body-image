@@ -57,7 +57,6 @@ use self::hyper::Client;
 use self::hyperx::header::{ContentEncoding, ContentLength,
                            Encoding as HyEncoding,
                            Header, TransferEncoding, Raw};
-use self::tokio::runtime::current_thread;
 use self::tokio::timer::DeadlineError;
 use self::tokio::util::FutureExt;
 
@@ -89,7 +88,7 @@ pub static BROWSE_ACCEPT: &str =
 /// simplistic form internally, and is currently not recommended for anything
 /// but one-time or test use.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
-    let mut rt = current_thread::Runtime::new()?;
+    let mut rt = tokio::runtime::Runtime::new()?;
     let work = {
         // scope the client to this work only
         let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
