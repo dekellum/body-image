@@ -84,18 +84,15 @@ pub static BROWSE_ACCEPT: &str =
      */*;q=0.8";
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
-/// function constructs all the necessary _hyper_ and _tokio_ components in a
-/// simplistic form internally, and is currently not recommended for anything
-/// but one-time or test use.
+/// function constructs a default *tokio* `Runtime`, `HttpsConnector`, and
+/// *hyper* `Client` in a simplistic form internally, waiting with timeout,
+/// and dropping these on completion.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
     let mut rt = tokio::runtime::Runtime::new()?;
-    let work = {
-        // scope the client to this work only
-        let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
-        let client = Client::builder().build(connector);
-        request_dialog(&client, rr, tune)
-    };
-    rt.block_on(work)
+    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
+    let client = Client::builder().build(connector);
+    rt.block_on(request_dialog(&client, rr, tune))
+    // Drop of `rt`, here, is equivalent to shutdown_now and wait
 }
 
 /// Given a suitable `Client` and `RequestRecord`, return a `Future<Item=Dialog>`.
