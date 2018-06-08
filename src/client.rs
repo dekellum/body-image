@@ -95,7 +95,8 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
     // Drop of `rt`, here, is equivalent to shutdown_now and wait
 }
 
-/// Given a suitable `Client` and `RequestRecord`, return a `Future<Item=Dialog>`.
+/// Given a suitable `Client` and `RequestRecord`, return a
+/// `Future<Item=Dialog>`.
 pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
                           rr: RequestRecord,
                           tune: &Tunables)
@@ -127,7 +128,7 @@ pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
                             body_timeout)
             })
         })
-        .and_then(|idialog| idialog.prepare())
+        .and_then(InDialog::prepare)
 }
 
 fn deadline_to_flare<F>(de: DeadlineError<Flare>, on_elapsed: F) -> Flare
