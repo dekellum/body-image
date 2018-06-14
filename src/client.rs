@@ -38,6 +38,7 @@ extern crate hyper;
 extern crate hyper_tls;
 extern crate hyperx;
 extern crate tokio;
+extern crate tokio_threadpool;
 
 use std::time::Instant;
 
@@ -49,9 +50,10 @@ use bytes::Bytes;
 /// Convenient and non-repetitive alias
 /// Also: "a sudden brief burst of bright flame or light."
 use failure::Error as Flare;
+use failure::err_msg;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
-use self::futures::{future, Future, Stream};
+use self::futures::{future, Async, Future, Stream};
 use http;
 use self::hyper::{Chunk, Client};
 use self::hyperx::header::{ContentEncoding, ContentLength,
@@ -354,10 +356,30 @@ fn save_chunk(bsink: &mut BodySink, chunk: Chunk, tune: &Tunables)
         bail!("Response stream too long: {}+", new_len);
     }
     if bsink.is_ram() && new_len > tune.max_body_ram() {
-        bsink.write_back(tune.temp_dir())?;
+        debug!("to write back file (blocking, len: {})", new_len);
+        unblock(|| bsink.write_back(tune.temp_dir()))?;
     }
-    debug!("to save chunk (len: {})", chunk.len());
-    bsink.save(chunk).map_err(Flare::from)
+    if bsink.is_ram() {
+        debug!("to save chunk (len: {})", chunk.len());
+        bsink.save(chunk).map_err(Flare::from)?;
+    } else {
+        debug!("to write chunk (blocking, len: {})", chunk.len());
+        unblock(|| bsink.write_all(chunk))?;
+    }
+    Ok(())
+}
+
+fn unblock<F, T>(f: F) -> Result<T, Flare>
+where F: FnOnce() -> Result<T, BodyError>
+{
+    match tokio_threadpool::blocking(f) {
+        Ok(Async::Ready(Ok(v))) => Ok(v),
+        Ok(Async::Ready(Err(e))) => Err(e.into()),
+        Ok(Async::NotReady) => {
+            Err(err_msg("blocking thread count exceeded"))
+        },
+        Err(e) => Err(e.into())
+    }
 }
 
 /// An `http::Request` and recording. Note that other important getter
