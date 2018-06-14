@@ -53,7 +53,7 @@ use failure::Error as Flare;
 use flate2::read::{DeflateDecoder, GzDecoder};
 use self::futures::{future, Future, Stream};
 use http;
-use self::hyper::Client;
+use self::hyper::{Chunk, Client};
 use self::hyperx::header::{ContentEncoding, ContentLength,
                            Encoding as HyEncoding,
                            Header, TransferEncoding, Raw};
@@ -330,19 +330,8 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     let s = body
         .from_err::<Flare>()
         .fold(idialog, move |mut idialog, chunk| {
-            let new_len = idialog.res_body.len() + (chunk.len() as u64);
-            if new_len > tune.max_body() {
-                bail!("Response stream too long: {}+", new_len);
-            } else {
-                if idialog.res_body.is_ram() && new_len > tune.max_body_ram() {
-                    idialog.res_body.write_back(tune.temp_dir())?;
-                }
-                debug!("to save chunk (len: {})", chunk.len());
-                idialog.res_body
-                    .save(chunk)
-                    .and(Ok(idialog))
-                    .map_err(Flare::from)
-            }
+            save_chunk(&mut idialog.res_body, chunk, &tune)
+                .and(Ok(idialog))
         });
     Box::new(s)
 }
@@ -355,6 +344,20 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
         bail!("Response Content-Length too long: {}", l);
     }
     Ok(l)
+}
+
+fn save_chunk(bsink: &mut BodySink, chunk: Chunk, tune: &Tunables)
+    -> Result<(), Flare>
+{
+    let new_len = bsink.len() + (chunk.len() as u64);
+    if new_len > tune.max_body() {
+        bail!("Response stream too long: {}+", new_len);
+    }
+    if bsink.is_ram() && new_len > tune.max_body_ram() {
+        bsink.write_back(tune.temp_dir())?;
+    }
+    debug!("to save chunk (len: {})", chunk.len());
+    bsink.save(chunk).map_err(Flare::from)
 }
 
 /// An `http::Request` and recording. Note that other important getter
