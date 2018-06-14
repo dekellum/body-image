@@ -38,7 +38,9 @@ extern crate hyper;
 extern crate hyper_tls;
 extern crate hyperx;
 extern crate tokio;
+extern crate tokio_threadpool;
 
+use std::mem;
 use std::time::Instant;
 
 #[cfg(feature = "brotli")]
@@ -51,7 +53,7 @@ use bytes::Bytes;
 use failure::Error as Flare;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
-use self::futures::{future, Future, Stream};
+use self::futures::{future, Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
 use http;
 use self::hyper::{Chunk, Client};
 use self::hyperx::header::{ContentEncoding, ContentLength,
@@ -319,21 +321,77 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         Err(e) => { return Box::new(future::err(e)); }
     };
 
-    let idialog = InDialog {
+    let async_body = AsyncBodySink { tune, bsink };
+
+    let mut in_dialog = InDialog {
         prolog:      monolog.prolog,
         version:     resp_parts.version,
         status:      resp_parts.status,
         res_headers: resp_parts.headers,
-        res_body:    bsink,
+        res_body:    BodySink::empty()
     };
 
-    let s = body
-        .from_err::<Flare>()
-        .fold(idialog, move |mut idialog, chunk| {
-            save_chunk(&mut idialog.res_body, chunk, &tune)
-                .and(Ok(idialog))
-        });
-    Box::new(s)
+    Box::new(
+        body.from_err::<Flare>()
+            .forward(async_body)
+            .and_then(|(_strm, mut async_body)| {
+                mem::swap(&mut async_body.bsink, &mut in_dialog.res_body);
+                Ok(in_dialog)
+            })
+    )
+}
+
+struct AsyncBodySink
+{
+    tune: Tunables,
+    bsink: BodySink,
+}
+
+macro_rules! unblock {
+    ($c:ident, || $b:block) => (match tokio_threadpool::blocking(|| $b) {
+        Ok(Async::Ready(Ok(_))) => (),
+        Ok(Async::Ready(Err(e))) => return Err(e.into()),
+        Ok(Async::NotReady) => return Ok(AsyncSink::NotReady($c)),
+        Err(e) => return Err(e.into())
+    })
+}
+
+impl Sink for AsyncBodySink
+{
+    type SinkItem = Chunk;
+    type SinkError = Flare;
+
+    fn start_send(&mut self, chunk: Chunk) -> StartSend<Chunk, Flare> {
+        let new_len = self.bsink.len() + (chunk.len() as u64);
+        if new_len > self.tune.max_body() {
+            bail!("Response stream too long: {}+", new_len);
+        }
+        if self.bsink.is_ram() && new_len > self.tune.max_body_ram() {
+            unblock!(chunk, || {
+                debug!("to write back file (blocking, len: {})", new_len);
+                self.bsink.write_back(self.tune.temp_dir())
+            })
+        }
+        if self.bsink.is_ram() {
+            debug!("to save chunk (len: {})", chunk.len());
+            self.bsink.save(chunk).map_err(Flare::from)?;
+        } else {
+            unblock!(chunk, || {
+                debug!("to write chunk (blocking, len: {})", chunk.len());
+                self.bsink.write_all(&chunk)
+            })
+        }
+
+        Ok(AsyncSink::Ready)
+    }
+
+    fn poll_complete(&mut self) -> Poll<(), Flare> {
+        Ok(Async::Ready(()))
+    }
+
+    fn close(&mut self) -> Poll<(), Flare> {
+        Ok(Async::Ready(()))
+    }
 }
 
 fn check_length(v: &http::header::HeaderValue, max: u64)
@@ -344,20 +402,6 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
         bail!("Response Content-Length too long: {}", l);
     }
     Ok(l)
-}
-
-fn save_chunk(bsink: &mut BodySink, chunk: Chunk, tune: &Tunables)
-    -> Result<(), Flare>
-{
-    let new_len = bsink.len() + (chunk.len() as u64);
-    if new_len > tune.max_body() {
-        bail!("Response stream too long: {}+", new_len);
-    }
-    if bsink.is_ram() && new_len > tune.max_body_ram() {
-        bsink.write_back(tune.temp_dir())?;
-    }
-    debug!("to save chunk (len: {})", chunk.len());
-    bsink.save(chunk).map_err(Flare::from)
 }
 
 /// An `http::Request` and recording. Note that other important getter
