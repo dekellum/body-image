@@ -50,7 +50,6 @@ use bytes::Bytes;
 /// Convenient and non-repetitive alias
 /// Also: "a sudden brief burst of bright flame or light."
 use failure::Error as Flare;
-use failure::err_msg;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
 use self::futures::{future, Async, Future, Stream};
@@ -357,28 +356,47 @@ fn save_chunk(bsink: &mut BodySink, chunk: Chunk, tune: &Tunables)
     }
     if bsink.is_ram() && new_len > tune.max_body_ram() {
         debug!("to write back file (blocking, len: {})", new_len);
-        unblock(|| bsink.write_back(tune.temp_dir()))?;
+        let anyway = {
+            let ur = unblock(|| bsink.write_back(tune.temp_dir()));
+            if let Some(r) = ur { r?; false } else { true }
+        };
+        if anyway {
+            bsink.write_back(tune.temp_dir()).map_err(Flare::from)?;
+        }
     }
     if bsink.is_ram() {
         debug!("to save chunk (len: {})", chunk.len());
         bsink.save(chunk).map_err(Flare::from)?;
     } else {
         debug!("to write chunk (blocking, len: {})", chunk.len());
-        unblock(|| bsink.write_all(chunk))?;
+        let anyway = {
+            let ur = unblock(|| bsink.write_all(&chunk));
+            if let Some(r) = ur { r?; false } else { true }
+        };
+        if anyway {
+            bsink.write_all(&chunk).map_err(Flare::from)?;
+        }
     }
     Ok(())
 }
 
-fn unblock<F, T>(f: F) -> Result<T, Flare>
-where F: FnOnce() -> Result<T, BodyError>
+
+fn unblock<F, T>(f: F) -> Option<Result<T, Flare>>
+    where F: FnOnce() -> Result<T, BodyError>
 {
     match tokio_threadpool::blocking(f) {
-        Ok(Async::Ready(Ok(v))) => Ok(v),
-        Ok(Async::Ready(Err(e))) => Err(e.into()),
+        Ok(Async::Ready(Ok(v))) => Some(Ok(v)),
+        Ok(Async::Ready(Err(e))) => Some(Err(e.into())),
         Ok(Async::NotReady) => {
-            Err(err_msg("blocking thread count exceeded"))
-        },
-        Err(e) => Err(e.into())
+            // FIXME: Guard against logging more than once per BodySink
+            warn!("Blocking thread not available; blocking events");
+            None
+        }
+        Err(_) => { // BlockingError
+            // FIXME: Guard against logging more than once per BodySink
+            warn!("Blocking thread not available; blocking current thread");
+            None
+        }
     }
 }
 
