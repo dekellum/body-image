@@ -355,12 +355,15 @@ fn save_chunk(bsink: &mut BodySink, chunk: Chunk, tune: &Tunables)
         bail!("Response stream too long: {}+", new_len);
     }
     if bsink.is_ram() && new_len > tune.max_body_ram() {
-        debug!("to write back file (blocking, len: {})", new_len);
         let anyway = {
-            let ur = unblock(|| bsink.write_back(tune.temp_dir()));
+            let ur = unblock(|| {
+                debug!("to write back file (backup, len: {})", new_len);
+                bsink.write_back(tune.temp_dir())
+            });
             if let Some(r) = ur { r?; false } else { true }
         };
         if anyway {
+            warn!("to write back file via worker! (len: {})", new_len);
             bsink.write_back(tune.temp_dir()).map_err(Flare::from)?;
         }
     }
@@ -368,35 +371,29 @@ fn save_chunk(bsink: &mut BodySink, chunk: Chunk, tune: &Tunables)
         debug!("to save chunk (len: {})", chunk.len());
         bsink.save(chunk).map_err(Flare::from)?;
     } else {
-        debug!("to write chunk (blocking, len: {})", chunk.len());
         let anyway = {
-            let ur = unblock(|| bsink.write_all(&chunk));
+            let ur = unblock(|| {
+                debug!("to write chunk (backup, len: {})", chunk.len());
+                bsink.write_all(&chunk)
+            });
             if let Some(r) = ur { r?; false } else { true }
         };
         if anyway {
+            warn!("to write chunk via worker! (len: {})", chunk.len());
             bsink.write_all(&chunk).map_err(Flare::from)?;
         }
     }
     Ok(())
 }
 
-
 fn unblock<F, T>(f: F) -> Option<Result<T, Flare>>
     where F: FnOnce() -> Result<T, BodyError>
 {
     match tokio_threadpool::blocking(f) {
-        Ok(Async::Ready(Ok(v))) => Some(Ok(v)),
+        Ok(Async::Ready(Ok(v)))  => Some(Ok(v)),
         Ok(Async::Ready(Err(e))) => Some(Err(e.into())),
-        Ok(Async::NotReady) => {
-            // FIXME: Guard against logging more than once per BodySink
-            warn!("Blocking thread not available; blocking events");
-            None
-        }
-        Err(_) => { // BlockingError
-            // FIXME: Guard against logging more than once per BodySink
-            warn!("Blocking thread not available; blocking current thread");
-            None
-        }
+        Ok(Async::NotReady) => None, // No backup thread available
+        Err(_)              => None, // BlockingError: not on threadpool
     }
 }
 
