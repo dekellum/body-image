@@ -321,30 +321,45 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         Err(e) => { return Box::new(future::err(e)); }
     };
 
-    let async_body = AsyncBodySink { tune, bsink };
+    let async_body = AsyncBodySink { body: bsink, tune };
 
     let mut in_dialog = InDialog {
         prolog:      monolog.prolog,
         version:     resp_parts.version,
         status:      resp_parts.status,
         res_headers: resp_parts.headers,
-        res_body:    BodySink::empty()
+        res_body:    BodySink::empty() // tmp, swap'ed below.
     };
 
     Box::new(
         body.from_err::<Flare>()
             .forward(async_body)
             .and_then(|(_strm, mut async_body)| {
-                mem::swap(&mut async_body.bsink, &mut in_dialog.res_body);
+                mem::swap(&mut async_body.body, &mut in_dialog.res_body);
                 Ok(in_dialog)
             })
     )
 }
 
-struct AsyncBodySink
+/// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
+/// allows a `hyper::Body` stream to be forwarded (e.g. via
+/// `futures::Stream::forward`) to a `BodySink`, in a fully asynchronous
+/// fashion.
+///
+/// `Tunables` are used during the streaming to decide when to write back a
+/// BodySink in `Ram` to `FsWrite`.  This implementation uses
+/// `tokio_threadpool::blocking` to request becoming a backup thread for
+/// blocking operations including `BodySink::write_back` and
+/// `BodySink::write_all` (state `FsWrite`). It may thus only be used on the
+/// tokio threadpool. If the `max_blocking` number of backup threads is
+/// reached, and a blocking operation is required, then this implementation
+/// will appear *full*, with `start_send` returning
+/// `Ok(AsyncSink::NotReady(chunk)`, until a backup thread becomes available
+/// or any timeout occurs.
+pub struct AsyncBodySink
 {
-    tune: Tunables,
-    bsink: BodySink,
+    pub body: BodySink,
+    pub tune: Tunables,
 }
 
 macro_rules! unblock {
@@ -362,23 +377,23 @@ impl Sink for AsyncBodySink
     type SinkError = Flare;
 
     fn start_send(&mut self, chunk: Chunk) -> StartSend<Chunk, Flare> {
-        let new_len = self.bsink.len() + (chunk.len() as u64);
+        let new_len = self.body.len() + (chunk.len() as u64);
         if new_len > self.tune.max_body() {
             bail!("Response stream too long: {}+", new_len);
         }
-        if self.bsink.is_ram() && new_len > self.tune.max_body_ram() {
+        if self.body.is_ram() && new_len > self.tune.max_body_ram() {
             unblock!(chunk, || {
                 debug!("to write back file (blocking, len: {})", new_len);
-                self.bsink.write_back(self.tune.temp_dir())
+                self.body.write_back(self.tune.temp_dir())
             })
         }
-        if self.bsink.is_ram() {
+        if self.body.is_ram() {
             debug!("to save chunk (len: {})", chunk.len());
-            self.bsink.save(chunk).map_err(Flare::from)?;
+            self.body.save(chunk).map_err(Flare::from)?;
         } else {
             unblock!(chunk, || {
                 debug!("to write chunk (blocking, len: {})", chunk.len());
-                self.bsink.write_all(&chunk)
+                self.body.write_all(&chunk)
             })
         }
 
