@@ -325,7 +325,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         Err(e) => { return Box::new(future::err(e)); }
     };
 
-    let async_body = AsyncBodySink { body: bsink, tune };
+    let async_body = AsyncBodySink::new(bsink, tune);
 
     let mut in_dialog = InDialog {
         prolog:      monolog.prolog,
@@ -339,7 +339,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         body.from_err::<Flare>()
             .forward(async_body)
             .and_then(|(_strm, mut async_body)| {
-                mem::swap(&mut async_body.body, &mut in_dialog.res_body);
+                mem::swap(async_body.body_mut(), &mut in_dialog.res_body);
                 Ok(in_dialog)
             })
     )
@@ -362,8 +362,25 @@ fn resp_future(monolog: Monolog, tune: Tunables)
 /// or any timeout occurs.
 pub struct AsyncBodySink
 {
-    pub body: BodySink,
-    pub tune: Tunables,
+    body: BodySink,
+    tune: Tunables,
+}
+
+impl AsyncBodySink {
+
+    pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
+        AsyncBodySink { body, tune }
+    }
+
+    /// The inner `BodySink` as constructed.
+    pub fn body(&self) -> &BodySink {
+        &self.body
+    }
+
+    /// A mutable reference to the inner `BodySink`.
+    pub fn body_mut(&mut self) -> &mut BodySink {
+        &mut self.body
+    }
 }
 
 macro_rules! unblock {
