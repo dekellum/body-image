@@ -1,7 +1,8 @@
 //! HTTP client integration and utilities.
 //!
 //! This optional module (via non-default _client_ feature) provides
-//! additional integration with the _http_ crate and _hyper_ 0.12.x.
+//! additional integration with the _http_, _hyper_ 0.12.x., and _tokio_
+//! crates.
 //!
 //! * Trait [`RequestRecordable`](trait.RequestRecordable.html) extends
 //!   `http::request::Builder` for recording a
@@ -17,11 +18,14 @@
 //!   `RequestRecord`. This function is thus more composable for complete
 //!   tokio applications.
 //!
+//! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
+//!   fully asynchronous receipt of a `hyper::Body` stream.
+//!
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
 //!
-//! With the release of _hyper_ 0.12 and tokio reform, the intent is to evolve
+//! With the release of _hyper_ 0.12 and _tokio_ reform, the intent is to evolve
 //! this module into a more general purpose _middleware_ type facility,
 //! including:
 //!
@@ -31,7 +35,7 @@
 //! * Symmetric support for `BodySink`/`BodyImage` request bodies.
 //!
 //! * Asynchronous I/O adaptions for file-based bodies where appropriate and
-//!   beneficial.
+//!   beneficial. (partially complete: see `AsyncBodySink`)
 
 extern crate futures;
 extern crate hyper;
