@@ -389,7 +389,10 @@ macro_rules! unblock {
     ($c:ident, || $b:block) => (match tokio_threadpool::blocking(|| $b) {
         Ok(Async::Ready(Ok(_))) => (),
         Ok(Async::Ready(Err(e))) => return Err(e.into()),
-        Ok(Async::NotReady) => return Ok(AsyncSink::NotReady($c)),
+        Ok(Async::NotReady) => {
+            debug!("No blocking backup thread available -> NotReady");
+            return Ok(AsyncSink::NotReady($c));
+        }
         Err(e) => return Err(e.into())
     })
 }
