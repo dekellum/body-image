@@ -37,6 +37,8 @@
 //! * Asynchronous I/O adaptions for file-based bodies where appropriate and
 //!   beneficial (partially complete, see `AsyncBodySink`).
 
+#[cfg(test)] extern crate fern;
+
 extern crate futures;
 extern crate hyper;
 extern crate hyper_tls;
@@ -94,7 +96,13 @@ pub static BROWSE_ACCEPT: &str =
 /// *hyper* `Client` in a simplistic form internally, waiting with timeout,
 /// and dropping these on completion.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
-    let mut rt = tokio::runtime::Runtime::new()?;
+    let mut pool = tokio::executor::thread_pool::Builder::new();
+    pool.name_prefix("tpool-")
+        .pool_size(2)
+        .max_blocking(2);
+    let mut rt = tokio::runtime::Builder::new()
+        .threadpool_builder(pool)
+        .build().unwrap();
     let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
     let client = Client::builder().build(connector);
     rt.block_on(request_dialog(&client, rr, tune))
@@ -571,7 +579,11 @@ impl RequestRecordable for http::request::Builder {
 
 #[cfg(test)]
 mod tests {
+    use ::std;
     use ::std::time::Duration;
+
+    use ::log;
+
     use ::Tuner;
     use super::*;
 
@@ -588,6 +600,7 @@ mod tests {
 
     #[test]
     fn test_small_http() {
+        assert!(*LOG_SETUP);
         let tune = Tunables::new();
         let req = create_request("http://gravitext.com").unwrap();
 
@@ -600,6 +613,7 @@ mod tests {
 
     #[test]
     fn test_small_https() {
+        assert!(*LOG_SETUP);
         let tune = Tunables::new();
         let req = create_request("https://www.usa.gov").unwrap();
 
@@ -613,6 +627,7 @@ mod tests {
 
     #[test]
     fn test_not_found() {
+        assert!(*LOG_SETUP);
         let tune = Tunables::new();
         let req = create_request("http://gravitext.com/no/existe").unwrap();
 
@@ -628,6 +643,7 @@ mod tests {
 
     #[test]
     fn test_large_http() {
+        assert!(*LOG_SETUP);
         let tune = Tuner::new()
             .set_max_body_ram(64 * 1024)
             .finish();
@@ -643,17 +659,19 @@ mod tests {
 
     #[test]
     fn test_large_parallel_constrained() {
+        assert!(*LOG_SETUP);
         let tune = Tuner::new()
             .set_max_body_ram(64 * 1024)
             .set_res_timeout(Duration::from_secs(15))
             .set_body_timeout(Duration::from_secs(55))
             .finish();
 
-        let mut poll = tokio::executor::thread_pool::Builder::new();
-        poll.pool_size(1)
+        let mut pool = tokio::executor::thread_pool::Builder::new();
+        pool.name_prefix("tpool-")
+            .pool_size(1)
             .max_blocking(2);
         let mut rt = tokio::runtime::Builder::new()
-            .threadpool_builder(poll)
+            .threadpool_builder(pool)
             .build().unwrap();
 
         let client = Client::new();
@@ -680,5 +698,51 @@ mod tests {
                 panic!("failed with: {}", e);
             }
         }
+    }
+
+    // Use lazy static to ensure we only setup logging once (by first test and
+    // thread)
+    lazy_static! {
+        pub static ref LOG_SETUP: bool = setup_logger();
+    }
+
+    fn setup_logger() -> bool {
+        let level = if let Ok(l) = std::env::var("TEST_LOG") {
+            l.parse().unwrap()
+        } else {
+            0
+        };
+        if level == 0 { return true; }
+
+        let mut disp = fern::Dispatch::new()
+            .format(|out, message, record| {
+                let t = std::thread::current();
+                out.finish(format_args!(
+                    "{} {} {}: {}",
+                    record.level(),
+                    record.target(),
+                    t.name().map(str::to_owned)
+                        .unwrap_or_else(|| format!("{:?}", t.id())),
+                    message
+                ))
+            });
+        disp = if level == 1 {
+            disp.level(log::LevelFilter::Info)
+        } else {
+            disp.level(log::LevelFilter::Debug)
+        };
+
+        if level < 2 {
+            // These are only for record/client deps, but are harmless if not
+            // loaded.
+            disp = disp
+                .level_for("hyper::proto",  log::LevelFilter::Info)
+                .level_for("tokio_core",    log::LevelFilter::Info)
+                .level_for("tokio_reactor", log::LevelFilter::Info);
+        }
+        disp.chain(std::io::stderr())
+            .apply().expect("setup logger");
+
+        true
     }
 }
