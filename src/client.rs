@@ -1,8 +1,8 @@
 //! HTTP client integration and utilities.
 //!
 //! This optional module (via non-default _client_ feature) provides
-//! additional integration with the _http_, _hyper_ 0.12.x., and _tokio_
-//! crates.
+//! additional integration with the _futures_, _http_, _hyper_ 0.12.x., and
+//! _tokio_ crates.
 //!
 //! * Trait [`RequestRecordable`](trait.RequestRecordable.html) extends
 //!   `http::request::Builder` for recording a
@@ -14,9 +14,9 @@
 //!   and runtime for `request_dialog`.
 //!
 //! * The [`request_dialog`](fn.request_dialog.html) function returns a
-//!   `Future<Item=Dialog>`, given a suitable Client reference and
+//!   `Future<Item=Dialog>`, given a suitable `hyper::Client` reference and
 //!   `RequestRecord`. This function is thus more composable for complete
-//!   tokio applications.
+//!   _tokio_ applications.
 //!
 //! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
 //!   fully asynchronous receipt of a `hyper::Body` stream.
@@ -25,17 +25,17 @@
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
 //!
-//! With the release of _hyper_ 0.12 and _tokio_ reform, the intent is to evolve
-//! this module into a more general purpose _middleware_ type facility,
+//! With the release of _hyper_ 0.12 and _tokio_ reform, the intent is to
+//! evolve this module into a more general purpose _middleware_ type facility,
 //! including:
 //!
 //! * More flexible integration of the recorded `Dialog` into more complete
 //!   _tokio_ applications (partially complete).
 //!
-//! * Symmetric support for `BodySink`/`BodyImage` request bodies.
+//! * Symmetric support for `BodyImage`/`BodySink` request/response bodies.
 //!
 //! * Asynchronous I/O adaptions for file-based bodies where appropriate and
-//!   beneficial. (partially complete: see `AsyncBodySink`)
+//!   beneficial (partially complete, see `AsyncBodySink`).
 
 extern crate futures;
 extern crate hyper;
@@ -52,7 +52,7 @@ use brotli;
 
 use bytes::Bytes;
 
-/// Convenient and non-repetitive alias
+/// Convenient and non-repetitive alias.
 /// Also: "a sudden brief burst of bright flame or light."
 use failure::Error as Flare;
 
@@ -102,7 +102,9 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
 }
 
 /// Given a suitable `Client` and `RequestRecord`, return a
-/// `Future<Item=Dialog>`.
+/// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
+/// (initial response and complete body) and if the response `BodyImage` will
+/// be in `Ram` or `FsRead`.
 pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
                           rr: RequestRecord,
                           tune: &Tunables)
