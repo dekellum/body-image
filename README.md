@@ -6,7 +6,7 @@
 [![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
 [![deps status](https://deps.rs/repo/github/dekellum/body-image/status.svg)](https://deps.rs/repo/github/dekellum/body-image)
 
-A rust crate providing a few separately usable but closely related HTTP
+A rust crate providing two separately usable but closely related HTTP
 ecosystem components:
 
 * `BodyImage` and supporting types (_root_ module) provide uniform access to

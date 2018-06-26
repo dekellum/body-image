@@ -32,10 +32,10 @@
 //! * More flexible integration of the recorded `Dialog` into more complete
 //!   _tokio_ applications (partially complete).
 //!
-//! * Symmetric support for `BodyImage`/`BodySink` request/response bodies.
-//!
 //! * Asynchronous I/O adaptions for file-based bodies where appropriate and
 //!   beneficial (partially complete, see `AsyncBodySink`).
+//!
+//! * Symmetric support for `BodyImage`/`BodySink` request/response bodies.
 
 #[cfg(test)] extern crate fern;
 
