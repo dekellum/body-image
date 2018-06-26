@@ -391,6 +391,11 @@ impl AsyncBodySink {
     pub fn body_mut(&mut self) -> &mut BodySink {
         &mut self.body
     }
+
+    /// Unwrap and return the `BodySink`.
+    pub fn into_inner(self) -> BodySink {
+        self.body
+    }
 }
 
 macro_rules! unblock {
