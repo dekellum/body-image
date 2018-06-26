@@ -440,10 +440,13 @@ fn setup_cli<'a, 'b>(var_help: &'a VarHelp) -> App<'a, 'b>
 fn setup_logger(debug_flags: u64) -> Result<(), Flare> {
     let mut disp = fern::Dispatch::new()
         .format(|out, message, record| {
+            let t = std::thread::current();
             out.finish(format_args!(
-                "{} {}: {}",
+                "{} {} {}: {}",
                 record.level(),
                 record.target(),
+                t.name().map(str::to_owned)
+                    .unwrap_or_else(|| format!("{:?}", t.id())),
                 message
             ))
         });

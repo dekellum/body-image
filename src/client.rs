@@ -1,63 +1,77 @@
 //! HTTP client integration and utilities.
 //!
 //! This optional module (via non-default _client_ feature) provides
-//! additional integration with the _http_ crate and _hyper_ 0.11.x (with the
-//! _compat_ feature, and its other dependencies.).  Thus far, its primary
-//! motivation has been to support the `barc record` command line, though some
-//! methods may have more general utility:
+//! additional integration with the _futures_, _http_, _hyper_ 0.12.x., and
+//! _tokio_ crates.
 //!
 //! * Trait [`RequestRecordable`](trait.RequestRecordable.html) extends
 //!   `http::request::Builder` for recording a
 //!   [`RequestRecord`](struct.RequestRecord.html), which can then be passed
-//!   to `fetch`.
+//!   to `request_dialog` or `fetch`.
 //!
-//! * The [`fetch` function](fn.fetch.html) runs a `RequestRecord` and returns a
-//!   completed [`Dialog`](../struct.Dialog.html).
+//! * The [`fetch`](fn.fetch.html) function runs a `RequestRecord` and returns
+//!   a completed [`Dialog`](../struct.Dialog.html) using a single-use client
+//!   and runtime for `request_dialog`.
 //!
-//! * The [`decode_res_body` function](fn.decode_res_body.html) and some
-//!   related functions will decompress any supported Transfer/Content-Encoding
-//!   of the response body and update the `Dialog` accordingly.
+//! * The [`request_dialog`](fn.request_dialog.html) function returns a
+//!   `Future<Item=Dialog>`, given a suitable `hyper::Client` reference and
+//!   `RequestRecord`. This function is thus more composable for complete
+//!   _tokio_ applications.
 //!
-//! Starting with the significant expected changes for _hyper_ 0.12 and its
-//! dependencies, the intent is to evolve this module into a more general
-//! purpose _middleware_ type facility, including:
+//! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
+//!   fully asynchronous receipt of a `hyper::Body` stream.
+//!
+//! * The [`decode_res_body`](fn.decode_res_body.html) and associated
+//!   functions will decompress any supported Transfer/Content-Encoding of the
+//!   response body and update the `Dialog` accordingly.
+//!
+//! With the release of _hyper_ 0.12 and _tokio_ reform, the intent is to
+//! evolve this module into a more general purpose _middleware_ type facility,
+//! including:
 //!
 //! * More flexible integration of the recorded `Dialog` into more complete
-//!   _hyper_ applications or downstream crate and frameworks.
-//!
-//! * Symmetric support for `BodySink`/`BodyImage` request bodies.
+//!   _tokio_ applications (partially complete).
 //!
 //! * Asynchronous I/O adaptions for file-based bodies where appropriate and
-//!   beneficial.
+//!   beneficial (partially complete, see `AsyncBodySink`).
+//!
+//! * Symmetric support for `BodyImage`/`BodySink` request/response bodies.
+
+#[cfg(test)] extern crate fern;
 
 extern crate futures;
 extern crate hyper;
 extern crate hyper_tls;
-extern crate tokio_core;
+extern crate hyperx;
+extern crate tokio;
+extern crate tokio_threadpool;
+
+use std::mem;
+use std::time::Instant;
 
 #[cfg(feature = "brotli")]
 use brotli;
 
 use bytes::Bytes;
 
-/// Convenient and non-repetitive alias
+/// Convenient and non-repetitive alias.
 /// Also: "a sudden brief burst of bright flame or light."
 use failure::Error as Flare;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
-use self::futures::{future, Future, Stream};
+use self::futures::{future, Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
 use http;
-use self::hyper::Client;
-use self::hyper::client::compat::CompatFutureResponse;
-use self::hyper::header::{ContentEncoding, ContentLength,
-                          Encoding as HyEncoding,
-                          Header, TransferEncoding, Raw};
-use self::tokio_core::reactor::Core;
+use self::hyper::{Chunk, Client};
+use self::hyperx::header::{ContentEncoding, ContentLength,
+                           Encoding as HyEncoding,
+                           Header, TransferEncoding, Raw};
+use self::tokio::timer::DeadlineError;
+use self::tokio::util::FutureExt;
 
 use {BodyImage, BodySink, BodyError, Encoding,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
-/// The HTTP request (with body) type (as of hyper 0.11.x.)
+/// The HTTP request (with body) type
 type HyRequest = http::Request<hyper::Body>;
 
 /// Appropriate value for the HTTP accept-encoding request header, including
@@ -78,40 +92,71 @@ pub static BROWSE_ACCEPT: &str =
      */*;q=0.8";
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
-/// function constructs all the necesarry _hyper_ and _tokio_ components in a
-/// simplistic form internally, and is currently not recommended for anything
-/// but one-time use.
+/// function constructs a default *tokio* `Runtime`, `HttpsConnector`, and
+/// *hyper* `Client` in a simplistic form internally, waiting with timeout,
+/// and dropping these on completion.
 pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
-    // FIXME: State of the Core (v Reactor), incl. construction,
-    // use from multiple threads is under flux:
-    // https://tokio.rs/blog/2018-02-tokio-reform-shipped/
-    //
-    // But hyper, as of 0.11.18 still depends on tokio-core, io,
-    // service:
-    // https://crates.io/crates/hyper
-    let mut core = Core::new()?;
-    let client = Client::configure()
-        .connector(hyper_tls::HttpsConnector::new(4, &core.handle())?)
-        // FIXME: threads ------------------------^
-        .build(&core.handle());
+    let mut pool = tokio::executor::thread_pool::Builder::new();
+    pool.name_prefix("tpool-")
+        .pool_size(2)
+        .max_blocking(2);
+    let mut rt = tokio::runtime::Builder::new()
+        .threadpool_builder(pool)
+        .build().unwrap();
+    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
+    let client = Client::builder().build(connector);
+    rt.block_on(request_dialog(&client, rr, tune))
+    // Drop of `rt`, here, is equivalent to shutdown_now and wait
+}
 
-    // FIXME: What about Timeouts? Appears to also be under flux:
-    // https://github.com/hyperium/hyper/issues/1234
-    // https://hyper.rs/guides/client/timeout/
-
+/// Given a suitable `Client` and `RequestRecord`, return a
+/// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
+/// (initial response and complete body) and if the response `BodyImage` will
+/// be in `Ram` or `FsRead`.
+pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
+                          rr: RequestRecord,
+                          tune: &Tunables)
+    -> impl Future<Item=Dialog, Error=Flare> + Send
+    where CN: hyper::client::connect::Connect + Sync + 'static
+{
     let prolog = rr.prolog;
+    let tune = tune.clone();
 
-    let fr: CompatFutureResponse = client.request_compat(rr.request);
+    let res_timeout = tune.res_timeout();
+    let body_timeout = tune.body_timeout();
+    let now = Instant::now();
 
-    let work = fr
-        .map(|response| Monolog { prolog, response } )
-        .map_err(Flare::from)
+    client.request(rr.request)
+        .from_err::<Flare>()
+        .map(|response| Monolog { prolog, response })
+        .deadline(now + res_timeout)
+        .map_err(move |de| {
+            deadline_to_flare(de, || {
+                format_err!("timeout before initial response ({:?})",
+                            res_timeout)
+            })
+        })
         .and_then(|monolog| resp_future(monolog, tune))
-        .and_then(|idialog| future::result(idialog.prepare()));
+        .deadline(now + body_timeout)
+        .map_err(move |de| {
+            deadline_to_flare(de, || {
+                format_err!("timeout before streaming body complete ({:?})",
+                            body_timeout)
+            })
+        })
+        .and_then(InDialog::prepare)
+}
 
-    // Run until completion
-    core.run(work)
-        .map_err(Flare::from)
+fn deadline_to_flare<F>(de: DeadlineError<Flare>, on_elapsed: F) -> Flare
+    where F: FnOnce() -> Flare
+{
+    if de.is_elapsed() {
+        on_elapsed()
+    } else if de.is_timer() {
+        Flare::from(de.into_timer().unwrap())
+    } else {
+        de.into_inner().expect("inner")
+    }
 }
 
 /// Return a list of supported encodings from the headers Transfer-Encoding
@@ -267,7 +312,7 @@ pub fn user_agent() -> String {
             VERSION)
 }
 
-fn resp_future(monolog: Monolog, tune: &Tunables)
+fn resp_future(monolog: Monolog, tune: Tunables)
     -> Box<Future<Item=InDialog, Error=Flare> + Send>
 {
     let (resp_parts, body) = monolog.response.into_parts();
@@ -290,33 +335,117 @@ fn resp_future(monolog: Monolog, tune: &Tunables)
         Err(e) => { return Box::new(future::err(e)); }
     };
 
-    let idialog = InDialog {
+    let async_body = AsyncBodySink::new(bsink, tune);
+
+    let mut in_dialog = InDialog {
         prolog:      monolog.prolog,
         version:     resp_parts.version,
         status:      resp_parts.status,
         res_headers: resp_parts.headers,
-        res_body:    bsink,
+        res_body:    BodySink::empty() // tmp, swap'ed below.
     };
 
-    let tune = tune.clone();
-    let s = body
-        .map_err(Flare::from)
-        .fold(idialog, move |mut idialog, chunk| {
-            let new_len = idialog.res_body.len() + (chunk.len() as u64);
-            if new_len > tune.max_body() {
-                bail!("Response stream too long: {}+", new_len);
-            } else {
-                if idialog.res_body.is_ram() && new_len > tune.max_body_ram() {
-                    idialog.res_body.write_back(tune.temp_dir())?;
-                }
-                debug!("to save chunk (len: {})", chunk.len());
-                idialog.res_body
-                    .save(chunk)
-                    .and(Ok(idialog))
-                    .map_err(Flare::from)
-            }
-        });
-    Box::new(s)
+    Box::new(
+        body.from_err::<Flare>()
+            .forward(async_body)
+            .and_then(|(_strm, mut async_body)| {
+                mem::swap(async_body.body_mut(), &mut in_dialog.res_body);
+                Ok(in_dialog)
+            })
+    )
+}
+
+/// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
+/// allows a `hyper::Body` stream to be forwarded (e.g. via
+/// `futures::Stream::forward`) to a `BodySink`, in a fully asynchronous
+/// fashion.
+///
+/// `Tunables` are used during the streaming to decide when to write back a
+/// BodySink in `Ram` to `FsWrite`.  This implementation uses
+/// `tokio_threadpool::blocking` to request becoming a backup thread for
+/// blocking operations including `BodySink::write_back` and
+/// `BodySink::write_all` (state `FsWrite`). It may thus only be used on the
+/// tokio threadpool. If the `max_blocking` number of backup threads is
+/// reached, and a blocking operation is required, then this implementation
+/// will appear *full*, with `start_send` returning
+/// `Ok(AsyncSink::NotReady(chunk)`, until a backup thread becomes available
+/// or any timeout occurs.
+pub struct AsyncBodySink
+{
+    body: BodySink,
+    tune: Tunables,
+}
+
+impl AsyncBodySink {
+
+    pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
+        AsyncBodySink { body, tune }
+    }
+
+    /// The inner `BodySink` as constructed.
+    pub fn body(&self) -> &BodySink {
+        &self.body
+    }
+
+    /// A mutable reference to the inner `BodySink`.
+    pub fn body_mut(&mut self) -> &mut BodySink {
+        &mut self.body
+    }
+
+    /// Unwrap and return the `BodySink`.
+    pub fn into_inner(self) -> BodySink {
+        self.body
+    }
+}
+
+macro_rules! unblock {
+    ($c:ident, || $b:block) => (match tokio_threadpool::blocking(|| $b) {
+        Ok(Async::Ready(Ok(_))) => (),
+        Ok(Async::Ready(Err(e))) => return Err(e.into()),
+        Ok(Async::NotReady) => {
+            debug!("No blocking backup thread available -> NotReady");
+            return Ok(AsyncSink::NotReady($c));
+        }
+        Err(e) => return Err(e.into())
+    })
+}
+
+impl Sink for AsyncBodySink
+{
+    type SinkItem = Chunk;
+    type SinkError = Flare;
+
+    fn start_send(&mut self, chunk: Chunk) -> StartSend<Chunk, Flare> {
+        let new_len = self.body.len() + (chunk.len() as u64);
+        if new_len > self.tune.max_body() {
+            bail!("Response stream too long: {}+", new_len);
+        }
+        if self.body.is_ram() && new_len > self.tune.max_body_ram() {
+            unblock!(chunk, || {
+                debug!("to write back file (blocking, len: {})", new_len);
+                self.body.write_back(self.tune.temp_dir())
+            })
+        }
+        if self.body.is_ram() {
+            debug!("to save chunk (len: {})", chunk.len());
+            self.body.save(chunk).map_err(Flare::from)?;
+        } else {
+            unblock!(chunk, || {
+                debug!("to write chunk (blocking, len: {})", chunk.len());
+                self.body.write_all(&chunk)
+            })
+        }
+
+        Ok(AsyncSink::Ready)
+    }
+
+    fn poll_complete(&mut self) -> Poll<(), Flare> {
+        Ok(Async::Ready(()))
+    }
+
+    fn close(&mut self) -> Poll<(), Flare> {
+        Ok(Async::Ready(()))
+    }
 }
 
 fn check_length(v: &http::header::HeaderValue, max: u64)
@@ -455,6 +584,11 @@ impl RequestRecordable for http::request::Builder {
 
 #[cfg(test)]
 mod tests {
+    use ::std;
+    use ::std::time::Duration;
+
+    use ::log;
+
     use ::Tuner;
     use super::*;
 
@@ -471,6 +605,7 @@ mod tests {
 
     #[test]
     fn test_small_http() {
+        assert!(*LOG_SETUP);
         let tune = Tunables::new();
         let req = create_request("http://gravitext.com").unwrap();
 
@@ -483,6 +618,7 @@ mod tests {
 
     #[test]
     fn test_small_https() {
+        assert!(*LOG_SETUP);
         let tune = Tunables::new();
         let req = create_request("https://www.usa.gov").unwrap();
 
@@ -496,6 +632,7 @@ mod tests {
 
     #[test]
     fn test_not_found() {
+        assert!(*LOG_SETUP);
         let tune = Tunables::new();
         let req = create_request("http://gravitext.com/no/existe").unwrap();
 
@@ -511,6 +648,7 @@ mod tests {
 
     #[test]
     fn test_large_http() {
+        assert!(*LOG_SETUP);
         let tune = Tuner::new()
             .set_max_body_ram(64 * 1024)
             .finish();
@@ -522,5 +660,94 @@ mod tests {
 
         assert!(dl.res_body.len() > (64 * 1024));
         assert!(!dl.res_body.is_ram());
+    }
+
+    #[test]
+    fn test_large_parallel_constrained() {
+        assert!(*LOG_SETUP);
+        let tune = Tuner::new()
+            .set_max_body_ram(64 * 1024)
+            .set_res_timeout(Duration::from_secs(15))
+            .set_body_timeout(Duration::from_secs(55))
+            .finish();
+
+        let mut pool = tokio::executor::thread_pool::Builder::new();
+        pool.name_prefix("tpool-")
+            .pool_size(1)
+            .max_blocking(2);
+        let mut rt = tokio::runtime::Builder::new()
+            .threadpool_builder(pool)
+            .build().unwrap();
+
+        let client = Client::new();
+
+        let rq0 = create_request(
+            "http://cache.ruby-lang.org/pub/ruby/1.8/ChangeLog-1.8.2"
+        ).unwrap();
+        let rq1 = create_request(
+            "http://cache.ruby-lang.org/pub/ruby/1.8/ChangeLog-1.8.3"
+        ).unwrap();
+
+        let res = rt.block_on(
+            request_dialog(&client, rq0, &tune)
+                .join(request_dialog(&client, rq1, &tune))
+        );
+        match res {
+            Ok((dl0, dl1)) => {
+                assert_eq!(dl0.res_body.len(), 333_210);
+                assert_eq!(dl1.res_body.len(), 134_827);
+                assert!(!dl0.res_body.is_ram());
+                assert!(!dl1.res_body.is_ram());
+            }
+            Err(e) => {
+                panic!("failed with: {}", e);
+            }
+        }
+    }
+
+    // Use lazy static to ensure we only setup logging once (by first test and
+    // thread)
+    lazy_static! {
+        pub static ref LOG_SETUP: bool = setup_logger();
+    }
+
+    fn setup_logger() -> bool {
+        let level = if let Ok(l) = std::env::var("TEST_LOG") {
+            l.parse().unwrap()
+        } else {
+            0
+        };
+        if level == 0 { return true; }
+
+        let mut disp = fern::Dispatch::new()
+            .format(|out, message, record| {
+                let t = std::thread::current();
+                out.finish(format_args!(
+                    "{} {} {}: {}",
+                    record.level(),
+                    record.target(),
+                    t.name().map(str::to_owned)
+                        .unwrap_or_else(|| format!("{:?}", t.id())),
+                    message
+                ))
+            });
+        disp = if level == 1 {
+            disp.level(log::LevelFilter::Info)
+        } else {
+            disp.level(log::LevelFilter::Debug)
+        };
+
+        if level < 2 {
+            // These are only for record/client deps, but are harmless if not
+            // loaded.
+            disp = disp
+                .level_for("hyper::proto",  log::LevelFilter::Info)
+                .level_for("tokio_core",    log::LevelFilter::Info)
+                .level_for("tokio_reactor", log::LevelFilter::Info);
+        }
+        disp.chain(std::io::stderr())
+            .apply().expect("setup logger");
+
+        true
     }
 }

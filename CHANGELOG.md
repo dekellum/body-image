@@ -1,4 +1,19 @@
 ## 0.3.0 (TBD)
+* Updates to _client_ module for better composability with _tokio_
+  applications and fully asynchronous response body support:
+  * Upgrade to _hyper_ 0.12.x and _tokio_ (reform, 0.1.x).
+  * New `AsyncBodySink` implements `futures::Sink` for `BodySink`,
+    supporting fully asynchronous receipt of a `hyper::Body` request
+    or response stream.
+  * New `request_dialog` function returns `impl Future<Item=Dialog>`
+    given a `RequestRecord` and suitable `hyper::Client` reference.
+  * Timeout support via _tokio-timer_ and `Tunables::res_timeout` and
+    `body_timeout` durations.
+
+* Upgrade (optional default) _brotli_ to >=2.2.1, <3.
+
+* Minimal rustc version upgraded to (and CI tested at) 1.26.2 for use
+  of `impl Trait` feature.
 
 ## 0.2.0 (2018-5-8)
 * Concurrent `FsRead` readers and infallible `BodyImage::clone`
