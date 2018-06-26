@@ -1,4 +1,4 @@
-## 0.3.0 (TBD)
+## 0.3.0 (2018-6-26)
 * Updates to _client_ module for better composability with _tokio_
   applications and fully asynchronous response body support (#2):
   * Upgrade to _hyper_ 0.12.x and _tokio_ (reform, 0.1.x).
