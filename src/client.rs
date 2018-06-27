@@ -37,14 +37,15 @@
 //!
 //! * Symmetric support for `BodyImage`/`BodySink` request/response bodies.
 
-#[cfg(test)] extern crate fern;
-
 extern crate futures;
 extern crate hyper;
 extern crate hyper_tls;
 extern crate hyperx;
 extern crate tokio;
 extern crate tokio_threadpool;
+
+#[cfg(test)] extern crate fern;
+#[cfg(test)] extern crate hyper_stub;
 
 use std::mem;
 use std::time::Instant;
@@ -698,6 +699,28 @@ mod tests {
                 assert_eq!(dl1.res_body.len(), 134_827);
                 assert!(!dl0.res_body.is_ram());
                 assert!(!dl1.res_body.is_ram());
+            }
+            Err(e) => {
+                panic!("failed with: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_dialog_via_stub() {
+        assert!(*LOG_SETUP);
+        let tune = Tunables::new();
+        let rq = create_request(
+            "http://gravitext.com/stubs/no/existe"
+        ).unwrap();
+        let client = hyper_stub::proxy_client_fn_ok(|_req| {
+            hyper::Response::new("stub".into())
+        });
+        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        let res = rt.block_on(request_dialog(&client, rq, &tune));
+        match res {
+            Ok(dl) => {
+                assert_eq!(dl.res_body.len(), 4);
             }
             Err(e) => {
                 panic!("failed with: {}", e);
