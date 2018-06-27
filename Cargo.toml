@@ -70,3 +70,4 @@ features = ["mmap", "brotli", "client"]
 [dev-dependencies]
 lazy_static = { version = ">=1.0.1, <2" }
 fern        = { version = ">=0.5.5, <2" }
+hyper-stub  = { version = ">=0.1.0, <2" }
