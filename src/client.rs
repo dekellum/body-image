@@ -370,14 +370,14 @@ fn resp_future(monolog: Monolog, tune: Tunables)
 /// will appear *full*, with `start_send` returning
 /// `Ok(AsyncSink::NotReady(chunk)`, until a backup thread becomes available
 /// or any timeout occurs.
-pub struct AsyncBodySink
-{
+pub struct AsyncBodySink {
     body: BodySink,
     tune: Tunables,
 }
 
 impl AsyncBodySink {
 
+    /// Wrap `BodySink` and `Tunables` instance.
     pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
         AsyncBodySink { body, tune }
     }
@@ -410,8 +410,7 @@ macro_rules! unblock {
     })
 }
 
-impl Sink for AsyncBodySink
-{
+impl Sink for AsyncBodySink {
     type SinkItem = Chunk;
     type SinkError = Flare;
 
