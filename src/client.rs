@@ -448,6 +448,38 @@ impl Sink for AsyncBodySink {
     }
 }
 
+pub struct AsyncBodyImage {
+    state: AsyncImageState,
+    tune: Tunables,
+}
+
+impl AsyncBodyImage {
+    pub fn new(body: BodyImage, tune: Tunables) -> AsyncBodyImage {
+        AsyncBodyImage { state: AsyncImageState::Ram(body.into_vec().into_iter()),
+                         tune }
+    }
+}
+
+use std::vec::IntoIter;
+
+enum AsyncImageState {
+    Ram(IntoIter<Bytes>),
+}
+
+impl Stream for AsyncBodyImage
+{
+    type Item = Bytes;
+    type Error = Flare;
+
+    fn poll(&mut self) -> Poll<Option<Bytes>, Flare> {
+        match self.state {
+            AsyncImageState::Ram(ref mut iter) => {
+                Ok(Async::Ready(iter.next()))
+            }
+        }
+    }
+}
+
 fn check_length(v: &http::header::HeaderValue, max: u64)
     -> Result<u64, Flare>
 {

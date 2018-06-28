@@ -507,6 +507,15 @@ impl BodyImage {
         }
     }
 
+    pub(crate) fn into_vec(self) -> Vec<Bytes>
+    {
+        if let ImageState::Ram(v) = self.state {
+            v
+        } else {
+            panic!("into_vec() when not in RAM state!");
+        }
+    }
+
     /// Given a `Read` object, a length estimate in bytes, and `Tunables` read
     /// and prepare a new `BodyImage`. `Tunables`, the estimate and actual
     /// length read will determine which buffering strategy is used. The
