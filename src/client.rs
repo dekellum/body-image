@@ -448,6 +448,7 @@ impl Sink for AsyncBodySink {
     }
 }
 
+use std::cmp;
 use std::io;
 use std::io::{Cursor, Read};
 use std::vec::IntoIter;
@@ -456,19 +457,29 @@ use bytes::{BufMut, BytesMut, IntoBuf};
 
 pub struct AsyncBodyImage {
     state: AsyncImageState,
+    len: u64,
+    consumed: u64,
 }
 
 impl AsyncBodyImage {
-    pub fn new(body: BodyImage, _tune: &Tunables) -> AsyncBodyImage {
+    pub fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
+        let len = body.len();
         match body.explode() {
             ExplodedImage::Ram(v) => {
                 AsyncBodyImage {
-                    state: AsyncImageState::Ram(v.into_iter())
+                    state: AsyncImageState::Ram(v.into_iter()),
+                    len,
+                    consumed: 0,
                 }
             }
             ExplodedImage::FsRead(rs) => {
                 AsyncBodyImage {
-                    state: AsyncImageState::File(rs)
+                    state: AsyncImageState::File {
+                        rs,
+                        bsize: tune.buffer_size_fs() as u64
+                    },
+                    len,
+                    consumed: 0,
                 }
             }
             #[cfg(feature = "mmap")]
@@ -479,10 +490,10 @@ impl AsyncBodyImage {
 
 enum AsyncImageState {
     Ram(IntoIter<Bytes>),
-    File(ReadSlice),
+    File { rs: ReadSlice, bsize: u64 },
 }
 
-fn blocking_io<F, T>(f: F) -> Poll<T, io::Error>
+fn unblock<F, T>(f: F) -> Poll<T, io::Error>
 where F: FnOnce() -> io::Result<T>,
 {
     match tokio_threadpool::blocking(f) {
@@ -511,23 +522,35 @@ impl Stream for AsyncBodyImage
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Bytes>, io::Error> {
+        let avail = self.len - self.consumed;
+        if avail == 0 {
+            return Ok(Async::Ready(None));
+        }
         match self.state {
             AsyncImageState::Ram(ref mut iter) => {
-                Ok(Async::Ready(iter.next()))
-            },
-            AsyncImageState::File(ref mut rs) => {
-                blocking_io( || {
-                   let mut buf = BytesMut::with_capacity(65_536); //FIXME: via tune
-                   let len = match rs.read(unsafe { buf.bytes_mut() }) {
-                       Ok(l) => l,
-                       Err(e) => return Err(e)
-                   };
-                   if len == 0 {
-                       return Ok(None);
-                   }
-                   unsafe { buf.advance_mut(len); }
-                   Ok(Some(buf.freeze()))
-                })
+                let n = iter.next();
+                if let Some(ref b) = n {
+                    self.consumed += b.len() as u64;
+                }
+                Ok(Async::Ready(n))
+            }
+            AsyncImageState::File { ref mut rs, bsize } => {
+                let res = unblock( || {
+                    let bs = cmp::min(bsize, avail) as usize;
+                    let mut buf = BytesMut::with_capacity(bs);
+                    match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
+                        Ok(0) => Ok(None),
+                        Ok(len) => {
+                            unsafe { buf.advance_mut(len); }
+                            Ok(Some(buf.freeze()))
+                        }
+                        Err(e) => Err(e)
+                    }
+                });
+                if let Ok(Async::Ready(Some(ref b))) = res {
+                    self.consumed += b.len() as u64;
+                }
+                res
             }
         }
     }
@@ -547,11 +570,11 @@ impl hyper::body::Payload for AsyncBodyImage {
     }
 
     fn content_length(&self) -> Option<u64> {
-        None //FIXME: Return length as recorded
+        Some(self.len)
     }
 
     fn is_end_stream(&self) -> bool {
-        false //FIXME: Update internal flag for this?
+        (self.len - self.consumed) == 0
     }
 }
 
