@@ -69,7 +69,7 @@ use self::hyperx::header::{ContentEncoding, ContentLength,
 use self::tokio::timer::DeadlineError;
 use self::tokio::util::FutureExt;
 
-use {BodyImage, BodySink, BodyError, Encoding,
+use {BodyImage, BodySink, BodyError, BodyReader, Encoding,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
 /// The HTTP request (with body) type
@@ -448,33 +448,85 @@ impl Sink for AsyncBodySink {
     }
 }
 
+use std::io;
+use std::io::Read;
+use std::vec::IntoIter;
+use olio::fs::rc::ReadSlice;
+use bytes::{BufMut, BytesMut};
+
 pub struct AsyncBodyImage {
     state: AsyncImageState,
-    tune: Tunables,
 }
 
 impl AsyncBodyImage {
-    pub fn new(body: BodyImage, tune: Tunables) -> AsyncBodyImage {
-        AsyncBodyImage { state: AsyncImageState::Ram(body.into_vec().into_iter()),
-                         tune }
+    pub fn new(body: BodyImage, _tune: &Tunables) -> AsyncBodyImage {
+        if body.is_ram() {
+            AsyncBodyImage {
+                state: AsyncImageState::Ram(body.into_vec().into_iter())
+            }
+        } else {
+            match body.reader() {
+                BodyReader::FileSlice(rs) => {
+                    AsyncBodyImage {
+                        state: AsyncImageState::File(rs)
+                    }
+                }
+                BodyReader::File(rp) => {
+                    AsyncBodyImage {
+                        state: AsyncImageState::File(rp.subslice(0, rp.len()))
+                    }
+                }
+                _ => panic!("FIXME: Memmap unsupported yet?!")
+            }
+        }
     }
 }
 
-use std::vec::IntoIter;
-
 enum AsyncImageState {
     Ram(IntoIter<Bytes>),
+    File(ReadSlice),
+}
+
+fn blocking_io<F, T>(f: F) -> Poll<T, io::Error>
+where F: FnOnce() -> io::Result<T>,
+{
+    match tokio_threadpool::blocking(f) {
+        Ok(Async::Ready(Ok(v))) => Ok(v.into()),
+        Ok(Async::Ready(Err(err))) => Err(err),
+        Ok(Async::NotReady) => Ok(Async::NotReady),
+        Err(_) => {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "AsyncBodyImage needs `blocking`, \
+                 backup threads of Tokio threadpool"
+            ))
+        }
+    }
 }
 
 impl Stream for AsyncBodyImage
 {
     type Item = Bytes;
-    type Error = Flare;
+    type Error = io::Error;
 
-    fn poll(&mut self) -> Poll<Option<Bytes>, Flare> {
+    fn poll(&mut self) -> Poll<Option<Bytes>, io::Error> {
         match self.state {
             AsyncImageState::Ram(ref mut iter) => {
                 Ok(Async::Ready(iter.next()))
+            },
+            AsyncImageState::File(ref mut rs) => {
+                blocking_io( || {
+                   let mut buf = BytesMut::with_capacity(65_536); //FIXME: via tune
+                   let len = match rs.read(unsafe { buf.bytes_mut() }) {
+                       Ok(l) => l,
+                       Err(e) => return Err(e)
+                   };
+                   if len == 0 {
+                       return Ok(None);
+                   }
+                   unsafe { buf.advance_mut(len); }
+                   Ok(Some(buf.freeze()))
+                })
             }
         }
     }
