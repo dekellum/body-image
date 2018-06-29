@@ -875,7 +875,7 @@ impl Tunables {
         self.buffer_size_ram
     }
 
-    /// Return the buffer size in bytes to use when buffering for output to
+    /// Return the buffer size in bytes to use when buffering to/from
     /// the file-system. Default: 64 KiB.
     pub fn buffer_size_fs(&self) -> usize {
         self.buffer_size_fs
@@ -956,8 +956,8 @@ impl Tuner {
         self
     }
 
-    /// Set the buffer size in bytes to use when buffering for output to the
-    /// file-system.
+    /// Set the buffer size in bytes to use when buffering to/from
+    /// the file-system.
     pub fn set_buffer_size_fs(&mut self, size: usize) -> &mut Tuner {
         assert!(size > 0, "buffer_size_fs must be greater than zero");
         self.template.buffer_size_fs = size;
