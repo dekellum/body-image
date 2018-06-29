@@ -656,6 +656,10 @@ pub trait RequestRecordable {
     /// `Bytes` buffer.
     fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, Flare>
         where B: Into<Bytes>;
+
+    /// Complete the builder with a `BodyImage` request body.
+    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
+        -> Result<RequestRecord, Flare>;
 }
 
 impl RequestRecordable for http::request::Builder {
@@ -691,6 +695,24 @@ impl RequestRecordable for http::request::Builder {
         Ok(RequestRecord {
             request,
             prolog: Prolog { method, url, req_headers, req_body } })
+    }
+
+    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
+        -> Result<RequestRecord, Flare>
+    {
+        let request = if !body.is_empty() {
+            let stream = AsyncBodyImage::new(body.clone(), tune);
+            self.body(hyper::Body::wrap_stream(stream))?
+        } else {
+            self.body(hyper::Body::empty())?
+        };
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body: body } })
     }
 }
 
