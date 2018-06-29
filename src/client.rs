@@ -492,7 +492,13 @@ where F: FnOnce() -> io::Result<T>,
 {
     match tokio_threadpool::blocking(f) {
         Ok(Async::Ready(Ok(v))) => Ok(v.into()),
-        Ok(Async::Ready(Err(err))) => Err(err),
+        Ok(Async::Ready(Err(e))) => {
+            if e.kind() == io::ErrorKind::Interrupted {
+                Ok(Async::NotReady)
+            } else {
+                Err(e)
+            }
+        }
         Ok(Async::NotReady) => Ok(Async::NotReady),
         Err(_) => {
             Err(io::Error::new(
