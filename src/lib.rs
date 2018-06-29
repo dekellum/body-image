@@ -507,12 +507,16 @@ impl BodyImage {
         }
     }
 
-    pub(crate) fn into_vec(self) -> Vec<Bytes>
-    {
-        if let ImageState::Ram(v) = self.state {
-            v
-        } else {
-            panic!("into_vec() when not in RAM state!");
+    /// Consume self, *exploding* into the possible image variants
+    pub(crate) fn explode(self) -> ExplodedImage {
+        match self.state {
+            ImageState::Ram(v) => ExplodedImage::Ram(v),
+            ImageState::FsRead(f) => {
+                ExplodedImage::FsRead(ReadSlice::new(f, 0, self.len))
+            }
+            ImageState::FsReadSlice(rs) => ExplodedImage::FsRead(rs),
+            #[cfg(feature = "mmap")]
+            ImageState::MemMap(m) => ExplodedImage::MemMap(m),
         }
     }
 
@@ -672,6 +676,13 @@ impl fmt::Debug for ImageState {
             }
         }
     }
+}
+
+pub enum ExplodedImage {
+    Ram(Vec<Bytes>),
+    FsRead(ReadSlice),
+    #[cfg(feature = "mmap")]
+    MemMap(Arc<Mmap>),
 }
 
 /// Provides a `Read` reference for a `BodyImage` in any state.

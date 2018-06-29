@@ -69,7 +69,7 @@ use self::hyperx::header::{ContentEncoding, ContentLength,
 use self::tokio::timer::DeadlineError;
 use self::tokio::util::FutureExt;
 
-use {BodyImage, BodySink, BodyError, BodyReader, Encoding,
+use {BodyImage, BodySink, BodyError, Encoding, ExplodedImage,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
 /// The HTTP request (with body) type
@@ -460,24 +460,19 @@ pub struct AsyncBodyImage {
 
 impl AsyncBodyImage {
     pub fn new(body: BodyImage, _tune: &Tunables) -> AsyncBodyImage {
-        if body.is_ram() {
-            AsyncBodyImage {
-                state: AsyncImageState::Ram(body.into_vec().into_iter())
-            }
-        } else {
-            match body.reader() {
-                BodyReader::FileSlice(rs) => {
-                    AsyncBodyImage {
-                        state: AsyncImageState::File(rs)
-                    }
+        match body.explode() {
+            ExplodedImage::Ram(v) => {
+                AsyncBodyImage {
+                    state: AsyncImageState::Ram(v.into_iter())
                 }
-                BodyReader::File(rp) => {
-                    AsyncBodyImage {
-                        state: AsyncImageState::File(rp.subslice(0, rp.len()))
-                    }
-                }
-                _ => panic!("FIXME: Memmap unsupported yet?!")
             }
+            ExplodedImage::FsRead(rs) => {
+                AsyncBodyImage {
+                    state: AsyncImageState::File(rs)
+                }
+            }
+            #[cfg(feature = "mmap")]
+            _ => panic!("FIXME: Memmap unsupported")
         }
     }
 }
