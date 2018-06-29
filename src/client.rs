@@ -449,10 +449,10 @@ impl Sink for AsyncBodySink {
 }
 
 use std::io;
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::vec::IntoIter;
 use olio::fs::rc::ReadSlice;
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, BytesMut, IntoBuf};
 
 pub struct AsyncBodyImage {
     state: AsyncImageState,
@@ -535,6 +535,28 @@ impl Stream for AsyncBodyImage
                 })
             }
         }
+    }
+}
+
+impl hyper::body::Payload for AsyncBodyImage {
+    type Data = Cursor<Bytes>;
+    type Error = io::Error;
+
+    fn poll_data(&mut self) -> Poll<Option<Self::Data>, io::Error> {
+        match self.poll() {
+            Ok(Async::Ready(Some(b))) => Ok(Async::Ready(Some(b.into_buf()))),
+            Ok(Async::Ready(None))    => Ok(Async::Ready(None)),
+            Ok(Async::NotReady)       => Ok(Async::NotReady),
+            Err(e)                    => Err(e)
+        }
+    }
+
+    fn content_length(&self) -> Option<u64> {
+        None //FIXME: Return length as recorded
+    }
+
+    fn is_end_stream(&self) -> bool {
+        false //FIXME: Update internal flag for this?
     }
 }
 
