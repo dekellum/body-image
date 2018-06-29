@@ -869,8 +869,8 @@ impl Tunables {
         self.max_body
     }
 
-    /// Return the buffer size in bytes to use when buffering for output in
-    /// RAM. Default: 8 KiB.
+    /// Return the buffer size in bytes to use when buffering to RAM.
+    /// Default: 8 KiB.
     pub fn buffer_size_ram(&self) -> usize {
         self.buffer_size_ram
     }
@@ -949,7 +949,7 @@ impl Tuner {
         self
     }
 
-    /// Set the buffer size in bytes to use when buffering for output in RAM.
+    /// Set the buffer size in bytes to use when buffering to RAM.
     pub fn set_buffer_size_ram(&mut self, size: usize) -> &mut Tuner {
         assert!(size > 0, "buffer_size_ram must be greater than zero");
         self.template.buffer_size_ram = size;
