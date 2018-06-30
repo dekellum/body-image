@@ -660,29 +660,30 @@ impl InDialog {
 /// Extension trait for `http::request::Builder`, to enable recording
 /// key portions of the request for the final `Dialog`.
 ///
-/// In particular any request body (e.g. POST, PUT) needs to be cloned in
-/// advance of finishing the request, though this is inexpensive via
-/// `Bytes::clone`.
-///
-/// _Limitation_: Currently only a single contiguous RAM buffer
-/// (implementing `Into<Bytes>`) is supported as the request body.
-pub trait RequestRecordable {
+/// Any request body (e.g. POST, PUT) is cloned in advance of finishing the
+/// request (via `Builder::body`), though this is inexpensive via
+/// `Bytes::clone` or `BodyImage::clone`. Other request fields (`method`,
+/// `uri`, `headers`) are recorded by `clone`, after finishing the request.
+pub trait RequestRecordable<B>
+    where B: hyper::body::Payload + Send
+{
     /// Short-hand for completing the builder with an empty body, as is
     /// the case with many HTTP request methods (e.g. GET).
-    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flare>;
+    fn record(&mut self) -> Result<RequestRecord<B>, Flare>;
 
-    /// Complete the builder with any request body that can be converted to a
+    /// Complete the builder with any body that can be converted to a (Ram)
     /// `Bytes` buffer.
-    fn record_body<BB, B>(&mut self, body: BB)
+    fn record_body<BB>(&mut self, body: BB)
         -> Result<RequestRecord<B>, Flare>
-        where BB: Into<Bytes>, B: From<Bytes>;
+        where BB: Into<Bytes>;
 
-    /// Complete the builder with a `BodyImage` request body.
+    /// Complete the builder with a `BodyImage` for the request body.
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<hyper::Body>, Flare>;
+        -> Result<RequestRecord<B>, Flare>;
 }
 
-impl RequestRecordable for http::request::Builder {
+impl RequestRecordable<hyper::Body> for http::request::Builder {
+
     fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flare> {
         let request = self.body(hyper::Body::empty())?;
         let method      = request.method().clone();
@@ -697,9 +698,9 @@ impl RequestRecordable for http::request::Builder {
         })
     }
 
-    fn record_body<BB, B>(&mut self, body: BB)
-       -> Result<RequestRecord<B>, Flare>
-       where BB: Into<Bytes>, B: From<Bytes>
+    fn record_body<BB>(&mut self, body: BB)
+       -> Result<RequestRecord<hyper::Body>, Flare>
+       where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
         let buf_copy: Bytes = buf.clone();
@@ -728,6 +729,62 @@ impl RequestRecordable for http::request::Builder {
         } else {
             self.body(hyper::Body::empty())?
         };
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body: body } })
+    }
+}
+
+impl RequestRecordable<AsyncBodyImage> for http::request::Builder {
+
+    fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, Flare> {
+        let request = {
+            let body = BodyImage::empty();
+            let tune = Tunables::default();
+            self.body(AsyncBodyImage::new(body, &tune))?
+        };
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        let req_body = BodyImage::empty();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body }
+        })
+    }
+
+    fn record_body<BB>(&mut self, body: BB)
+       -> Result<RequestRecord<AsyncBodyImage>, Flare>
+       where BB: Into<Bytes>
+    {
+        let buf: Bytes = body.into();
+        let req_body = if buf.is_empty() {
+            BodyImage::empty()
+        } else {
+            BodyImage::from_slice(buf)
+        };
+        let tune = Tunables::default();
+        let request = self.body(AsyncBodyImage::new(req_body.clone(), &tune))?;
+
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body } })
+    }
+
+    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
+        -> Result<RequestRecord<AsyncBodyImage>, Flare>
+    {
+        let request = self.body(AsyncBodyImage::new(body.clone(), tune))?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
         let req_headers = request.headers().clone();
