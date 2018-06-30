@@ -72,9 +72,6 @@ use self::tokio::util::FutureExt;
 use {BodyImage, BodySink, BodyError, Encoding, ExplodedImage,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
-/// The HTTP request (with body) type
-type HyRequest = http::Request<hyper::Body>;
-
 /// Appropriate value for the HTTP accept-encoding request header, including
 /// (br)otli when the brotli feature is configured.
 #[cfg(feature = "brotli")]
@@ -96,7 +93,10 @@ pub static BROWSE_ACCEPT: &str =
 /// function constructs a default *tokio* `Runtime`, `HttpsConnector`, and
 /// *hyper* `Client` in a simplistic form internally, waiting with timeout,
 /// and dropping these on completion.
-pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
+pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
+    -> Result<Dialog, Flare>
+    where B: hyper::body::Payload + Send
+{
     let mut pool = tokio::executor::thread_pool::Builder::new();
     pool.name_prefix("tpool-")
         .pool_size(2)
@@ -114,11 +114,12 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
 /// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
 /// (initial response and complete body) and if the response `BodyImage` will
 /// be in `Ram` or `FsRead`.
-pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
-                          rr: RequestRecord,
-                          tune: &Tunables)
+pub fn request_dialog<CN, B>(client: &Client<CN, B>,
+                             rr: RequestRecord<B>,
+                             tune: &Tunables)
     -> impl Future<Item=Dialog, Error=Flare> + Send
-    where CN: hyper::client::connect::Connect + Sync + 'static
+    where CN: hyper::client::connect::Connect + Sync + 'static,
+          B: hyper::body::Payload + Send
 {
     let prolog = rr.prolog;
     let tune = tune.clone();
@@ -595,12 +596,12 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
 /// _Limitations:_ This can't be `Clone`, because
 /// `http::Request<client::hyper::Body>` isn't `Clone`.
 #[derive(Debug)]
-pub struct RequestRecord {
-    request:      HyRequest,
+pub struct RequestRecord<B> {
+    request:      http::Request<B>,
     prolog:       Prolog,
 }
 
-impl RequestRecord {
+impl<B> RequestRecord<B> {
     /// The HTTP method (verb), e.g. `GET`, `POST`, etc.
     pub fn method(&self)  -> &http::Method         { &self.prolog.method }
 
@@ -608,10 +609,10 @@ impl RequestRecord {
     pub fn url(&self)     -> &http::Uri            { &self.prolog.url }
 
     /// Return the HTTP request.
-    pub fn request(&self) -> &HyRequest            { &self.request }
+    pub fn request(&self) -> &http::Request<B>     { &self.request }
 }
 
-impl RequestRecorded for RequestRecord {
+impl<B> RequestRecorded for RequestRecord<B> {
     fn req_headers(&self) -> &http::HeaderMap      { &self.prolog.req_headers }
     fn req_body(&self)    -> &BodyImage            { &self.prolog.req_body }
 }
@@ -668,20 +669,21 @@ impl InDialog {
 pub trait RequestRecordable {
     /// Short-hand for completing the builder with an empty body, as is
     /// the case with many HTTP request methods (e.g. GET).
-    fn record(&mut self) -> Result<RequestRecord, Flare>;
+    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flare>;
 
     /// Complete the builder with any request body that can be converted to a
     /// `Bytes` buffer.
-    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, Flare>
-        where B: Into<Bytes>;
+    fn record_body<BB, B>(&mut self, body: BB)
+        -> Result<RequestRecord<B>, Flare>
+        where BB: Into<Bytes>, B: From<Bytes>;
 
     /// Complete the builder with a `BodyImage` request body.
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord, Flare>;
+        -> Result<RequestRecord<hyper::Body>, Flare>;
 }
 
 impl RequestRecordable for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord, Flare> {
+    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flare> {
         let request = self.body(hyper::Body::empty())?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -691,11 +693,13 @@ impl RequestRecordable for http::request::Builder {
 
         Ok(RequestRecord {
             request,
-            prolog: Prolog { method, url, req_headers, req_body } })
+            prolog: Prolog { method, url, req_headers, req_body }
+        })
     }
 
-    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, Flare>
-        where B: Into<Bytes>
+    fn record_body<BB, B>(&mut self, body: BB)
+       -> Result<RequestRecord<B>, Flare>
+       where BB: Into<Bytes>, B: From<Bytes>
     {
         let buf: Bytes = body.into();
         let buf_copy: Bytes = buf.clone();
@@ -716,7 +720,7 @@ impl RequestRecordable for http::request::Builder {
     }
 
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord, Flare>
+        -> Result<RequestRecord<hyper::Body>, Flare>
     {
         let request = if !body.is_empty() {
             let stream = AsyncBodyImage::new(body.clone(), tune);
@@ -744,7 +748,9 @@ mod tests {
     use ::Tuner;
     use super::*;
 
-    fn create_request(url: &str) -> Result<RequestRecord, Flare> {
+    fn create_request(url: &str)
+        -> Result<RequestRecord<hyper::Body>, Flare>
+    {
         http::Request::builder()
             .method(http::Method::GET)
             .header(http::header::ACCEPT, BROWSE_ACCEPT)
