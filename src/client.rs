@@ -19,23 +19,14 @@
 //!   _tokio_ applications.
 //!
 //! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
-//!   fully asynchronous receipt of a `hyper::Body` stream.
+//!   asynchronous input from a `hyper::Body` stream.
+//!
+//! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
+//!   asynchronous output as a body stream.
 //!
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
-//!
-//! With the release of _hyper_ 0.12 and _tokio_ reform, the intent is to
-//! evolve this module into a more general purpose _middleware_ type facility,
-//! including:
-//!
-//! * More flexible integration of the recorded `Dialog` into more complete
-//!   _tokio_ applications (partially complete).
-//!
-//! * Asynchronous I/O adaptions for file-based bodies where appropriate and
-//!   beneficial (partially complete, see `AsyncBodySink`).
-//!
-//! * Symmetric support for `BodyImage`/`BodySink` request/response bodies.
 
 extern crate futures;
 extern crate hyper;
@@ -456,6 +447,12 @@ use std::vec::IntoIter;
 use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, BytesMut, IntoBuf};
 
+/// Adaptor for `BodyImage` implementing the `futures::Stream` and
+/// `hyper::body::Payload` traits.
+///
+/// The `Payload` trait (plus `Send`) makes this usable with hyper as the `B`
+/// body type of `http::Request<B>`. The `Stream` trait is sufficient for use
+/// via `hyper::Body::with_stream`.
 pub struct AsyncBodyImage {
     state: AsyncImageState,
     len: u64,
@@ -593,8 +590,8 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
 /// methods for `RequestRecord` are found in trait implementation
 /// [`RequestRecorded`](#impl-RequestRecorded).
 ///
-/// _Limitations:_ This can't be `Clone`, because
-/// `http::Request<client::hyper::Body>` isn't `Clone`.
+/// _Limitations:_ This can't be `Clone`, because `B = client::hyper::Body`
+/// isn't `Clone`.
 #[derive(Debug)]
 pub struct RequestRecord<B> {
     request:      http::Request<B>,
@@ -660,10 +657,11 @@ impl InDialog {
 /// Extension trait for `http::request::Builder`, to enable recording
 /// key portions of the request for the final `Dialog`.
 ///
-/// Any request body (e.g. POST, PUT) is cloned in advance of finishing the
-/// request (via `Builder::body`), though this is inexpensive via
-/// `Bytes::clone` or `BodyImage::clone`. Other request fields (`method`,
-/// `uri`, `headers`) are recorded by `clone`, after finishing the request.
+/// Any non-empty request body (e.g. POST, PUT) is cloned in advance of
+/// finishing the request (internally via `Builder::body`), though this is
+/// inexpensive via `Bytes::clone` or `BodyImage::clone`. Other request fields
+/// (`method`, `uri`, `headers`) are recorded by `clone`, after finishing the
+/// request.
 pub trait RequestRecordable<B>
     where B: hyper::body::Payload + Send
 {

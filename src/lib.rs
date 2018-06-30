@@ -1,13 +1,13 @@
 //! This crate provides a few separately usable but closely related HTTP
 //! ecosystem components.
 //!
-//! In the _root_ module, the [`BodyImage`](struct.BodyImage.html) struct
-//! and supporting types provides a strategy for safely handling
-//! potentially large HTTP request or response bodies without risk of
-//! allocation failure, or the need to impose awkwardly low size limits in the
-//! face of high concurrency. `Tunables` size thresholds can be used to decide
-//! when to accumulate the body in RAM vs the filesystem, including when the
-//! length is unknown in advance.
+//! In the _root_ module, [`BodyImage`](struct.BodyImage.html),
+//! [`BodySink`](struct.BodySink.html) and supporting types provide a
+//! strategy for safely handling potentially large HTTP request or response
+//! bodies without risk of allocation failure, or the need to impose awkwardly
+//! low size limits in the face of high concurrency. `Tunables` size
+//! thresholds can be used to decide when to accumulate the body in RAM vs the
+//! filesystem, including when the length is unknown in advance.
 //!
 //! See the top level README for additional rationale.
 //!
@@ -21,10 +21,11 @@
 //!
 //! ## Optional Features
 //!
-//! The following features may be enabled or disabled at build time:
+//! The following features may be enabled or disabled at build time.
 //!
-//! _client (non-default):_ The [client module](client/index.html) for
-//! recording of HTTP `Dialog`s via _hyper_ 0.12.x and _tokio_.
+//! _client (non-default):_ The [client module](client/index.html) for input
+//! to `BodySink`, output of `BodyImage`, and and recording of HTTP `Dialog`s
+//! via _hyper_ 0.12.x and _tokio_.
 //!
 //! _cli (default):_ The `barc` command line tool for viewing
 //! (e.g. compressed) records and copying records across BARC files. If the
