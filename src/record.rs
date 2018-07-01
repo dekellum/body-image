@@ -1,9 +1,11 @@
+extern crate hyper;
+
 use failure::Error as Flare;
 use body_image::Tunables;
 use body_image::barc::{BarcFile, CompressStrategy, Record};
 use body_image::client::{ACCEPT_ENCODINGS, BROWSE_ACCEPT,
                          decode_res_body, fetch,
-                         user_agent, RequestRecordable};
+                         user_agent, RequestRecord, RequestRecordable};
 use http;
 
 /// The `record` command implementation.
@@ -15,7 +17,7 @@ pub(crate) fn record(
     strategy: &CompressStrategy)
     -> Result<(), Flare>
 {
-    let req = http::Request::builder()
+    let req: RequestRecord<hyper::Body> = http::Request::builder()
         .method(http::Method::GET)
         .header(http::header::ACCEPT, accept.unwrap_or(BROWSE_ACCEPT))
         .header(http::header::ACCEPT_LANGUAGE, "en")
