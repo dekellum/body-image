@@ -547,6 +547,7 @@ impl Stream for AsyncBodyImage
                 });
                 if let Ok(Async::Ready(Some(ref b))) = res {
                     self.consumed += b.len() as u64;
+                    debug!("read chunk (blocking, len: {})", b.len())
                 }
                 res
             }
