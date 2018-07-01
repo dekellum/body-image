@@ -64,6 +64,11 @@ bench = false
 doc = false
 required-features = ["cli"]
 
+[[test]]
+name = "client_server"
+path = "tests/client_server.rs"
+required-features = ["client"]
+
 [package.metadata.docs.rs]
 features = ["mmap", "brotli", "client"]
 
