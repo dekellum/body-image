@@ -3,11 +3,12 @@
              extern crate body_image;
 #[macro_use] extern crate clap;
 #[macro_use] extern crate failure;
-             extern crate fern;
              extern crate http;
 #[macro_use] extern crate log;
 
 #[cfg(feature = "client")] mod record;
+
+mod logger;
 
 use std::io;
 use std::process;
@@ -15,6 +16,7 @@ use body_image::{Tunables, RequestRecorded, Recorded};
 use body_image::barc::{BarcFile, write_body, write_headers, MetaRecorded};
 use clap::{Arg, ArgMatches, App, AppSettings, SubCommand};
 use failure::Error as Flare;
+use logger::setup_logger;
 
 use body_image::barc::{CompressStrategy,
                        NoCompressStrategy,
@@ -35,7 +37,7 @@ fn run() -> Result<(), Flare> {
     let var_help = VarHelp::default();
     let m = setup_cli(&var_help).get_matches();
 
-    setup_logger(m.occurrences_of("debug"))?;
+    setup_logger(m.occurrences_of("debug") as u32)?;
     let scname = m.subcommand_name().unwrap(); // required
     let subm = m.subcommand_matches(scname).unwrap();
 
@@ -435,37 +437,4 @@ fn setup_cli<'a, 'b>(var_help: &'a VarHelp) -> App<'a, 'b>
         .subcommand(cat)
         .subcommand(cp)
         .subcommand(rec)
-}
-
-fn setup_logger(debug_flags: u64) -> Result<(), Flare> {
-    let mut disp = fern::Dispatch::new()
-        .format(|out, message, record| {
-            let t = std::thread::current();
-            out.finish(format_args!(
-                "{} {} {}: {}",
-                record.level(),
-                record.target(),
-                t.name().map(str::to_owned)
-                    .unwrap_or_else(|| format!("{:?}", t.id())),
-                message
-            ))
-        });
-    disp = if debug_flags == 0 {
-        disp.level(log::LevelFilter::Info)
-    } else {
-        disp.level(log::LevelFilter::Debug)
-    };
-
-    if debug_flags < 2 {
-        // These are only for record/client deps, but are harmless if not
-        // loaded.
-        disp = disp
-            .level_for("hyper::proto",  log::LevelFilter::Info)
-            .level_for("tokio_core",    log::LevelFilter::Info)
-            .level_for("tokio_reactor", log::LevelFilter::Info);
-    }
-
-    disp.chain(std::io::stderr())
-        .apply()
-        .map_err(Flare::from)
 }

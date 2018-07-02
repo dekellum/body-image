@@ -47,8 +47,7 @@
                            extern crate flate2;
                            extern crate http;
                            extern crate httparse;
-#[cfg(all(test, feature = "client"))]
-#[macro_use]               extern crate lazy_static;
+#[cfg(all(test, feature = "client"))] #[macro_use] extern crate lazy_static;
 #[macro_use]               extern crate log;
                            extern crate olio;
 #[cfg(feature = "mmap")]   extern crate memmap;
@@ -56,6 +55,7 @@
 
                            pub mod barc;
 #[cfg(feature = "client")] pub mod client;
+#[cfg(test)]               pub(crate) mod logger;
 
 use std::env;
 use std::fmt;

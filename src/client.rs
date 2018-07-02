@@ -35,7 +35,6 @@ extern crate hyperx;
 extern crate tokio;
 extern crate tokio_threadpool;
 
-#[cfg(test)] extern crate fern;
 #[cfg(test)] extern crate hyper_stub;
 
 use std::mem;
@@ -796,11 +795,8 @@ impl RequestRecordable<AsyncBodyImage> for http::request::Builder {
 
 #[cfg(test)]
 mod tests {
-    use ::std;
     use ::std::time::Duration;
-
-    use ::log;
-
+    use ::logger::LOG_SETUP;
     use ::Tuner;
     use super::*;
 
@@ -1007,51 +1003,5 @@ mod tests {
                 panic!("failed with: {}", e);
             }
         }
-    }
-
-    // Use lazy static to ensure we only setup logging once (by first test and
-    // thread)
-    lazy_static! {
-        pub static ref LOG_SETUP: bool = setup_logger();
-    }
-
-    fn setup_logger() -> bool {
-        let level = if let Ok(l) = std::env::var("TEST_LOG") {
-            l.parse().unwrap()
-        } else {
-            0
-        };
-        if level == 0 { return true; }
-
-        let mut disp = fern::Dispatch::new()
-            .format(|out, message, record| {
-                let t = std::thread::current();
-                out.finish(format_args!(
-                    "{} {} {}: {}",
-                    record.level(),
-                    record.target(),
-                    t.name().map(str::to_owned)
-                        .unwrap_or_else(|| format!("{:?}", t.id())),
-                    message
-                ))
-            });
-        disp = if level == 1 {
-            disp.level(log::LevelFilter::Info)
-        } else {
-            disp.level(log::LevelFilter::Debug)
-        };
-
-        if level < 2 {
-            // These are only for record/client deps, but are harmless if not
-            // loaded.
-            disp = disp
-                .level_for("hyper::proto",  log::LevelFilter::Info)
-                .level_for("tokio_core",    log::LevelFilter::Info)
-                .level_for("tokio_reactor", log::LevelFilter::Info);
-        }
-        disp.chain(std::io::stderr())
-            .apply().expect("setup logger");
-
-        true
     }
 }
