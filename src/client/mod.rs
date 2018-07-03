@@ -52,7 +52,10 @@ use bytes::Bytes;
 use failure::Error as Flare;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
-use self::futures::{future, Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
+use self::futures::{future, Async, AsyncSink, Future,
+                    Poll, Sink, StartSend, Stream};
+use self::futures::future::Either;
+
 use http;
 use self::hyper::{Chunk, Client};
 use self::hyperx::header::{ContentEncoding, ContentLength,
@@ -307,7 +310,7 @@ pub fn user_agent() -> String {
 }
 
 fn resp_future(monolog: Monolog, tune: Tunables)
-    -> Box<Future<Item=InDialog, Error=Flare> + Send>
+    -> impl Future<Item=InDialog, Error=Flare> + Send
 {
     let (resp_parts, body) = monolog.response.into_parts();
 
@@ -326,7 +329,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     // Unwrap BodySink, returning any error as Future
     let bsink = match bsink {
         Ok(b) => b,
-        Err(e) => { return Box::new(future::err(e)); }
+        Err(e) => { return Either::A(future::err(e)); }
     };
 
     let async_body = AsyncBodySink::new(bsink, tune);
@@ -339,7 +342,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         res_body:    BodySink::empty() // tmp, swap'ed below.
     };
 
-    Box::new(
+    Either::B(
         body.from_err::<Flare>()
             .forward(async_body)
             .and_then(|(_strm, mut async_body)| {
