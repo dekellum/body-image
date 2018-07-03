@@ -1,32 +1,25 @@
-extern crate http;
-extern crate hyper;
-extern crate fern;
-extern crate futures;
-#[macro_use] extern crate lazy_static;
-extern crate log;
-
-extern crate tokio;
-extern crate body_image;
-
 use std::net::SocketAddr;
 use std::io;
 use std::net::TcpListener as StdTcpListener;
 
-use futures::{Future, Stream};
-use tokio::net::{TcpListener};
-use tokio::runtime::Runtime;
-use tokio::reactor::Handle;
+use ::http;
+use ::http::{Request, Response};
+use ::logger::LOG_SETUP;
 
-use http::{Request, Response};
+use client::futures::{Future, Stream};
+use client::tokio::net::{TcpListener};
+use client::tokio::runtime::Runtime;
+use client::tokio::reactor::Handle;
 
-use hyper::Body;
-use hyper::client::{Client, HttpConnector};
-use hyper::server::conn::Http;
-use hyper::service::service_fn_ok;
+use client::hyper;
+use client::hyper::Body;
+use client::hyper::client::{Client, HttpConnector};
+use client::hyper::server::conn::Http;
+use client::hyper::service::service_fn_ok;
 
-use body_image::{BodySink, Recorded, Tuner};
-use body_image::client::{AsyncBodyImage, RequestRecord, RequestRecordable,
-                         request_dialog};
+use ::{BodySink, Recorded, Tuner};
+use client::{AsyncBodyImage, RequestRecord, RequestRecordable,
+               request_dialog};
 
 fn local_bind() -> Result<(TcpListener, SocketAddr), io::Error> {
     let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
@@ -36,14 +29,9 @@ fn local_bind() -> Result<(TcpListener, SocketAddr), io::Error> {
     Ok((listener, local_addr))
 }
 
-// Use lazy static to ensure we only setup logging once (by first test and
-// thread)
-lazy_static! {
-    pub static ref LOG_SETUP: bool = setup_logger();
-}
 
 #[test]
-fn echo_service() {
+fn post_echo_async_body() {
     assert!(*LOG_SETUP);
     let (listener, addr) = local_bind().unwrap();
     let svc = service_fn_ok(move |req: Request<Body>| {
@@ -104,44 +92,4 @@ fn echo_service() {
 
     drop(client);
     rt.shutdown_on_idle().wait().unwrap();
-}
-
-fn setup_logger() -> bool {
-    let level = if let Ok(l) = std::env::var("TEST_LOG") {
-        l.parse().unwrap()
-    } else {
-        0
-    };
-    if level == 0 { return true; }
-
-    let mut disp = fern::Dispatch::new()
-        .format(|out, message, record| {
-            let t = std::thread::current();
-            out.finish(format_args!(
-                "{} {} {}: {}",
-                record.level(),
-                record.target(),
-                t.name().map(str::to_owned)
-                    .unwrap_or_else(|| format!("{:?}", t.id())),
-                message
-            ))
-        });
-    disp = if level == 1 {
-        disp.level(log::LevelFilter::Info)
-    } else {
-        disp.level(log::LevelFilter::Debug)
-    };
-
-    if level < 2 {
-        // These are only for record/client deps, but are harmless if not
-        // loaded.
-        disp = disp
-            .level_for("hyper::proto",  log::LevelFilter::Info)
-            .level_for("tokio_core",    log::LevelFilter::Info)
-            .level_for("tokio_reactor", log::LevelFilter::Info);
-    }
-    disp.chain(std::io::stderr())
-        .apply().expect("setup logger");
-
-    true
 }
