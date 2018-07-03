@@ -37,9 +37,13 @@ extern crate tokio_threadpool;
 
 use std::mem;
 use std::time::Instant;
+use std::sync::Arc;
 
 #[cfg(feature = "brotli")]
 use brotli;
+
+#[cfg(feature = "mmap")]
+use memmap::{Mmap};
 
 use bytes::Bytes;
 
@@ -478,7 +482,13 @@ impl AsyncBodyImage {
                 }
             }
             #[cfg(feature = "mmap")]
-            _ => panic!("FIXME: Memmap unsupported")
+            ExplodedImage::MemMap(mmap) => {
+                AsyncBodyImage {
+                    state: AsyncImageState::MemMap(mmap),
+                    len,
+                    consumed: 0,
+                }
+            }
         }
     }
 }
@@ -486,6 +496,8 @@ impl AsyncBodyImage {
 enum AsyncImageState {
     Ram(IntoIter<Bytes>),
     File { rs: ReadSlice, bsize: u64 },
+    #[cfg(feature = "mmap")]
+    MemMap(Arc<Mmap>),
 }
 
 fn unblock<F, T>(f: F) -> Poll<T, io::Error>
@@ -545,6 +557,20 @@ impl Stream for AsyncBodyImage
                 if let Ok(Async::Ready(Some(ref b))) = res {
                     self.consumed += b.len() as u64;
                     debug!("read chunk (blocking, len: {})", b.len())
+                }
+                res
+            }
+            #[cfg(feature = "mmap")]
+            AsyncImageState::MemMap(ref mmap) => {
+                let res = unblock( || {
+                    let b = Bytes::from(&mmap[..]);
+                    let _ = b[0];  //start page faults while blocking
+                    Ok(Some(b))
+                });
+                if let Ok(Async::Ready(Some(ref b))) = res {
+                    assert_eq!( b.len() as u64, avail);
+                    self.consumed += b.len() as u64;
+                    debug!("mapped chunk (blocking, len: {})", b.len())
                 }
                 res
             }
