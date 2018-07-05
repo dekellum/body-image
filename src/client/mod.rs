@@ -45,7 +45,7 @@ use brotli;
 #[cfg(feature = "mmap")]
 use memmap::{Mmap};
 
-use bytes::Bytes;
+use bytes::{Bytes, Buf};
 
 /// Convenient and non-repetitive alias.
 /// Also: "a sudden brief burst of bright flame or light."
@@ -566,8 +566,8 @@ impl Stream for AsyncBodyImage
             #[cfg(feature = "mmap")]
             AsyncImageState::MemMap(ref mmap) => {
                 let res = unblock( || {
+                    // FIXME: This performs a copy here: (e.g. copy_from_slice())
                     let b = Bytes::from(&mmap[..]);
-                    let _ = b[0];  //start page faults while blocking
                     Ok(Some(b))
                 });
                 if let Ok(Async::Ready(Some(ref b))) = res {
@@ -600,6 +600,82 @@ impl hyper::body::Payload for AsyncBodyImage {
 
     fn is_end_stream(&self) -> bool {
         (self.len - self.consumed) == 0
+    }
+}
+
+#[cfg(feature = "mmap")]
+pub struct AsyncMemMapBody {
+    buf: Option<MemMapBuf>,
+}
+
+/// New type for copy-less Buf over MemMap
+#[cfg(feature = "mmap")]
+pub struct MemMapBuf {
+    mm: Arc<Mmap>,
+    pos: usize,
+}
+
+#[cfg(feature = "mmap")]
+impl Buf for MemMapBuf {
+    fn remaining(&self) -> usize {
+        self.mm.len() - self.pos
+    }
+
+    fn bytes(&self) -> &[u8] {
+        &self.mm[self.pos..]
+    }
+
+    fn advance(&mut self, count: usize) {
+        self.pos += count;
+    }
+}
+
+#[cfg(feature = "mmap")]
+impl AsyncMemMapBody {
+    pub fn new(body: BodyImage) -> AsyncMemMapBody {
+        assert!(body.is_mem_map());
+        match body.explode() {
+            #[cfg(feature = "mmap")]
+            ExplodedImage::MemMap(mmap) => {
+                AsyncMemMapBody {
+                    buf: Some(MemMapBuf {
+                        mm: mmap,
+                        pos: 0
+                    })
+                }
+            },
+            _ => unreachable!()
+        }
+    }
+
+    pub fn empty() -> AsyncMemMapBody {
+        AsyncMemMapBody { buf: None }
+    }
+}
+
+#[cfg(feature = "mmap")]
+impl hyper::body::Payload for AsyncMemMapBody {
+    type Data = MemMapBuf;
+    type Error = io::Error;
+
+    fn poll_data(&mut self) -> Poll<Option<Self::Data>, io::Error> {
+        let d = self.buf.take();
+        if let Some(ref mb) = d {
+            debug!("read MemMapBuf (len: {})", mb.remaining())
+        }
+        Ok(Async::Ready(d))
+    }
+
+    fn content_length(&self) -> Option<u64> {
+        if let Some(ref b) = self.buf {
+            Some(b.remaining() as u64)
+        } else {
+            None
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.buf.is_none()
     }
 }
 
@@ -810,6 +886,45 @@ impl RequestRecordable<AsyncBodyImage> for http::request::Builder {
         -> Result<RequestRecord<AsyncBodyImage>, Flare>
     {
         let request = self.body(AsyncBodyImage::new(body.clone(), tune))?;
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body: body } })
+    }
+}
+
+#[cfg(feature = "mmap")]
+impl RequestRecordable<AsyncMemMapBody> for http::request::Builder {
+
+    fn record(&mut self) -> Result<RequestRecord<AsyncMemMapBody>, Flare> {
+        let request = self.body(AsyncMemMapBody::empty())?;
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        let req_body = BodyImage::empty();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body }
+        })
+    }
+
+    fn record_body<BB>(&mut self, _body: BB)
+       -> Result<RequestRecord<AsyncMemMapBody>, Flare>
+       where BB: Into<Bytes>
+    {
+        panic!("Not a MemMap");
+    }
+
+    fn record_body_image(&mut self, body: BodyImage, _tune: &Tunables)
+        -> Result<RequestRecord<AsyncMemMapBody>, Flare>
+    {
+        assert!(body.is_mem_map(), "Not a MemMap");
+        let request = self.body(AsyncMemMapBody::new(body.clone()))?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
         let req_headers = request.headers().clone();

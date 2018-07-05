@@ -425,6 +425,15 @@ impl BodyImage {
         }
     }
 
+    /// Return true if in state `MemMap`.
+    #[cfg(feature = "mmap")]
+    pub fn is_mem_map(&self) -> bool {
+        match self.state {
+            ImageState::MemMap(_) => true,
+            _ => false
+        }
+    }
+
     /// Return the current length of body in bytes.
     pub fn len(&self) -> u64 {
         self.len

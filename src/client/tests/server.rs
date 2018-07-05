@@ -21,8 +21,9 @@ use client::hyper::server::conn::Http;
 use client::hyper::service::service_fn_ok;
 
 use ::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
-use client::{AsyncBodyImage, RequestRecord, RequestRecordable,
-               request_dialog};
+use client::{ AsyncBodyImage, AsyncMemMapBody,
+              RequestRecord, RequestRecordable,
+              request_dialog};
 
 #[test]
 fn post_echo_async_body() {
@@ -36,7 +37,7 @@ fn post_echo_async_body() {
         .set_buffer_size_fs(17)
         .finish();
     let body = fs_body_image();
-    match rt.block_on(post_body_req(&url, body, &tune)) {
+    match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
             println!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
@@ -61,7 +62,7 @@ fn post_echo_async_mmap_body() {
         .finish();
     let mut body = fs_body_image();
     body.mem_map().unwrap();
-    match rt.block_on(post_body_req(&url, body, &tune)) {
+    match rt.block_on(post_body_req::<AsyncMemMapBody>(&url, body, &tune)) {
         Ok(dl) => {
             println!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
@@ -119,16 +120,18 @@ fn fs_body_image() -> BodyImage {
     body.prepare().unwrap()
 }
 
-fn post_body_req(url: &str, body: BodyImage, tune: &Tunables)
+fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
     -> impl Future<Item=Dialog, Error=Flare> + Send
+    where T: hyper::body::Payload + Send,
+          http::request::Builder: RequestRecordable<T>
 {
-    let req: RequestRecord<AsyncBodyImage> = http::Request::builder()
+    let req: RequestRecord<T> = http::Request::builder()
         .method(http::Method::POST)
         .uri(url)
         .record_body_image(body, &tune)
         .unwrap();
     let connector = HttpConnector::new(1 /*DNS threads*/);
-    let client: Client<_, AsyncBodyImage> = Client::builder().build(connector);
+    let client: Client<_, T> = Client::builder().build(connector);
     request_dialog(&client, req, &tune)
 }
 
