@@ -37,15 +37,20 @@ extern crate tokio_threadpool;
 
 use std::mem;
 use std::time::Instant;
+
+#[cfg(feature = "mmap")]
 use std::sync::Arc;
 
 #[cfg(feature = "brotli")]
 use brotli;
 
 #[cfg(feature = "mmap")]
-use memmap::{Mmap};
+use memmap::Mmap;
 
-use bytes::{Bytes, Buf};
+use bytes::Bytes;
+
+#[cfg(feature = "mmap")]
+use bytes::Buf;
 
 /// Convenient and non-repetitive alias.
 /// Also: "a sudden brief burst of bright flame or light."

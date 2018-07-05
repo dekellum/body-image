@@ -21,9 +21,11 @@ use client::hyper::server::conn::Http;
 use client::hyper::service::service_fn_ok;
 
 use ::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
-use client::{ AsyncBodyImage, AsyncMemMapBody,
-              RequestRecord, RequestRecordable,
-              request_dialog};
+use client::{ AsyncBodyImage,
+              RequestRecord, RequestRecordable, request_dialog};
+
+#[cfg(feature = "mmap")]
+use client::AsyncMemMapBody;
 
 #[test]
 fn post_echo_async_body() {
@@ -50,6 +52,7 @@ fn post_echo_async_body() {
 }
 
 #[test]
+#[cfg(feature = "mmap")]
 fn post_echo_async_mmap_body() {
     assert!(*LOG_SETUP);
 

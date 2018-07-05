@@ -47,7 +47,7 @@
                            extern crate flate2;
                            extern crate http;
                            extern crate httparse;
-#[cfg(all(test, feature = "client"))] #[macro_use] extern crate lazy_static;
+#[cfg(test)] #[macro_use]  extern crate lazy_static;
 #[macro_use]               extern crate log;
                            extern crate olio;
 #[cfg(feature = "mmap")]   extern crate memmap;

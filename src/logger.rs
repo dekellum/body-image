@@ -58,3 +58,14 @@ pub fn setup_logger(level: u32) -> Result<(), Flare> {
         .apply()
         .map_err(Flare::from)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::LOG_SETUP;
+
+    /// Sanity test and silence non-use warnings.
+    #[test]
+    fn log_setup() {
+        assert!(*LOG_SETUP);
+    }
+}
