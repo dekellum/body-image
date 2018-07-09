@@ -517,8 +517,8 @@ impl BodyImage {
         }
     }
 
-    /// Consume self, *exploding* into the possible image variants
-    pub(crate) fn explode(self) -> ExplodedImage {
+    /// Consume self, *exploding* into the possible `ExplodedImage` variants
+    pub fn explode(self) -> ExplodedImage {
         match self.state {
             ImageState::Ram(v) => ExplodedImage::Ram(v),
             ImageState::FsRead(f) => {
@@ -688,6 +688,7 @@ impl fmt::Debug for ImageState {
     }
 }
 
+/// *Exploded* representation of the possible `BodyImage` states.
 pub enum ExplodedImage {
     Ram(Vec<Bytes>),
     FsRead(ReadSlice),
