@@ -942,7 +942,9 @@ impl RequestRecordable<AsyncMemMapBody> for http::request::Builder {
 
 #[cfg(test)]
 mod tests {
-    mod live;
     mod stub;
     mod server;
+
+    #[cfg(feature = "live_test")]
+    mod live;
 }

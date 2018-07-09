@@ -51,6 +51,7 @@ client = ["futures", "hyper", "hyper-tls", "hyperx",
           "tokio", "tokio-threadpool"]
 cli = ["fern", "clap"]
 mmap = ["memmap", "olio/mmap"]
+live_test = ["client"]
 
 [lib]
 doctest = false
