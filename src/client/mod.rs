@@ -631,6 +631,7 @@ impl Buf for MemMapBuf {
     }
 
     fn advance(&mut self, count: usize) {
+        assert!(count <= self.remaining(), "MemMapBuf::advance past end");
         self.pos += count;
     }
 }
@@ -638,7 +639,7 @@ impl Buf for MemMapBuf {
 #[cfg(feature = "mmap")]
 impl AsyncMemMapBody {
     pub fn new(body: BodyImage) -> AsyncMemMapBody {
-        assert!(body.is_mem_map());
+        assert!(body.is_mem_map(), "Body not MemMap");
         match body.explode() {
             #[cfg(feature = "mmap")]
             ExplodedImage::MemMap(mmap) => {
@@ -922,13 +923,13 @@ impl RequestRecordable<AsyncMemMapBody> for http::request::Builder {
        -> Result<RequestRecord<AsyncMemMapBody>, Flare>
        where BB: Into<Bytes>
     {
-        panic!("Not a MemMap");
+        panic!("Bytes body not MemMap"); //FIXME
     }
 
     fn record_body_image(&mut self, body: BodyImage, _tune: &Tunables)
         -> Result<RequestRecord<AsyncMemMapBody>, Flare>
     {
-        assert!(body.is_mem_map(), "Not a MemMap");
+        assert!(body.is_mem_map(), "Body not MemMap");
         let request = self.body(AsyncMemMapBody::new(body.clone()))?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
