@@ -1,3 +1,5 @@
+extern crate libc;
+
 use std::io;
 use std::sync::Arc;
 
@@ -7,6 +9,7 @@ use memmap::Mmap;
 use failure::Error as Flare;
 
 use async::hyper;
+use async::tokio_threadpool;
 use async::futures::{Async, Poll};
 use async::{RequestRecord, RequestRecordableEmpty, RequestRecordableImage};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
@@ -23,6 +26,29 @@ pub struct AsyncMemMapBody {
 pub struct MemMapBuf {
     mm: Arc<Mmap>,
     pos: usize,
+}
+
+impl MemMapBuf {
+    /// Advise the OS that we will be sequentially assessing the memory map
+    /// region, and thus that agressive read-ahead is advisable.
+    fn advise_sequential(&self) -> Result<(), io::Error> {
+        let res = unsafe {
+            libc::posix_madvise(
+                &(self.mm.as_ref()[0]) as *const u8 as *mut libc::c_void,
+                self.mm.len(),
+                libc::POSIX_MADV_SEQUENTIAL
+            )
+        };
+        if res == 0 {
+            Ok(())
+        } else {
+            warn!( "libc::posix_madvise return code {}", res);
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "posix_madvise failed"
+            ))
+        }
+    }
 }
 
 impl Buf for MemMapBuf {
@@ -67,6 +93,25 @@ impl AsyncMemMapBody {
     }
 }
 
+macro_rules! unblock {
+    (|| $b:block) => (match tokio_threadpool::blocking(|| $b) {
+        Ok(Async::Ready(Ok(_))) => (),
+        Ok(Async::Ready(Err(e))) => return Err(e),
+        Ok(Async::NotReady) => {
+            debug!("No blocking backup thread available -> NotReady");
+            return Ok(Async::NotReady);
+        }
+        Err(_e) => {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "AsyncMemMapBody needs `blocking`, \
+                 backup threads of Tokio threadpool"
+            ));
+        }
+
+    })
+}
+
 impl hyper::body::Payload for AsyncMemMapBody {
     type Data = MemMapBuf;
     type Error = io::Error;
@@ -74,7 +119,12 @@ impl hyper::body::Payload for AsyncMemMapBody {
     fn poll_data(&mut self) -> Poll<Option<Self::Data>, io::Error> {
         let d = self.buf.take();
         if let Some(ref mb) = d {
-            debug!("read MemMapBuf (len: {})", mb.remaining())
+            unblock!( || {
+                mb.advise_sequential()?;
+                let _b = mb.bytes()[0];
+                debug!("read MemMapBuf (blocking, len: {})", mb.remaining());
+                Ok(())
+            })
         }
         Ok(Async::Ready(d))
     }

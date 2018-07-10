@@ -38,6 +38,7 @@ httparse   = ">=1.2.4, <2"
 hyper      = { version = ">=0.12.1, <2", optional = true }
 hyper-tls  = { version = ">=0.2.0, <2",  optional = true }
 hyperx     = { version = ">=0.12.0, <2", optional = true }
+libc       = { version = ">=0.2.42, <2", optional = true }
 log        = ">=0.4.0, <2"
 olio       = { version = ">=0.2.0, <2", default-features = false }
 memmap     = { version = ">=0.6.2, <2", optional = true }
@@ -50,7 +51,7 @@ default = ["mmap", "brotli", "cli", "async"]
 async = ["futures", "hyper", "hyper-tls", "hyperx",
           "tokio", "tokio-threadpool"]
 cli = ["fern", "clap"]
-mmap = ["memmap", "olio/mmap"]
+mmap = ["memmap", "olio/mmap", "libc"]
 live_test = ["async"] # Internet based http(s) tests
 client = ["async"] # older synonym
 
