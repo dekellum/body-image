@@ -1,7 +1,9 @@
+#[cfg(unix)]
 extern crate libc;
 
 use std::io;
 use std::sync::Arc;
+use std::fmt;
 
 use ::http;
 use bytes::Buf;
@@ -16,6 +18,15 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 /// Experimental, specialized adaptor for `BodyImage` in `MemMap` state,
 /// implementating the `hyper::body::Payload` trait with zero-copy.
+///
+/// ### Implementation Notes
+///
+/// This uses `tokio_threadpool::blocking` to request becoming a backup thread
+/// before advising a *Nix OS (if applicable) of desired SEQUENTIAL access to
+/// the memory region, and then referencing the first byte.  Beyond this
+/// initial blocking annotation, its presumed race between OS read-ahead and
+/// Tokio, not unlike what would happen in a virtual memory swapping
+/// situation.
 #[derive(Debug)]
 pub struct AsyncMemMapBody {
     buf: Option<MemMapBuf>,
@@ -28,9 +39,26 @@ pub struct MemMapBuf {
     pos: usize,
 }
 
+/// Possible error with `madvise(...SEQUENTIAL)`, wrapped in an
+/// `io::Error(Other)` on *Nix platforms.
+#[derive(Debug)]
+pub struct MadviseError {
+    ecode: i32,
+}
+
+impl fmt::Display for MadviseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "libc::posix_madvise error return code {}", self.ecode)
+    }
+}
+
+impl ::std::error::Error for MadviseError {}
+
+
 impl MemMapBuf {
-    /// Advise the OS that we will be sequentially assessing the memory map
-    /// region, and thus that agressive read-ahead is advisable.
+    /// Advise the *Nix OS that we will be sequentially assessing the memory
+    /// map region, and thus that agressive read-ahead is advisable.
+    #[cfg(unix)]
     fn advise_sequential(&self) -> Result<(), io::Error> {
         let res = unsafe {
             libc::posix_madvise(
@@ -42,12 +70,16 @@ impl MemMapBuf {
         if res == 0 {
             Ok(())
         } else {
-            warn!( "libc::posix_madvise return code {}", res);
             Err(io::Error::new(
                 io::ErrorKind::Other,
-                "posix_madvise failed"
+                MadviseError { ecode: res }
             ))
         }
+    }
+
+    #[cfg(not(unix))]
+    fn advise_sequential(&self) -> Result<(), io::Error> {
+        Ok(())
     }
 }
 
