@@ -37,33 +37,28 @@ extern crate hyperx;
 extern crate tokio;
 extern crate tokio_threadpool;
 
+mod body_image;
 mod body_sink;
 
 pub use self::body_sink::AsyncBodySink;
+pub use self::body_image::AsyncBodyImage;
+
+#[cfg(feature = "mmap")] mod memmap_body;
+#[cfg(feature = "mmap")] pub use self::memmap_body::AsyncMemMapBody;
 
 use std::mem;
 use std::time::Instant;
 
-#[cfg(feature = "mmap")]
-use std::sync::Arc;
-
-#[cfg(feature = "brotli")]
-use brotli;
-
-#[cfg(feature = "mmap")]
-use memmap::Mmap;
+#[cfg(feature = "brotli")] use ::brotli;
 
 use bytes::Bytes;
-
-#[cfg(feature = "mmap")]
-use bytes::Buf;
 
 /// Convenient and non-repetitive alias.
 /// Also: "a sudden brief burst of bright flame or light."
 use failure::Error as Flare;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
-use self::futures::{future, Async, Future, Poll, Stream};
+use self::futures::{future, Future, Stream};
 use self::futures::future::Either;
 
 use http;
@@ -73,7 +68,7 @@ use self::hyperx::header::{ContentEncoding, ContentLength,
 use self::tokio::timer::DeadlineError;
 use self::tokio::util::FutureExt;
 
-use {BodyImage, BodySink, BodyError, Encoding, ExplodedImage,
+use {BodyImage, BodySink, BodyError, Encoding,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
 /// Appropriate value for the HTTP accept-encoding request header, including
@@ -361,278 +356,6 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     )
 }
 
-use std::cmp;
-use std::io;
-use std::io::{Cursor, Read};
-use std::vec::IntoIter;
-use olio::fs::rc::ReadSlice;
-use bytes::{BufMut, BytesMut, IntoBuf};
-
-/// Adaptor for `BodyImage` implementing the `futures::Stream` and
-/// `hyper::body::Payload` traits.
-///
-/// The `Payload` trait (plus `Send`) makes this usable with hyper as the `B`
-/// body type of `http::Request<B>`. The `Stream` trait is sufficient for use
-/// via `hyper::Body::with_stream`.
-///
-/// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
-/// state. `BodyImage` in `Ram` is made available with zero-copy using a
-/// consuming iterator.  This implementation uses `tokio_threadpool::blocking`
-/// to request becoming a backup thread for blocking reads from `FsRead` state
-/// and when dereferencing an `MemMap` (see below).
-///
-/// While it works without complaint, it is not generally advisable to adapt a
-/// `BodyImage` in `MemMap` state with this Payload type. The `Bytes` part of
-/// the contract requires a copy of the memory-mapped region of memory, which
-/// contradicts any advantage of the memory-map. Instead consider using
-/// [AsyncMemMapBody](struct.AsyncMemMapBody.html) for this case. Of course,
-/// none of this ever applies if the *mmap* feature is disabled or if
-/// `BodyImage::mem_map` is never called.
-#[derive(Debug)]
-pub struct AsyncBodyImage {
-    state: AsyncImageState,
-    len: u64,
-    consumed: u64,
-}
-
-impl AsyncBodyImage {
-    /// Wrap by consuming the `BodyImage` instance.
-    ///
-    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
-    /// beforehand to preserve an owned copy.
-    pub fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
-        let len = body.len();
-        match body.explode() {
-            ExplodedImage::Ram(v) => {
-                AsyncBodyImage {
-                    state: AsyncImageState::Ram(v.into_iter()),
-                    len,
-                    consumed: 0,
-                }
-            }
-            ExplodedImage::FsRead(rs) => {
-                AsyncBodyImage {
-                    state: AsyncImageState::File {
-                        rs,
-                        bsize: tune.buffer_size_fs() as u64
-                    },
-                    len,
-                    consumed: 0,
-                }
-            }
-            #[cfg(feature = "mmap")]
-            ExplodedImage::MemMap(mmap) => {
-                AsyncBodyImage {
-                    state: AsyncImageState::MemMap(mmap),
-                    len,
-                    consumed: 0,
-                }
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-enum AsyncImageState {
-    Ram(IntoIter<Bytes>),
-    File { rs: ReadSlice, bsize: u64 },
-    #[cfg(feature = "mmap")]
-    MemMap(Arc<Mmap>),
-}
-
-fn unblock<F, T>(f: F) -> Poll<T, io::Error>
-where F: FnOnce() -> io::Result<T>,
-{
-    match tokio_threadpool::blocking(f) {
-        Ok(Async::Ready(Ok(v))) => Ok(v.into()),
-        Ok(Async::Ready(Err(e))) => {
-            if e.kind() == io::ErrorKind::Interrupted {
-                Ok(Async::NotReady)
-            } else {
-                Err(e)
-            }
-        }
-        Ok(Async::NotReady) => Ok(Async::NotReady),
-        Err(_) => {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "AsyncBodyImage needs `blocking`, \
-                 backup threads of Tokio threadpool"
-            ))
-        }
-    }
-}
-
-impl Stream for AsyncBodyImage
-{
-    type Item = Bytes;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Option<Bytes>, io::Error> {
-        let avail = self.len - self.consumed;
-        if avail == 0 {
-            return Ok(Async::Ready(None));
-        }
-        match self.state {
-            AsyncImageState::Ram(ref mut iter) => {
-                let n = iter.next();
-                if let Some(ref b) = n {
-                    self.consumed += b.len() as u64;
-                }
-                Ok(Async::Ready(n))
-            }
-            AsyncImageState::File { ref mut rs, bsize } => {
-                let res = unblock( || {
-                    let bs = cmp::min(bsize, avail) as usize;
-                    let mut buf = BytesMut::with_capacity(bs);
-                    match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
-                        Ok(0) => Ok(None),
-                        Ok(len) => {
-                            unsafe { buf.advance_mut(len); }
-                            Ok(Some(buf.freeze()))
-                        }
-                        Err(e) => Err(e)
-                    }
-                });
-                if let Ok(Async::Ready(Some(ref b))) = res {
-                    self.consumed += b.len() as u64;
-                    debug!("read chunk (blocking, len: {})", b.len())
-                }
-                res
-            }
-            #[cfg(feature = "mmap")]
-            AsyncImageState::MemMap(ref mmap) => {
-                let res = unblock( || {
-                    // This performs a copy here in *bytes* crate,
-                    // `copy_from_slice`. There is no apparent way to achieve
-                    // a 'static lifetime for `Bytes::from_static`, for
-                    // example. The silver lining is that the `blocking`
-                    // contract is guarunteed fullfilled here, unless of
-                    // course swap is enabled and the copy is so large as to
-                    // cause the copy to be swapped out before it is written!
-                    let b = Bytes::from(&mmap[..]);
-                    Ok(Some(b))
-                });
-                if let Ok(Async::Ready(Some(ref b))) = res {
-                    assert_eq!( b.len() as u64, avail);
-                    self.consumed += b.len() as u64;
-                    debug!("mapped chunk (blocking, len: {})", b.len())
-                }
-                res
-            }
-        }
-    }
-}
-
-impl hyper::body::Payload for AsyncBodyImage {
-    type Data = Cursor<Bytes>;
-    type Error = io::Error;
-
-    fn poll_data(&mut self) -> Poll<Option<Self::Data>, io::Error> {
-        match self.poll() {
-            Ok(Async::Ready(Some(b))) => Ok(Async::Ready(Some(b.into_buf()))),
-            Ok(Async::Ready(None))    => Ok(Async::Ready(None)),
-            Ok(Async::NotReady)       => Ok(Async::NotReady),
-            Err(e)                    => Err(e)
-        }
-    }
-
-    fn content_length(&self) -> Option<u64> {
-        Some(self.len)
-    }
-
-    fn is_end_stream(&self) -> bool {
-        (self.len - self.consumed) == 0
-    }
-}
-
-/// Experimental, specialized adaptor for `BodyImage` in `MemMap` state,
-/// implementating the `hyper::body::Payload` trait with zero-copy.
-#[cfg(feature = "mmap")]
-#[derive(Debug)]
-pub struct AsyncMemMapBody {
-    buf: Option<MemMapBuf>,
-}
-
-/// New-type for zero-copy `Buf` trait implementation of `Mmap`
-#[cfg(feature = "mmap")]
-#[derive(Debug)]
-pub struct MemMapBuf {
-    mm: Arc<Mmap>,
-    pos: usize,
-}
-
-#[cfg(feature = "mmap")]
-impl Buf for MemMapBuf {
-    fn remaining(&self) -> usize {
-        self.mm.len() - self.pos
-    }
-
-    fn bytes(&self) -> &[u8] {
-        &self.mm[self.pos..]
-    }
-
-    fn advance(&mut self, count: usize) {
-        assert!(count <= self.remaining(), "MemMapBuf::advance past end");
-        self.pos += count;
-    }
-}
-
-#[cfg(feature = "mmap")]
-impl AsyncMemMapBody {
-    /// Wrap by consuming the `BodyImage` instance.
-    ///
-    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
-    /// beforehand to preserve an owned copy.  This asserts-for and will
-    /// panic if the supplied `BodyImage` is not in `MemMap` state
-    /// (e.g. `BodyImage::is_mem_map` returns `true`.)
-    pub fn new(body: BodyImage) -> AsyncMemMapBody {
-        assert!(body.is_mem_map(), "Body not MemMap");
-        match body.explode() {
-            #[cfg(feature = "mmap")]
-            ExplodedImage::MemMap(mmap) => {
-                AsyncMemMapBody {
-                    buf: Some(MemMapBuf {
-                        mm: mmap,
-                        pos: 0
-                    })
-                }
-            },
-            _ => unreachable!()
-        }
-    }
-
-    pub fn empty() -> AsyncMemMapBody {
-        AsyncMemMapBody { buf: None }
-    }
-}
-
-#[cfg(feature = "mmap")]
-impl hyper::body::Payload for AsyncMemMapBody {
-    type Data = MemMapBuf;
-    type Error = io::Error;
-
-    fn poll_data(&mut self) -> Poll<Option<Self::Data>, io::Error> {
-        let d = self.buf.take();
-        if let Some(ref mb) = d {
-            debug!("read MemMapBuf (len: {})", mb.remaining())
-        }
-        Ok(Async::Ready(d))
-    }
-
-    fn content_length(&self) -> Option<u64> {
-        if let Some(ref b) = self.buf {
-            Some(b.remaining() as u64)
-        } else {
-            None
-        }
-    }
-
-    fn is_end_stream(&self) -> bool {
-        self.buf.is_none()
-    }
-}
-
 fn check_length(v: &http::header::HeaderValue, max: u64)
     -> Result<u64, Flare>
 {
@@ -812,99 +535,6 @@ impl RequestRecordableImage<hyper::Body> for http::request::Builder {
         } else {
             self.body(hyper::Body::empty())?
         };
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body: body } })
-    }
-}
-
-impl RequestRecordableEmpty<AsyncBodyImage> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, Flare> {
-        let request = {
-            let body = BodyImage::empty();
-            let tune = Tunables::default();
-            self.body(AsyncBodyImage::new(body, &tune))?
-        };
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        let req_body = BodyImage::empty();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body }
-        })
-    }
-}
-
-impl RequestRecordableBytes<AsyncBodyImage> for http::request::Builder {
-    fn record_body<BB>(&mut self, body: BB)
-       -> Result<RequestRecord<AsyncBodyImage>, Flare>
-       where BB: Into<Bytes>
-    {
-        let buf: Bytes = body.into();
-        let req_body = if buf.is_empty() {
-            BodyImage::empty()
-        } else {
-            BodyImage::from_slice(buf)
-        };
-        let tune = Tunables::default();
-        let request = self.body(AsyncBodyImage::new(req_body.clone(), &tune))?;
-
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body } })
-    }
-}
-
-impl RequestRecordableImage<AsyncBodyImage> for http::request::Builder {
-    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<AsyncBodyImage>, Flare>
-    {
-        let request = self.body(AsyncBodyImage::new(body.clone(), tune))?;
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body: body } })
-    }
-}
-
-#[cfg(feature = "mmap")]
-impl RequestRecordableEmpty<AsyncMemMapBody> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<AsyncMemMapBody>, Flare> {
-        let request = self.body(AsyncMemMapBody::empty())?;
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        let req_body = BodyImage::empty();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body }
-        })
-    }
-}
-
-#[cfg(feature = "mmap")]
-impl RequestRecordableImage<AsyncMemMapBody> for http::request::Builder {
-    fn record_body_image(&mut self, body: BodyImage, _tune: &Tunables)
-        -> Result<RequestRecord<AsyncMemMapBody>, Flare>
-    {
-        assert!(body.is_mem_map(), "Body not MemMap");
-        let request = self.body(AsyncMemMapBody::new(body.clone()))?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
         let req_headers = request.headers().clone();
