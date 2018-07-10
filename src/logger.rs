@@ -43,7 +43,7 @@ pub fn setup_logger(level: u32) -> Result<(), Flare> {
         disp.level(log::LevelFilter::Debug)
     };
 
-    #[cfg(feature = "client")]
+    #[cfg(feature = "async")]
     {
         if level < 2 {
             // These are only for record/client deps

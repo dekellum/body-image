@@ -2,7 +2,7 @@ use ::std::time::Duration;
 use ::logger::LOG_SETUP;
 use ::Tuner;
 
-use client::*;
+use async::*;
 
 fn create_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, Flare>

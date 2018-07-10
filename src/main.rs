@@ -6,7 +6,7 @@
              extern crate http;
 #[macro_use] extern crate log;
 
-#[cfg(feature = "client")] mod record;
+#[cfg(feature = "async")] mod record;
 
 mod logger;
 
@@ -61,7 +61,7 @@ fn run() -> Result<(), Flare> {
             }
             Ok(())
         }
-        #[cfg(feature = "client")]
+        #[cfg(feature = "async")]
         "record" => {
             let cs = compress_flags(subm)?;
             record::record(subm.value_of("url").unwrap(),
@@ -70,7 +70,7 @@ fn run() -> Result<(), Flare> {
                            subm.value_of("accept"),
                            cs.as_ref())
         }
-        #[cfg(not(feature = "client"))]
+        #[cfg(not(feature = "async"))]
         "record" => {
             bail!("Sub-command \"record\" requires the \"client\" \
                    build feature");
@@ -262,7 +262,7 @@ struct VarHelp {
 
 impl Default for VarHelp {
     fn default() -> VarHelp {
-        let feature = if cfg!(feature = "client") {
+        let feature = if cfg!(feature = "async") {
             "included"
         } else {
             "not included"

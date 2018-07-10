@@ -46,12 +46,13 @@ tokio      = { version = ">=0.1.7, <0.2", optional = true }
 tokio-threadpool = { version = ">=0.1.4, <0.2", optional = true }
 
 [features]
-default = ["mmap", "brotli", "cli"]
-client = ["futures", "hyper", "hyper-tls", "hyperx",
+default = ["mmap", "brotli", "cli", "async"]
+async = ["futures", "hyper", "hyper-tls", "hyperx",
           "tokio", "tokio-threadpool"]
 cli = ["fern", "clap"]
 mmap = ["memmap", "olio/mmap"]
-live_test = ["client"]
+live_test = ["async"] # Internet based http(s) tests
+client = ["async"] # older synonym
 
 [lib]
 doctest = false
@@ -66,7 +67,7 @@ doc = false
 required-features = ["cli"]
 
 [package.metadata.docs.rs]
-features = ["mmap", "brotli", "client"]
+features = ["mmap", "brotli", "async"]
 
 [dev-dependencies]
 lazy_static = { version = ">=1.0.1, <2" }

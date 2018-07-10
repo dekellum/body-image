@@ -3,7 +3,7 @@ extern crate hyper_stub;
 use ::logger::LOG_SETUP;
 use ::Tuner;
 
-use client::*;
+use async::*;
 
 fn get_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, Flare>

@@ -7,25 +7,25 @@ use ::http::{Request, Response};
 use ::logger::LOG_SETUP;
 use failure::Error as Flare;
 
-use client::futures::{Future, Stream};
+use async::futures::{Future, Stream};
 
-use client::tokio;
-use client::tokio::net::{TcpListener};
-use client::tokio::runtime::Runtime;
-use client::tokio::reactor::Handle;
+use async::tokio;
+use async::tokio::net::TcpListener;
+use async::tokio::runtime::Runtime;
+use async::tokio::reactor::Handle;
 
-use client::hyper;
-use client::hyper::Body;
-use client::hyper::client::{Client, HttpConnector};
-use client::hyper::server::conn::Http;
-use client::hyper::service::service_fn_ok;
+use async::hyper;
+use async::hyper::Body;
+use async::hyper::client::{Client, HttpConnector};
+use async::hyper::server::conn::Http;
+use async::hyper::service::service_fn_ok;
 
 use ::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
-use client::{ AsyncBodyImage,
-              RequestRecord, RequestRecordableImage, request_dialog};
+use async::{AsyncBodyImage,
+            RequestRecord, RequestRecordableImage, request_dialog};
 
 #[cfg(feature = "mmap")]
-use client::AsyncMemMapBody;
+use async::AsyncMemMapBody;
 
 #[test]
 fn post_echo_async_body() {

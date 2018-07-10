@@ -21,25 +21,28 @@
 //!
 //! ## Optional Features
 //!
-//! The following features may be enabled or disabled at build time.
+//! The following features may be enabled or disabled at build time. All are
+//! enabled by default.
 //!
-//! _client (non-default):_ The [client module](client/index.html) for input
-//! to `BodySink`, output of `BodyImage`, and and recording of HTTP `Dialog`s
-//! via _hyper_ 0.12.x and _tokio_.
+//! _async:_ The [async module](async/index.html) for input to
+//! `BodySink`, output of `BodyImage`, and recording of HTTP `Dialog`s via
+//! _hyper_ 0.12+ and _tokio_. Originally the *async* module was named
+//! *client* , but this would be misleading as *async* is also usable in a
+//! server (request or response contexts as well).  The *client* path name,
+//! now a re-export, is deprecatated as of 0.4.0 in preference to the *async*
+//! name.
 //!
-//! _cli (default):_ The `barc` command line tool for viewing
+//! _cli:_ The `barc` command line tool for viewing
 //! (e.g. compressed) records and copying records across BARC files. If the
-//! _client_ feature is enabled, than a `record` command is also provided for
+//! _async_ feature is enabled, than a `record` command is also provided for
 //! live BARC recording from the network.
 //!
-//! _brotli (default):_ Brotli transfer/content decoding in the _client_, and
-//! Brotli BARC record compression, via the native-rust _brotli_ crate. (Gzip,
+//! _brotli:_ Brotli transfer/content decoding in _async_ module, and Brotli BARC
+//! record compression (in _barc_), via the native-rust _brotli_ crate. (Gzip,
 //! via the _flate2_ crate, is standard.)
 //!
-//! _mmap (default):_ Adds `BodyImage::mem_map` support for memory mapping
+//! _mmap:_ Adds `BodyImage::mem_map` support for memory mapping
 //! from `FsRead` state.
-//!
-//! For complete functionally, build or install with `--all-features`.
 
 #[cfg(feature = "brotli")] extern crate brotli;
                            extern crate bytes;
@@ -54,8 +57,15 @@
                            extern crate tempfile;
 
                            pub mod barc;
-#[cfg(feature = "client")] pub mod client;
+#[cfg(feature = "async")]  pub mod async;
+
 #[cfg(test)]               pub(crate) mod logger;
+
+// See note on *async* feature above. For whatever reason, rustdoc doesn't
+// currently show this deprecation in the re-exports section.
+#[cfg(feature = "async")]
+#[deprecated(since="0.4.0", note="use async module path")]
+pub use async as client;
 
 use std::env;
 use std::fmt;
