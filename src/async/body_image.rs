@@ -28,13 +28,13 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// state. `BodyImage` in `Ram` is made available with zero-copy using a
 /// consuming iterator.  This implementation uses `tokio_threadpool::blocking`
 /// to request becoming a backup thread for blocking reads from `FsRead` state
-/// and when dereferencing an `MemMap` (see below).
+/// and when dereferencing from `MemMap` state (see below).
 ///
 /// While it works without complaint, it is not generally advisable to adapt a
-/// `BodyImage` in `MemMap` state with this Payload type. The `Bytes` part of
+/// `BodyImage` in `MemMap` state with this `Payload` type. The `Bytes` part of
 /// the contract requires a copy of the memory-mapped region of memory, which
 /// contradicts any advantage of the memory-map. Instead consider using
-/// [AsyncMemMapBody](struct.AsyncMemMapBody.html) for this case. Of course,
+/// [`AsyncMemMapBody`](struct.AsyncMemMapBody.html) for this case. Of course,
 /// none of this ever applies if the *mmap* feature is disabled or if
 /// `BodyImage::mem_map` is never called.
 #[derive(Debug)]
