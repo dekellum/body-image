@@ -381,7 +381,10 @@ pub struct AsyncBodySink {
 
 impl AsyncBodySink {
 
-    /// Wrap `BodySink` and `Tunables` instance.
+    /// Wrap by consuming a `BodySink` and `Tunables` instances.
+    ///
+    /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
+    /// that can be done beforehand to preserve owned copies.
     pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
         AsyncBodySink { body, tune }
     }
@@ -464,6 +467,21 @@ use bytes::{BufMut, BytesMut, IntoBuf};
 /// The `Payload` trait (plus `Send`) makes this usable with hyper as the `B`
 /// body type of `http::Request<B>`. The `Stream` trait is sufficient for use
 /// via `hyper::Body::with_stream`.
+///
+/// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
+/// state. `BodyImage` in `Ram` is made available with zero-copy using a
+/// consuming iterator.  This implementation uses `tokio_threadpool::blocking`
+/// to request becoming a backup thread for blocking reads from `FsRead` state
+/// and when dereferencing an `MemMap` (see below).
+///
+/// While it works without complaint, it is not generally advisable to adapt a
+/// `BodyImage` in `MemMap` state with this Payload type. The `Bytes` part of
+/// the contract requires a copy of the memory-mapped region of memory, which
+/// contradicts any advantage of the memory-map. Instead consider using
+/// [AsyncMemMapBody](struct.AsyncMemMapBody.html) for this case. Of course,
+/// none of this ever applies if the *mmap* feature is disabled or if
+/// `BodyImage::mem_map` is never called.
+#[derive(Debug)]
 pub struct AsyncBodyImage {
     state: AsyncImageState,
     len: u64,
@@ -471,6 +489,10 @@ pub struct AsyncBodyImage {
 }
 
 impl AsyncBodyImage {
+    /// Wrap by consuming the `BodyImage` instance.
+    ///
+    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
+    /// beforehand to preserve an owned copy.
     pub fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
         let len = body.len();
         match body.explode() {
@@ -503,6 +525,7 @@ impl AsyncBodyImage {
     }
 }
 
+#[derive(Debug)]
 enum AsyncImageState {
     Ram(IntoIter<Bytes>),
     File { rs: ReadSlice, bsize: u64 },
@@ -573,7 +596,13 @@ impl Stream for AsyncBodyImage
             #[cfg(feature = "mmap")]
             AsyncImageState::MemMap(ref mmap) => {
                 let res = unblock( || {
-                    // FIXME: This performs a copy here: (e.g. copy_from_slice())
+                    // This performs a copy here in *bytes* crate,
+                    // `copy_from_slice`. There is no apparent way to achieve
+                    // a 'static lifetime for `Bytes::from_static`, for
+                    // example. The silver lining is that the `blocking`
+                    // contract is guarunteed fullfilled here, unless of
+                    // course swap is enabled and the copy is so large as to
+                    // cause the copy to be swapped out before it is written!
                     let b = Bytes::from(&mmap[..]);
                     Ok(Some(b))
                 });
@@ -610,13 +639,17 @@ impl hyper::body::Payload for AsyncBodyImage {
     }
 }
 
+/// Experimental, specialized adaptor for `BodyImage` in `MemMap` state,
+/// implementating the `hyper::body::Payload` trait with zero-copy.
 #[cfg(feature = "mmap")]
+#[derive(Debug)]
 pub struct AsyncMemMapBody {
     buf: Option<MemMapBuf>,
 }
 
-/// New type for copy-less Buf over MemMap
+/// New-type for zero-copy `Buf` trait implementation of `Mmap`
 #[cfg(feature = "mmap")]
+#[derive(Debug)]
 pub struct MemMapBuf {
     mm: Arc<Mmap>,
     pos: usize,
@@ -640,6 +673,12 @@ impl Buf for MemMapBuf {
 
 #[cfg(feature = "mmap")]
 impl AsyncMemMapBody {
+    /// Wrap by consuming the `BodyImage` instance.
+    ///
+    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
+    /// beforehand to preserve an owned copy.  This asserts-for and will
+    /// panic if the supplied `BodyImage` is not in `MemMap` state
+    /// (e.g. `BodyImage::is_mem_map` returns `true`.)
     pub fn new(body: BodyImage) -> AsyncMemMapBody {
         assert!(body.is_mem_map(), "Body not MemMap");
         match body.explode() {
