@@ -125,10 +125,12 @@ impl AsyncMemMapBody {
     /// Wrap by consuming the `BodyImage` instance.
     ///
     /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
-    /// beforehand to preserve an owned copy.  This asserts-for and will
-    /// panic if the supplied `BodyImage` is not in `MemMap` state
-    /// (e.g. `BodyImage::is_mem_map` returns `true`.)
+    /// beforehand to preserve an owned copy. Returns as per `empty()` if the
+    /// the body is empty. Otherwise panics if the supplied
+    /// `BodyImage` is not in `MemMap` state (e.g. `BodyImage::is_mem_map`
+    /// returns `true`.)
     pub fn new(body: BodyImage) -> AsyncMemMapBody {
+        if body.is_empty() { return Self::empty() };
         assert!(body.is_mem_map(), "Body not MemMap");
         match body.explode() {
             ExplodedImage::MemMap(mmap) => {
@@ -143,6 +145,7 @@ impl AsyncMemMapBody {
         }
     }
 
+    /// Construct optimal (no allocation) empty body representation.
     pub fn empty() -> AsyncMemMapBody {
         AsyncMemMapBody { buf: None }
     }
