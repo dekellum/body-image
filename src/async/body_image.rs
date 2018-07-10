@@ -152,7 +152,7 @@ impl Stream for AsyncBodyImage
             #[cfg(feature = "mmap")]
             AsyncImageState::MemMap(ref mmap) => {
                 let res = unblock( || {
-                    // This performs a copy here in *bytes* crate,
+                    // This performs a copy via *bytes* crate
                     // `copy_from_slice`. There is no apparent way to achieve
                     // a 'static lifetime for `Bytes::from_static`, for
                     // example. The silver lining is that the `blocking`
@@ -165,7 +165,7 @@ impl Stream for AsyncBodyImage
                 if let Ok(Async::Ready(Some(ref b))) = res {
                     assert_eq!( b.len() as u64, avail);
                     self.consumed += b.len() as u64;
-                    debug!("mapped chunk (blocking, len: {})", b.len())
+                    debug!("MemMap copy to chunk (blocking, len: {})", b.len())
                 }
                 res
             }
