@@ -64,7 +64,6 @@ use self::futures::{future, Async, AsyncSink, Future,
 use self::futures::future::Either;
 
 use http;
-use self::hyper::{Chunk, Client};
 use self::hyperx::header::{ContentEncoding, ContentLength,
                            Encoding as HyEncoding,
                            Header, TransferEncoding, Raw};
@@ -92,9 +91,9 @@ pub static BROWSE_ACCEPT: &str =
      */*;q=0.8";
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
-/// function constructs a default *tokio* `Runtime`, `HttpsConnector`, and
-/// *hyper* `Client` in a simplistic form internally, waiting with timeout,
-/// and dropping these on completion.
+/// function constructs a default *tokio* `Runtime`,
+/// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
+/// internally, waiting with timeout, and dropping these on completion.
 pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     -> Result<Dialog, Flare>
     where B: hyper::body::Payload + Send
@@ -107,16 +106,16 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         .threadpool_builder(pool)
         .build().unwrap();
     let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
-    let client = Client::builder().build(connector);
+    let client = hyper::Client::builder().build(connector);
     rt.block_on(request_dialog(&client, rr, tune))
     // Drop of `rt`, here, is equivalent to shutdown_now and wait
 }
 
-/// Given a suitable `Client` and `RequestRecord`, return a
+/// Given a suitable `hyper::Client` and `RequestRecord`, return a
 /// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
 /// (initial response and complete body) and if the response `BodyImage` will
 /// be in `Ram` or `FsRead`.
-pub fn request_dialog<CN, B>(client: &Client<CN, B>,
+pub fn request_dialog<CN, B>(client: &hyper::Client<CN, B>,
                              rr: RequestRecord<B>,
                              tune: &Tunables)
     -> impl Future<Item=Dialog, Error=Flare> + Send

@@ -93,7 +93,7 @@ fn test_large_parallel_constrained() {
         .threadpool_builder(pool)
         .build().unwrap();
 
-    let client = Client::new();
+    let client = hyper::Client::new();
 
     let rq0 = create_request(
         "http://cache.ruby-lang.org/pub/ruby/1.8/ChangeLog-1.8.2"
