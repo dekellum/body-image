@@ -22,11 +22,26 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// ### Implementation Notes
 ///
 /// This uses `tokio_threadpool::blocking` to request becoming a backup thread
-/// before advising a *Nix OS (if applicable) of desired SEQUENTIAL access to
-/// the memory region, and then referencing the first byte.  Beyond this
-/// initial blocking annotation, its presumed a race between OS read-ahead,
-/// Tokio and the TCP streams; not unlike what would happen in a virtual
-/// memory swapping situation with many large bodies in memory (waves hands).
+/// before:
+///
+/// 1. On a *Nix OS, if applicable, advising of the imminent desire for
+/// sequential access to the memory region of the map (see excerpt below).
+///
+/// 2. Referencing the first byte of the memory mapped region.
+///
+/// Beyond this initial blocking annotation, its presumed a race between OS
+/// read-ahead and storage, Tokio and the TCP streams; not unlike what would
+/// happen in a virtual memory swapping situation with many large bodies in
+/// memory (author waves hands).
+///
+/// *Excerpt from GNU/Linux POSIX_MADVISE(3)*:
+///
+/// > #### POSIX_MADV_SEQUENTIAL
+/// >
+/// > The application expects to access the specified address range
+/// > sequentially, running from lower addresses to higher addresses. Hence,
+/// > pages in this region can be aggressively read ahead, and may be freed
+/// > soon after they are accessed.
 #[derive(Debug)]
 pub struct AsyncMemMapBody {
     buf: Option<MemMapBuf>,
