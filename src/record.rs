@@ -5,7 +5,7 @@ use body_image::Tunables;
 use body_image::barc::{BarcFile, CompressStrategy, Record};
 use body_image::client::{ACCEPT_ENCODINGS, BROWSE_ACCEPT,
                          decode_res_body, fetch,
-                         user_agent, RequestRecord, RequestRecordable};
+                         user_agent, RequestRecord, RequestRecordableEmpty};
 use http;
 
 /// The `record` command implementation.

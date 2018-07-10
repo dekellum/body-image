@@ -22,7 +22,7 @@ use client::hyper::service::service_fn_ok;
 
 use ::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 use client::{ AsyncBodyImage,
-              RequestRecord, RequestRecordable, request_dialog};
+              RequestRecord, RequestRecordableImage, request_dialog};
 
 #[cfg(feature = "mmap")]
 use client::AsyncMemMapBody;
@@ -126,7 +126,7 @@ fn fs_body_image() -> BodyImage {
 fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
     -> impl Future<Item=Dialog, Error=Flare> + Send
     where T: hyper::body::Payload + Send,
-          http::request::Builder: RequestRecordable<T>
+          http::request::Builder: RequestRecordableImage<T>
 {
     let req: RequestRecord<T> = http::Request::builder()
         .method(http::Method::POST)

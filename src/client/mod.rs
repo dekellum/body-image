@@ -4,10 +4,12 @@
 //! additional integration with the _futures_, _http_, _hyper_ 0.12.x., and
 //! _tokio_ crates.
 //!
-//! * Trait [`RequestRecordable`](trait.RequestRecordable.html) extends
+//! * Traits [`RequestRecordableEmpty`](trait.RequestRecordableEmpty.html),
+//!   [`RequestRecordableBytes`](trait.RequestRecordableBytes.html) and
+//!   [`RequestRecordableImage`](trait.RequestRecordableImage.html) extend
 //!   `http::request::Builder` for recording a
-//!   [`RequestRecord`](struct.RequestRecord.html), which can then be passed
-//!   to `request_dialog` or `fetch`.
+//!   [`RequestRecord`](struct.RequestRecord.html) of varous body types, which
+//!   can then be passed to `request_dialog` or `fetch`.
 //!
 //! * The [`fetch`](fn.fetch.html) function runs a `RequestRecord` and returns
 //!   a completed [`Dialog`](../struct.Dialog.html) using a single-use client
@@ -763,34 +765,58 @@ impl InDialog {
     }
 }
 
-/// Extension trait for `http::request::Builder`, to enable recording
-/// key portions of the request for the final `Dialog`.
+/// Type alias for body-image ≤0.3.0 compatibility
+pub type RequestRecordable = RequestRecordableBytes<hyper::Body>;
+
+/// Extension trait for `http::request::Builder`, to enable recording key
+/// portions of the request for the final `Dialog`. This variant supports
+/// recording empty bodies for typical request methods like `GET`.
 ///
-/// Any non-empty request body (e.g. POST, PUT) is cloned in advance of
-/// finishing the request (internally via `Builder::body`), though this is
-/// inexpensive via `Bytes::clone` or `BodyImage::clone`. Other request fields
-/// (`method`, `uri`, `headers`) are recorded by `clone`, after finishing the
-/// request.
-pub trait RequestRecordable<B>
+/// Other request fields (`method`, `uri`, `headers`) are recorded by `clone`,
+/// after finishing the request.
+pub trait RequestRecordableEmpty<B>
     where B: hyper::body::Payload + Send
 {
     /// Short-hand for completing the builder with an empty body, as is
     /// the case with many HTTP request methods (e.g. GET).
     fn record(&mut self) -> Result<RequestRecord<B>, Flare>;
+}
 
+/// Extension trait for `http::request::Builder`, to enable recording key
+/// portions of the request for the final `Dialog`. This variant supports
+/// recording bodies represented by an in-RAM `Bytes` buffer.
+///
+/// The request body is cloned in advance of finishing the request (internally
+/// via `Builder::body`), though this is inexpensive via `Bytes::clone`. Other
+/// request fields (`method`, `uri`, `headers`) are recorded by `clone`, after
+/// finishing the request.
+pub trait RequestRecordableBytes<B>: RequestRecordableEmpty<B>
+    where B: hyper::body::Payload + Send
+{
     /// Complete the builder with any body that can be converted to a (Ram)
     /// `Bytes` buffer.
     fn record_body<BB>(&mut self, body: BB)
         -> Result<RequestRecord<B>, Flare>
         where BB: Into<Bytes>;
+}
 
+/// Extension trait for `http::request::Builder`, to enable recording key
+/// portions of the request for the final `Dialog`. This variant supports
+/// recording full `BodyImage` request bodies.
+///
+/// The request body (e.g. POST, PUT) is cloned in advance of finishing the
+/// request (internally via `Builder::body`), though this is inexpensive via
+/// `BodyImage::clone`. Other request fields (`method`, `uri`, `headers`) are
+/// recorded by `clone`, after finishing the request.
+pub trait RequestRecordableImage<B>: RequestRecordableEmpty<B>
+    where B: hyper::body::Payload + Send
+{
     /// Complete the builder with a `BodyImage` for the request body.
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
         -> Result<RequestRecord<B>, Flare>;
 }
 
-impl RequestRecordable<hyper::Body> for http::request::Builder {
-
+impl RequestRecordableEmpty<hyper::Body> for http::request::Builder {
     fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flare> {
         let request = self.body(hyper::Body::empty())?;
         let method      = request.method().clone();
@@ -804,7 +830,9 @@ impl RequestRecordable<hyper::Body> for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body }
         })
     }
+}
 
+impl RequestRecordableBytes<hyper::Body> for http::request::Builder {
     fn record_body<BB>(&mut self, body: BB)
        -> Result<RequestRecord<hyper::Body>, Flare>
        where BB: Into<Bytes>
@@ -826,7 +854,9 @@ impl RequestRecordable<hyper::Body> for http::request::Builder {
             request,
             prolog: Prolog { method, url, req_headers, req_body } })
     }
+}
 
+impl RequestRecordableImage<hyper::Body> for http::request::Builder {
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
         -> Result<RequestRecord<hyper::Body>, Flare>
     {
@@ -846,8 +876,7 @@ impl RequestRecordable<hyper::Body> for http::request::Builder {
     }
 }
 
-impl RequestRecordable<AsyncBodyImage> for http::request::Builder {
-
+impl RequestRecordableEmpty<AsyncBodyImage> for http::request::Builder {
     fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, Flare> {
         let request = {
             let body = BodyImage::empty();
@@ -865,7 +894,9 @@ impl RequestRecordable<AsyncBodyImage> for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body }
         })
     }
+}
 
+impl RequestRecordableBytes<AsyncBodyImage> for http::request::Builder {
     fn record_body<BB>(&mut self, body: BB)
        -> Result<RequestRecord<AsyncBodyImage>, Flare>
        where BB: Into<Bytes>
@@ -887,7 +918,9 @@ impl RequestRecordable<AsyncBodyImage> for http::request::Builder {
             request,
             prolog: Prolog { method, url, req_headers, req_body } })
     }
+}
 
+impl RequestRecordableImage<AsyncBodyImage> for http::request::Builder {
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
         -> Result<RequestRecord<AsyncBodyImage>, Flare>
     {
@@ -903,8 +936,7 @@ impl RequestRecordable<AsyncBodyImage> for http::request::Builder {
 }
 
 #[cfg(feature = "mmap")]
-impl RequestRecordable<AsyncMemMapBody> for http::request::Builder {
-
+impl RequestRecordableEmpty<AsyncMemMapBody> for http::request::Builder {
     fn record(&mut self) -> Result<RequestRecord<AsyncMemMapBody>, Flare> {
         let request = self.body(AsyncMemMapBody::empty())?;
         let method      = request.method().clone();
@@ -918,14 +950,10 @@ impl RequestRecordable<AsyncMemMapBody> for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body }
         })
     }
+}
 
-    fn record_body<BB>(&mut self, _body: BB)
-       -> Result<RequestRecord<AsyncMemMapBody>, Flare>
-       where BB: Into<Bytes>
-    {
-        panic!("Bytes body not MemMap"); //FIXME
-    }
-
+#[cfg(feature = "mmap")]
+impl RequestRecordableImage<AsyncMemMapBody> for http::request::Builder {
     fn record_body_image(&mut self, body: BodyImage, _tune: &Tunables)
         -> Result<RequestRecord<AsyncMemMapBody>, Flare>
     {
