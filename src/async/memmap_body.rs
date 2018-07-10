@@ -24,9 +24,9 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// This uses `tokio_threadpool::blocking` to request becoming a backup thread
 /// before advising a *Nix OS (if applicable) of desired SEQUENTIAL access to
 /// the memory region, and then referencing the first byte.  Beyond this
-/// initial blocking annotation, its presumed a race between OS read-ahead and
-/// Tokio and TCP streams, and is not unlike what would happen in a virtual
-/// memory swapping situation (waves hands) with enormous bodies in memory.
+/// initial blocking annotation, its presumed a race between OS read-ahead,
+/// Tokio and the TCP streams; not unlike what would happen in a virtual
+/// memory swapping situation with many large bodies in memory (waves hands).
 #[derive(Debug)]
 pub struct AsyncMemMapBody {
     buf: Option<MemMapBuf>,
@@ -42,6 +42,7 @@ pub struct MemMapBuf {
 /// Possible error with `madvise(...SEQUENTIAL)`, wrapped in an
 /// `io::Error(Other)` on *Nix platforms.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct MadviseError {
     ecode: i32,
 }
