@@ -52,6 +52,31 @@ fn post_echo_async_body() {
 }
 
 #[test]
+fn post_echo_async_body_mmap_copy() {
+    assert!(*LOG_SETUP);
+
+    let mut rt = new_limited_runtime();
+    let (fut, url) = echo_server();
+    rt.spawn(fut);
+
+    let tune = Tuner::new()
+        .set_buffer_size_fs(17)
+        .finish();
+    let mut body = fs_body_image();
+    body.mem_map().unwrap();
+    match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
+        Ok(dl) => {
+            println!("{:#?}", dl);
+            assert_eq!(dl.res_body().len(), 445);
+        }
+        Err(e) => {
+            panic!("failed with: {}", e);
+        }
+    }
+    rt.shutdown_on_idle().wait().unwrap();
+}
+
+#[test]
 #[cfg(feature = "mmap")]
 fn post_echo_async_mmap_body() {
     assert!(*LOG_SETUP);
