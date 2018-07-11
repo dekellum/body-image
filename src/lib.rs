@@ -515,7 +515,7 @@ impl BodyImage {
                 }
             }
             ImageState::FsRead(ref f) => {
-                BodyReader::File(ReadPos::new(f.clone(), self.len))
+                BodyReader::FileSlice(ReadSlice::new(f.clone(), 0, self.len))
             }
             ImageState::FsReadSlice(ref rslice) => {
                 BodyReader::FileSlice(rslice.clone())
@@ -720,6 +720,7 @@ pub enum BodyReader<'a> {
     /// `ReadPos` providing instance independent, unbuffered `Read` and `Seek`
     /// for BodyImage `FsRead` state. Consider wrapping this in
     /// `std::io::BufReader` if performing many small reads.
+    #[deprecated(since="0.4.0", note="FileSlice is returned instead")]
     File(ReadPos),
 
     /// `ReadSlice` providing instance independent, unbuffered `Read` and
@@ -731,12 +732,13 @@ pub enum BodyReader<'a> {
 
 impl<'a> BodyReader<'a> {
     /// Return the `Read` reference.
+    #[allow(deprecated)]
     pub fn as_read(&mut self) -> &mut Read {
         match *self {
             BodyReader::Contiguous(ref mut cursor) => cursor,
             BodyReader::Scattered(ref mut gatherer) => gatherer,
-            BodyReader::File(ref mut rpos) => rpos,
             BodyReader::FileSlice(ref mut rslice) => rslice,
+            BodyReader::File(_) => unreachable!("BodyReader::File deprecated"),
         }
     }
 }
