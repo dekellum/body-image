@@ -55,9 +55,11 @@
                            extern crate olio;
 #[cfg(feature = "mmap")]   extern crate memmap;
                            extern crate tempfile;
+#[cfg(all(unix, feature = "mmap"))] extern crate libc;
 
                            pub mod barc;
 #[cfg(feature = "async")]  pub mod async;
+#[cfg(feature = "mmap")]   pub(crate) mod mem_util;
 
 #[cfg(test)]               pub(crate) mod logger;
 
@@ -612,7 +614,17 @@ impl BodyImage {
             }
             #[cfg(feature = "mmap")]
             ImageState::MemMap(ref m) => {
+                mem_util::advise(
+                    m.as_ref(),
+                    &[mem_util::MemoryAccess::Sequential]
+                )?;
+
                 out.write_all(m)?;
+
+                mem_util::advise(
+                    m.as_ref(),
+                    &[mem_util::MemoryAccess::NoNeed]
+                )?;
             }
             ImageState::FsRead(ref f) => {
                 let mut rp = ReadPos::new(f.clone(), self.len);

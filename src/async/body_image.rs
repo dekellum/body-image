@@ -16,6 +16,7 @@ use async::futures::{Async, Poll, Stream};
 use async::{RequestRecord, RequestRecordableBytes,
             RequestRecordableEmpty, RequestRecordableImage};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
+use ::mem_util;
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits.
@@ -159,7 +160,18 @@ impl Stream for AsyncBodyImage
                     // contract is guarunteed fullfilled here, unless of
                     // course swap is enabled and the copy is so large as to
                     // cause the copy to be swapped out before it is written!
+                    mem_util::advise(
+                        mmap.as_ref(),
+                        &[mem_util::MemoryAccess::Sequential]
+                    )?;
+
                     let b = Bytes::from(&mmap[..]);
+
+                    mem_util::advise(
+                        mmap.as_ref(),
+                        &[mem_util::MemoryAccess::NoNeed]
+                    ).ok();
+
                     Ok(Some(b))
                 });
                 if let Ok(Async::Ready(Some(ref b))) = res {

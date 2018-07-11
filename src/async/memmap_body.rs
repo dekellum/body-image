@@ -3,7 +3,6 @@ extern crate libc;
 
 use std::io;
 use std::sync::Arc;
-use std::fmt;
 
 use ::http;
 use bytes::Buf;
@@ -15,6 +14,7 @@ use async::tokio_threadpool;
 use async::futures::{Async, Poll};
 use async::{RequestRecord, RequestRecordableEmpty, RequestRecordableImage};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
+use ::mem_util;
 
 /// Experimental, specialized adaptor for `BodyImage` in `MemMap` state,
 /// implementating the `hyper::body::Payload` trait with zero-copy.
@@ -24,7 +24,7 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// This uses `tokio_threadpool::blocking` to request becoming a backup thread
 /// before:
 ///
-/// 1. On a *Nix OS, if applicable, advising of the imminent desire for
+/// 1. On a \*nix OS, if applicable, advising of the imminent desire for
 /// sequential access to the memory region of the map (see excerpt below).
 ///
 /// 2. Referencing the first byte of the memory mapped region.
@@ -33,6 +33,9 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// read-ahead and storage, Tokio and the TCP streams; not unlike what would
 /// happen in a virtual memory swapping situation with many large bodies in
 /// memory (author waves hands).
+///
+/// Upon drop of the `MemMapBuf` (`Payload::Data` unit type), if on a \*nix
+/// OS, advising of no longer needing access to the memory mapped region.
 ///
 /// *Excerpt from GNU/Linux POSIX_MADVISE(3)*:
 ///
@@ -54,55 +57,19 @@ pub struct MemMapBuf {
     pos: usize,
 }
 
-/// Possible error with `madvise(...SEQUENTIAL)`, wrapped in an
-/// `io::Error(Other)` on *Nix platforms.
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct MadviseError {
-    ecode: i32,
-}
-
-impl fmt::Display for MadviseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "libc::posix_madvise error return code {}", self.ecode)
-    }
-}
-
-impl ::std::error::Error for MadviseError {
-    fn description(&self) -> &str {
-        "description() is deprecated; use Display"
-    }
-
-    fn cause(&self) -> Option<&::std::error::Error> {
-        None
-    }
-}
-
 impl MemMapBuf {
-    /// Advise the *Nix OS that we will be sequentially assessing the memory
+    /// Advise the \*nix OS that we will be sequentially assessing the memory
     /// map region, and thus that agressive read-ahead is advisable.
-    #[cfg(unix)]
     fn advise_sequential(&self) -> Result<(), io::Error> {
-        let res = unsafe {
-            libc::posix_madvise(
-                &(self.mm.as_ref()[0]) as *const u8 as *mut libc::c_void,
-                self.mm.len(),
-                libc::POSIX_MADV_SEQUENTIAL
-            )
-        };
-        if res == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                MadviseError { ecode: res }
-            ))
-        }
+        mem_util::advise(self.mm.as_ref(),
+                         &[mem_util::MemoryAccess::Sequential])
     }
+}
 
-    #[cfg(not(unix))]
-    fn advise_sequential(&self) -> Result<(), io::Error> {
-        Ok(())
+impl Drop for MemMapBuf {
+    fn drop(&mut self) {
+        mem_util::advise(self.mm.as_ref(),
+                         &[mem_util::MemoryAccess::NoNeed]).ok();
     }
 }
 
