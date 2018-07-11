@@ -44,7 +44,7 @@ pub use self::body_sink::AsyncBodySink;
 pub use self::body_image::AsyncBodyImage;
 
 #[cfg(feature = "mmap")] mod memmap_body;
-#[cfg(feature = "mmap")] pub use self::memmap_body::AsyncMemMapBody;
+#[cfg(feature = "mmap")] pub use self::memmap_body::{AsyncMemMapBody, MemMapBuf};
 
 use std::mem;
 use std::time::Instant;
