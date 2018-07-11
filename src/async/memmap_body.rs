@@ -61,15 +61,19 @@ impl MemMapBuf {
     /// Advise the \*nix OS that we will be sequentially assessing the memory
     /// map region, and thus that agressive read-ahead is advisable.
     fn advise_sequential(&self) -> Result<(), io::Error> {
-        mem_util::advise(self.mm.as_ref(),
-                         &[mem_util::MemoryAccess::Sequential])
+        mem_util::advise(
+            self.mm.as_ref(),
+            &[mem_util::MemoryAccess::Sequential]
+        )
     }
 }
 
 impl Drop for MemMapBuf {
     fn drop(&mut self) {
-        mem_util::advise(self.mm.as_ref(),
-                         &[mem_util::MemoryAccess::NoNeed]).ok();
+        mem_util::advise(
+            self.mm.as_ref(),
+            &[mem_util::MemoryAccess::NoNeed]
+        ).ok();
     }
 }
 
