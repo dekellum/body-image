@@ -623,7 +623,7 @@ impl BodyImage {
 
                 mem_util::advise(
                     m.as_ref(),
-                    &[mem_util::MemoryAccess::NoNeed]
+                    &[mem_util::MemoryAccess::Normal]
                 )?;
             }
             ImageState::FsRead(ref f) => {

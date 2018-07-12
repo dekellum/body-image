@@ -169,7 +169,7 @@ impl Stream for AsyncBodyImage
 
                     mem_util::advise(
                         mmap.as_ref(),
-                        &[mem_util::MemoryAccess::NoNeed]
+                        &[mem_util::MemoryAccess::Normal]
                     ).ok();
 
                     Ok(Some(b))

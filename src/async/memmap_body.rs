@@ -19,32 +19,45 @@ use ::mem_util;
 /// Experimental, specialized adaptor for `BodyImage` in `MemMap` state,
 /// implementating the `hyper::body::Payload` trait with zero-copy.
 ///
-/// ### Implementation Notes
+/// ## Implementation Notes
 ///
 /// This uses `tokio_threadpool::blocking` to request becoming a backup thread
 /// before:
 ///
 /// 1. On a \*nix OS, if applicable, advising of the imminent desire for
-/// sequential access to the memory region of the map (see excerpt below).
+/// *sequential* access to the memory region of the map (see excerpt below).
 ///
 /// 2. Referencing the first byte of the memory mapped region.
 ///
 /// Beyond this initial blocking annotation, its presumed a race between OS
-/// read-ahead and storage, Tokio and the TCP streams; not unlike what would
-/// happen in a virtual memory swapping situation with many large bodies in
-/// memory (author waves hands).
+/// read-ahead and storage, Tokio and TCP or other streams; not unlike what
+/// would happen in a virtual memory swapping situation with many large bodies
+/// exceeding physical RAM (author waves hands).
 ///
-/// Upon drop of the `MemMapBuf` (`Payload::Data` unit type), if on a \*nix
-/// OS, advising of no longer needing access to the memory mapped region.
+/// Upon `Drop` of the `MemMapBuf` (`Payload::Data` unit type), if on a \*nix
+/// OS, we conclude by advising of *normal* access (see below) to the memory
+/// mapped region, as if *sequential* access had never been requested. This
+/// behavior is logically symetric, but doesn't account for the fact that the
+/// `BodyImage` may have been cloned and the memory map remains alive for
+/// other, potentially concurrent use. It's likely not fatal, if the same
+/// pattern is used for all `MemMap` handle accesses, and given the advisory
+/// nature, but its definately racy.
 ///
-/// *Excerpt from GNU/Linux POSIX_MADVISE(3)*:
+/// ## Excerpt from GNU/Linux POSIX_MADVISE(3)
 ///
-/// > #### POSIX_MADV_SEQUENTIAL
+/// > ### POSIX_MADV_SEQUENTIAL
 /// >
 /// > The application expects to access the specified address range
 /// > sequentially, running from lower addresses to higher addresses. Hence,
 /// > pages in this region can be aggressively read ahead, and may be freed
 /// > soon after they are accessed.
+/// >
+/// > *\[…\]*
+/// >
+/// > ### POSIX_MADV_NORMAL
+/// >
+/// > The application has no special advice regarding its memory usage
+/// > patterns for the specified address range.  This is the default behavior.
 #[derive(Debug)]
 pub struct AsyncMemMapBody {
     buf: Option<MemMapBuf>,
@@ -58,8 +71,8 @@ pub struct MemMapBuf {
 }
 
 impl MemMapBuf {
-    /// Advise the \*nix OS that we will be sequentially assessing the memory
-    /// map region, and thus that agressive read-ahead is advisable.
+    /// Advise the \*nix OS that we will be sequentially accessing the memory
+    /// map region, and that agressive read-ahead is warranted.
     fn advise_sequential(&self) -> Result<(), io::Error> {
         mem_util::advise(
             self.mm.as_ref(),
@@ -72,7 +85,7 @@ impl Drop for MemMapBuf {
     fn drop(&mut self) {
         mem_util::advise(
             self.mm.as_ref(),
-            &[mem_util::MemoryAccess::NoNeed]
+            &[mem_util::MemoryAccess::Normal]
         ).ok();
     }
 }
