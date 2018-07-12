@@ -24,8 +24,8 @@ use ::mem_util;
 /// This uses `tokio_threadpool::blocking` to request becoming a backup thread
 /// before:
 ///
-/// 1. On a \*nix OS, if applicable, advising of the imminent desire for
-/// *sequential* access to the memory region of the map (see excerpt below).
+/// 1. On a \*nix OS, if applicable, advise of imminent *sequential* access to
+/// the memory region of the map (see excerpt below).
 ///
 /// 2. Referencing the first byte of the memory mapped region.
 ///
