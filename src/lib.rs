@@ -29,7 +29,7 @@
 //! _hyper_ 0.12+ and _tokio_. Originally the *async* module was named
 //! *client* , but this would be misleading as *async* is also usable in a
 //! server (request or response contexts as well).  The *client* path name,
-//! now a re-export, is deprecatated as of 0.4.0 in preference to the *async*
+//! now a re-export, is deprecated as of 0.4.0 in preference to the *async*
 //! name.
 //!
 //! _cli:_ The `barc` command line tool for viewing
@@ -738,7 +738,10 @@ impl<'a> BodyReader<'a> {
             BodyReader::Contiguous(ref mut cursor) => cursor,
             BodyReader::Scattered(ref mut gatherer) => gatherer,
             BodyReader::FileSlice(ref mut rslice) => rslice,
-            BodyReader::File(_) => unreachable!("BodyReader::File deprecated"),
+            BodyReader::File(_) => {
+                unreachable!("BodyReader::File deprecated, \
+                              replaced with FileSlice")
+            }
         }
     }
 }
