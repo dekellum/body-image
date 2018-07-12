@@ -16,6 +16,12 @@ pub struct MadviseError {
     ecode: i32,
 }
 
+impl From<MadviseError> for io::Error {
+    fn from(me: MadviseError) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, me)
+    }
+}
+
 impl fmt::Display for MadviseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "libc::posix_madvise error return code {}", self.ecode)
@@ -62,10 +68,8 @@ pub fn advise<T>(mem: &T, advice: &[MemoryAccess])
     if res == 0 {
         Ok(())
     } else {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            MadviseError { ecode: res }
-        ))
+        let me = MadviseError { ecode: res };
+        Err(me.into())
     }
 }
 
