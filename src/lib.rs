@@ -1,3 +1,7 @@
+#![feature(dyn_trait)]       // for our min rust 1.26
+#![warn(bare_trait_objects)] // default allow
+#![allow(stable_features)]   // for 1.27+ including nightly
+
 //! This crate provides a few separately usable but closely related HTTP
 //! ecosystem components.
 //!
