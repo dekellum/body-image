@@ -173,7 +173,7 @@ impl fmt::Display for BarcError {
 // InvalidHeader's Flare type as #[cause], see:
 // https://github.com/rust-lang-nursery/failure/issues/176
 impl Fail for BarcError {
-    fn cause(&self) -> Option<&Fail> {
+    fn cause(&self) -> Option<&dyn Fail> {
         match *self {
             BarcError::Body(ref be)               => Some(be),
             BarcError::Io(ref e)                  => Some(e),
@@ -392,7 +392,7 @@ impl Compression {
 pub trait CompressStrategy {
     /// Return an `EncodeWrapper` for `File` by evaluating the
     /// `MetaRecorded` for compression worthiness.
-    fn wrap_encoder<'a>(&self, rec: &'a MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>;
 }
 
@@ -407,7 +407,7 @@ impl Default for NoCompressStrategy {
 impl CompressStrategy for NoCompressStrategy {
     /// Return an `EncodeWrapper` for `File`. This implementation
     /// always returns a `Plain` wrapper.
-    fn wrap_encoder<'a>(&self, _rec: &'a MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, _rec: &'a dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         Ok(EncodeWrapper::Plain(file))
@@ -447,7 +447,7 @@ impl Default for GzipCompressStrategy {
 }
 
 impl CompressStrategy for GzipCompressStrategy {
-    fn wrap_encoder<'a>(&self, rec: &'a MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
@@ -499,7 +499,7 @@ impl Default for BrotliCompressStrategy {
 
 #[cfg(feature = "brotli")]
 impl CompressStrategy for BrotliCompressStrategy {
-    fn wrap_encoder<'a>(&self, rec: &'a MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
@@ -539,7 +539,7 @@ impl<'a> EncodeWrapper<'a> {
     }
 
     /// Return a `Write` reference for self.
-    pub fn as_write(&mut self) -> &mut Write {
+    pub fn as_write(&mut self) -> &mut dyn Write {
         match *self {
             EncodeWrapper::Plain(ref mut f) => f,
             EncodeWrapper::Gzip(ref mut gze) => gze,
@@ -629,7 +629,9 @@ impl<'a> BarcWriter<'a> {
     /// Write a new record, returning the record's offset from the
     /// start of the BARC file. The writer position is then advanced
     /// to the end of the file, for the next `write`.
-    pub fn write(&mut self, rec: &MetaRecorded, strategy: &CompressStrategy)
+    pub fn write(&mut self,
+                 rec: &dyn MetaRecorded,
+                 strategy: &dyn CompressStrategy)
         -> Result<u64, BarcError>
     {
         // BarcFile::writer() guarantees Some(File)
@@ -670,7 +672,9 @@ impl<'a> BarcWriter<'a> {
 
 // Write the record, returning a preliminary `RecordHead` with
 // observed (not compressed) lengths.
-fn write_record(file: &mut File, rec: &MetaRecorded, strategy: &CompressStrategy)
+fn write_record(file: &mut File,
+                rec: &dyn MetaRecorded,
+                strategy: &dyn CompressStrategy)
     -> Result<RecordHead, BarcError>
 {
     let mut wrapper = strategy.wrap_encoder(rec, file)?;
@@ -710,7 +714,7 @@ fn write_record(file: &mut File, rec: &MetaRecorded, strategy: &CompressStrategy
 }
 
 // Write record head to out, asserting the various length constraints.
-fn write_record_head(out: &mut Write, head: &RecordHead)
+fn write_record_head(out: &mut dyn Write, head: &RecordHead)
     -> Result<(), BarcError>
 {
     // Check input ranges
@@ -733,7 +737,9 @@ fn write_record_head(out: &mut Write, head: &RecordHead)
 /// Write header block to out, with optional CR+LF end padding, and return the
 /// length written. This is primarily an implementation detail of `BarcWriter`,
 /// but is made public for its general diagnostic utility.
-pub fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap)
+pub fn write_headers(out: &mut dyn Write,
+                     with_crlf: bool,
+                     headers: &http::HeaderMap)
     -> Result<usize, BarcError>
 {
     let mut size = 0;
@@ -753,7 +759,7 @@ pub fn write_headers(out: &mut Write, with_crlf: bool, headers: &http::HeaderMap
 /// Write body to out, with optional CR+LF end padding, and return the length
 /// written.  This is primarily an implementation detail of `BarcWriter`, but
 /// is made public for its general diagnostic utility.
-pub fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
+pub fn write_body(out: &mut dyn Write, with_crlf: bool, body: &BodyImage)
     -> Result<u64, BarcError>
 {
     let mut size = body.write_to(out)?;
@@ -764,7 +770,7 @@ pub fn write_body(out: &mut Write, with_crlf: bool, body: &BodyImage)
 }
 
 // Like `write_all`, but return the length of the provided byte slice.
-fn write_all_len(out: &mut Write, bs: &[u8]) -> Result<usize, BarcError> {
+fn write_all_len(out: &mut dyn Write, bs: &[u8]) -> Result<usize, BarcError> {
     out.write_all(bs)?;
     Ok(bs.len())
 }
@@ -872,7 +878,7 @@ impl DecodeWrapper {
     }
 
     /// Return a `Read` reference for self.
-    fn as_read(&mut self) -> &mut Read {
+    fn as_read(&mut self) -> &mut dyn Read {
         match *self {
             DecodeWrapper::Gzip(ref mut gze) => gze,
             #[cfg(feature = "brotli")]
@@ -917,7 +923,7 @@ fn read_compressed(rslice: ReadSlice, rhead: &RecordHead, tune: &Tunables)
 }
 
 // Return RecordHead or None if EOF
-fn read_record_head(r: &mut Read)
+fn read_record_head(r: &mut dyn Read)
     -> Result<Option<RecordHead>, BarcError>
 {
     let mut buf = [0u8; V2_HEAD_SIZE];
@@ -946,7 +952,7 @@ fn read_record_head(r: &mut Read)
 // Like `Read::read_exact` but we need to distinguish 0 bytes read
 // (EOF) from partial bytes read (a format error), so it also returns
 // the number of bytes read.
-fn read_record_head_buf(r: &mut Read, mut buf: &mut [u8])
+fn read_record_head_buf(r: &mut dyn Read, mut buf: &mut [u8])
     -> Result<usize, BarcError>
 {
     let mut size = 0;
@@ -992,7 +998,7 @@ fn parse_hex<T>(buf: &[u8]) -> Result<T, BarcError>
 }
 
 // Reader header block of len bytes to HeaderMap.
-fn read_headers(r: &mut Read, with_crlf: bool, len: usize)
+fn read_headers(r: &mut dyn Read, with_crlf: bool, len: usize)
     -> Result<http::HeaderMap, BarcError>
 {
     if len == 0 {
@@ -1048,7 +1054,7 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, BarcError> {
 }
 
 // Read into `BodyImage` of state `Ram` as a single buffer.
-fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
+fn read_body_ram(r: &mut dyn Read, with_crlf: bool, len: usize)
     -> Result<BodyImage, BarcError>
 {
     if len == 0 {
@@ -1069,7 +1075,7 @@ fn read_body_ram(r: &mut Read, with_crlf: bool, len: usize)
 
 // Read into `BodyImage` state `FsRead`. Assumes no CRLF terminator
 // (only used for compressed records).
-fn read_body_fs(r: &mut Read, len: u64, tune: &Tunables)
+fn read_body_fs(r: &mut dyn Read, len: u64, tune: &Tunables)
     -> Result<BodyImage, BarcError>
 {
     if len == 0 {
@@ -1168,7 +1174,8 @@ mod tests {
         write_read_small(&fname, &strategy).unwrap();
     }
 
-    fn write_read_small(fname: &PathBuf, strategy: &CompressStrategy)
+    fn write_read_small(fname: &PathBuf,
+                        strategy: &dyn CompressStrategy)
         -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
@@ -1235,7 +1242,8 @@ mod tests {
         write_read_empty_record(&fname, &strategy).unwrap();
     }
 
-    fn write_read_empty_record(fname: &PathBuf, strategy: &CompressStrategy)
+    fn write_read_empty_record(fname: &PathBuf,
+                               strategy: &dyn CompressStrategy)
         -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
@@ -1291,7 +1299,7 @@ mod tests {
         write_read_large(&fname, &strategy).unwrap();
     }
 
-    fn write_read_large(fname: &PathBuf, strategy: &CompressStrategy)
+    fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
         -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
@@ -1324,7 +1332,8 @@ mod tests {
         }
         let res_body = res_body.prepare()?;
 
-        writer.write(&Record { req_body, res_body, ..Record::default()}, strategy)?;
+        writer.write(&Record { req_body, res_body, ..Record::default()},
+                     strategy)?;
 
         let tune = Tunables::new();
         let mut reader = bfile.reader()?;
