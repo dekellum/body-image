@@ -33,15 +33,19 @@ impl std::error::Error for MadviseError {
     fn cause(&self) -> Option<&std::error::Error> { None }
 }
 
-/// Memory Access plans, cross platform abstraction.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// Memory access pattern advice, coresponding roughly to POSIX.1-2001, but
+/// intending to be a cross platform abstraction. In particular, the values do
+/// not correspond to any particular libc constants, and are arranged in
+/// ascending order of minimal to maximum requirements for access.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[allow(dead_code)]
+#[repr(u8)]
 pub enum MemoryAccess {
-    Normal,
-    Sequential,
-    Random,
-    Need,
-    NoNeed,
+    Normal     = 0,
+    NoNeed     = 1,
+    Need       = 2,
+    Random     = 3,
+    Sequential = 4,
 }
 
 /// Advise the \*nix OS about our RAM access plans.
