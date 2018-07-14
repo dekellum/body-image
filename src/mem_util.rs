@@ -34,18 +34,19 @@ impl std::error::Error for MadviseError {
 }
 
 /// Memory access pattern advice, coresponding roughly to POSIX.1-2001, but
-/// intending to be a cross platform abstraction. In particular, the values do
-/// not correspond to any particular libc constants, and are arranged in
-/// ascending order of minimal to maximum requirements for access.
+/// intending to be a workable cross platform abstraction. In particular, the
+/// values do not necessarily correspond to any libc or other lib
+/// constants, and are arranged in ascending order of minimal to maximum
+/// *priority* in the presence of concurrent interest in the same region.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[allow(dead_code)]
-#[repr(u8)]
+#[repr(u16)]
 pub enum MemoryAccess {
-    Normal     = 0,
-    NoNeed     = 1,
-    Need       = 2,
-    Random     = 3,
-    Sequential = 4,
+    NoNeed     =  0,
+    Normal     = 10,
+    Need       = 20,
+    Random     = 30,
+    Sequential = 40,
 }
 
 /// Advise the \*nix OS about our RAM access plans.
@@ -54,13 +55,14 @@ pub fn advise<T>(mem: &T, advice: &[MemoryAccess])
     -> Result<(), io::Error>
     where T: Deref<Target=[u8]>
 {
+    // bit-wise OR, so order independent
     let flags: libc::c_int = advice.iter().fold(0, |m, ma| {
         m | (match *ma {
-            MemoryAccess::Normal     => libc::POSIX_MADV_NORMAL,
-            MemoryAccess::Sequential => libc::POSIX_MADV_SEQUENTIAL,
-            MemoryAccess::Random     => libc::POSIX_MADV_RANDOM,
-            MemoryAccess::Need       => libc::POSIX_MADV_WILLNEED,
-            MemoryAccess::NoNeed     => libc::POSIX_MADV_DONTNEED,
+            MemoryAccess::NoNeed       => libc::POSIX_MADV_DONTNEED,
+            MemoryAccess::Normal       => libc::POSIX_MADV_NORMAL,
+            MemoryAccess::Need         => libc::POSIX_MADV_WILLNEED,
+            MemoryAccess::Random       => libc::POSIX_MADV_RANDOM,
+            MemoryAccess::Sequential   => libc::POSIX_MADV_SEQUENTIAL,
         })
     });
 
@@ -77,7 +79,7 @@ pub fn advise<T>(mem: &T, advice: &[MemoryAccess])
     }
 }
 
-/// RAM access advice, no-op for non-\*nix OS
+/// RAM access advice, currently a no-op for non-\*nix OS
 #[cfg(not(unix))]
 pub fn advise<T>(_mem: &T, _advice: &[MemoryAccess])
     -> Result<(), io::Error>
