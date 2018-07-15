@@ -16,6 +16,7 @@ use async::futures::{Async, Poll, Stream};
 use async::{RequestRecord, RequestRecordableBytes,
             RequestRecordableEmpty, RequestRecordableImage};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
+use ::mem_util;
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits.
@@ -30,13 +31,17 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// to request becoming a backup thread for blocking reads from `FsRead` state
 /// and when dereferencing from `MemMap` state (see below).
 ///
+/// ## MemMap
+///
 /// While it works without complaint, it is not generally advisable to adapt a
-/// `BodyImage` in `MemMap` state with this `Payload` type. The `Bytes` part of
-/// the contract requires a copy of the memory-mapped region of memory, which
-/// contradicts any advantage of the memory-map. Instead consider using
-/// [`AsyncMemMapBody`](struct.AsyncMemMapBody.html) for this case. Of course,
-/// none of this ever applies if the *mmap* feature is disabled or if
-/// `BodyImage::mem_map` is never called.
+/// `BodyImage` in `MemMap` state with this `Payload` and `Stream` type. The
+/// `Bytes` part of the contract requires a static copy of the memory-mapped
+/// region of memory, which contradicts any advantage of the
+/// memory-map.
+///
+/// Consider using [`AsyncMemMapBody`](struct.AsyncMemMapBody.html) for this
+/// case. Of course, none of this ever applies if the *mmap* feature is
+/// disabled or if `BodyImage::mem_map` is never called.
 #[derive(Debug)]
 pub struct AsyncBodyImage {
     state: AsyncImageState,
@@ -159,7 +164,18 @@ impl Stream for AsyncBodyImage
                     // contract is guarunteed fullfilled here, unless of
                     // course swap is enabled and the copy is so large as to
                     // cause the copy to be swapped out before it is written!
+                    mem_util::advise(
+                        mmap.as_ref(),
+                        &[mem_util::MemoryAccess::Sequential]
+                    )?;
+
                     let b = Bytes::from(&mmap[..]);
+
+                    mem_util::advise(
+                        mmap.as_ref(),
+                        &[mem_util::MemoryAccess::Normal]
+                    ).ok();
+
                     Ok(Some(b))
                 });
                 if let Ok(Async::Ready(Some(ref b))) = res {

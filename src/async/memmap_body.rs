@@ -1,3 +1,6 @@
+#[cfg(unix)]
+extern crate libc;
+
 use std::io;
 use std::sync::Arc;
 
@@ -7,12 +10,54 @@ use memmap::Mmap;
 use failure::Error as Flare;
 
 use async::hyper;
+use async::tokio_threadpool;
 use async::futures::{Async, Poll};
 use async::{RequestRecord, RequestRecordableEmpty, RequestRecordableImage};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
+use ::mem_util;
 
 /// Experimental, specialized adaptor for `BodyImage` in `MemMap` state,
 /// implementating the `hyper::body::Payload` trait with zero-copy.
+///
+/// ## Implementation Notes
+///
+/// This uses `tokio_threadpool::blocking` to request becoming a backup thread
+/// before:
+///
+/// 1. On a \*nix OS, if applicable, advise of imminent *sequential* access to
+/// the memory region of the map (see excerpt below).
+///
+/// 2. Referencing the first byte of the memory mapped region.
+///
+/// Beyond this initial blocking annotation, its presumed a race between OS
+/// read-ahead and storage, Tokio and TCP or other streams; not unlike what
+/// would happen in a virtual memory swapping situation with many large bodies
+/// exceeding physical RAM (author waves hands).
+///
+/// Upon `Drop` of the `MemMapBuf` (`Payload::Data` unit type), if on a \*nix
+/// OS, we conclude by advising of *normal* access (see below) to the memory
+/// mapped region, as if *sequential* access had never been requested. This
+/// behavior is logically symetric, but doesn't account for the fact that the
+/// `BodyImage` may have been cloned and the memory map remains alive for
+/// other, potentially concurrent use. It's likely not fatal, if the same
+/// pattern is used for all `MemMap` handle accesses, and given the advisory
+/// nature, but its definately racy.
+///
+/// ## Excerpt from GNU/Linux POSIX_MADVISE(3)
+///
+/// > ### POSIX_MADV_SEQUENTIAL
+/// >
+/// > The application expects to access the specified address range
+/// > sequentially, running from lower addresses to higher addresses. Hence,
+/// > pages in this region can be aggressively read ahead, and may be freed
+/// > soon after they are accessed.
+/// >
+/// > *\[…\]*
+/// >
+/// > ### POSIX_MADV_NORMAL
+/// >
+/// > The application has no special advice regarding its memory usage
+/// > patterns for the specified address range.  This is the default behavior.
 #[derive(Debug)]
 pub struct AsyncMemMapBody {
     buf: Option<MemMapBuf>,
@@ -23,6 +68,26 @@ pub struct AsyncMemMapBody {
 pub struct MemMapBuf {
     mm: Arc<Mmap>,
     pos: usize,
+}
+
+impl MemMapBuf {
+    /// Advise the \*nix OS that we will be sequentially accessing the memory
+    /// map region, and that agressive read-ahead is warranted.
+    fn advise_sequential(&self) -> Result<(), io::Error> {
+        mem_util::advise(
+            self.mm.as_ref(),
+            &[mem_util::MemoryAccess::Sequential]
+        )
+    }
+}
+
+impl Drop for MemMapBuf {
+    fn drop(&mut self) {
+        mem_util::advise(
+            self.mm.as_ref(),
+            &[mem_util::MemoryAccess::Normal]
+        ).ok();
+    }
 }
 
 impl Buf for MemMapBuf {
@@ -44,10 +109,12 @@ impl AsyncMemMapBody {
     /// Wrap by consuming the `BodyImage` instance.
     ///
     /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
-    /// beforehand to preserve an owned copy.  This asserts-for and will
-    /// panic if the supplied `BodyImage` is not in `MemMap` state
-    /// (e.g. `BodyImage::is_mem_map` returns `true`.)
+    /// beforehand to preserve an owned copy. Returns as per `empty()` if the
+    /// the body is empty. Otherwise panics if the supplied
+    /// `BodyImage` is not in `MemMap` state (e.g. `BodyImage::is_mem_map`
+    /// returns `true`.)
     pub fn new(body: BodyImage) -> AsyncMemMapBody {
+        if body.is_empty() { return Self::empty() };
         assert!(body.is_mem_map(), "Body not MemMap");
         match body.explode() {
             ExplodedImage::MemMap(mmap) => {
@@ -62,9 +129,29 @@ impl AsyncMemMapBody {
         }
     }
 
+    /// Construct optimal (no allocation) empty body representation.
     pub fn empty() -> AsyncMemMapBody {
         AsyncMemMapBody { buf: None }
     }
+}
+
+macro_rules! unblock {
+    (|| $b:block) => (match tokio_threadpool::blocking(|| $b) {
+        Ok(Async::Ready(Ok(_))) => (),
+        Ok(Async::Ready(Err(e))) => return Err(e),
+        Ok(Async::NotReady) => {
+            debug!("No blocking backup thread available -> NotReady");
+            return Ok(Async::NotReady);
+        }
+        Err(_e) => {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "AsyncMemMapBody needs `blocking`, \
+                 backup threads of Tokio threadpool"
+            ));
+        }
+
+    })
 }
 
 impl hyper::body::Payload for AsyncMemMapBody {
@@ -74,7 +161,12 @@ impl hyper::body::Payload for AsyncMemMapBody {
     fn poll_data(&mut self) -> Poll<Option<Self::Data>, io::Error> {
         let d = self.buf.take();
         if let Some(ref mb) = d {
-            debug!("read MemMapBuf (len: {})", mb.remaining())
+            unblock!( || {
+                mb.advise_sequential()?;
+                let _b = mb.bytes()[0];
+                debug!("read MemMapBuf (blocking, len: {})", mb.remaining());
+                Ok(())
+            })
         }
         Ok(Async::Ready(d))
     }
