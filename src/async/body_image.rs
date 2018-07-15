@@ -95,7 +95,7 @@ enum AsyncImageState {
 }
 
 fn unblock<F, T>(f: F) -> Poll<T, io::Error>
-where F: FnOnce() -> io::Result<T>,
+    where F: FnOnce() -> io::Result<T>
 {
     match tokio_threadpool::blocking(f) {
         Ok(Async::Ready(Ok(v))) => Ok(v.into()),
@@ -117,8 +117,7 @@ where F: FnOnce() -> io::Result<T>,
     }
 }
 
-impl Stream for AsyncBodyImage
-{
+impl Stream for AsyncBodyImage {
     type Item = Bytes;
     type Error = io::Error;
 
