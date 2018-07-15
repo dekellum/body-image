@@ -11,13 +11,14 @@ use failure::Error as Flare;
 
 use async::hyper;
 use async::tokio_threadpool;
-use async::futures::{Async, Poll};
+use async::futures::{Async, Poll, Stream};
 use async::{RequestRecord, RequestRecordableEmpty, RequestRecordableImage};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 use ::mem_util;
 
 /// Experimental, specialized adaptor for `BodyImage` in `MemMap` state,
-/// implementating the `hyper::body::Payload` trait with zero-copy.
+/// implementating `futures::Stream` and `hyper::body::Payload` traits
+/// with zero-copy.
 ///
 /// ## Implementation Notes
 ///
@@ -154,11 +155,11 @@ macro_rules! unblock {
     })
 }
 
-impl hyper::body::Payload for AsyncMemMapBody {
-    type Data = MemMapBuf;
+impl Stream for AsyncMemMapBody {
+    type Item = MemMapBuf;
     type Error = io::Error;
 
-    fn poll_data(&mut self) -> Poll<Option<Self::Data>, io::Error> {
+    fn poll(&mut self) -> Poll<Option<MemMapBuf>, io::Error> {
         let d = self.buf.take();
         if let Some(ref mb) = d {
             unblock!( || {
@@ -169,6 +170,15 @@ impl hyper::body::Payload for AsyncMemMapBody {
             })
         }
         Ok(Async::Ready(d))
+    }
+}
+
+impl hyper::body::Payload for AsyncMemMapBody {
+    type Data = MemMapBuf;
+    type Error = io::Error;
+
+    fn poll_data(&mut self) -> Poll<Option<MemMapBuf>, io::Error> {
+        self.poll()
     }
 
     fn content_length(&self) -> Option<u64> {
