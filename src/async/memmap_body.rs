@@ -72,6 +72,10 @@ pub struct MemMapBuf {
 }
 
 impl MemMapBuf {
+    pub(crate) fn new(mmap: Arc<Mmap>) -> MemMapBuf {
+        MemMapBuf { mm: mmap, pos: 0 }
+    }
+
     /// Advise the \*nix OS that we will be sequentially accessing the memory
     /// map region, and that agressive read-ahead is warranted.
     fn advise_sequential(&self) -> Result<(), io::Error> {
@@ -120,10 +124,7 @@ impl AsyncMemMapBody {
         match body.explode() {
             ExplodedImage::MemMap(mmap) => {
                 AsyncMemMapBody {
-                    buf: Some(MemMapBuf {
-                        mm: mmap,
-                        pos: 0
-                    })
+                    buf: Some(MemMapBuf::new(mmap))
                 }
             },
             _ => unreachable!()
