@@ -67,7 +67,9 @@ impl Sink for AsyncBodySink {
     type SinkItem = hyper::Chunk;
     type SinkError = Flare;
 
-    fn start_send(&mut self, chunk: hyper::Chunk) -> StartSend<hyper::Chunk, Flare> {
+    fn start_send(&mut self, chunk: hyper::Chunk)
+        -> StartSend<hyper::Chunk, Flare>
+    {
         let new_len = self.body.len() + (chunk.len() as u64);
         if new_len > self.tune.max_body() {
             bail!("Response stream too long: {}+", new_len);

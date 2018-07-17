@@ -162,7 +162,7 @@ impl Stream for AsyncBodyImage {
                     // example. The silver lining is that the `blocking`
                     // contract is guarunteed fullfilled here, unless of
                     // course swap is enabled and the copy is so large as to
-                    // cause the copy to be swapped out before it is written!
+                    // cause it to be swapped out before it is written!
                     mem_util::advise(
                         mmap.as_ref(),
                         &[mem_util::MemoryAccess::Sequential]
