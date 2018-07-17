@@ -132,7 +132,7 @@ fn stream_13_fsread_128k(b: &mut Bencher) {
 // `AsyncBodyImage` in `FsRead`, 1MiB buffer size
 #[bench]
 fn stream_14_fsread_1m(b: &mut Bencher) {
-    let tune = Tuner::new().set_buffer_size_fs(1 * 1024 * 1024).finish();
+    let tune = Tuner::new().set_buffer_size_fs(1024 * 1024).finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = tokio::runtime::Runtime::new().unwrap();

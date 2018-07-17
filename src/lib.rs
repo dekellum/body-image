@@ -1249,7 +1249,7 @@ mod root {
         body.write_all("hello").unwrap();
         body.write_all(" ").unwrap();
         body.write_all("world").unwrap();
-        if let Err(_) = body.write_back(tune.temp_dir()) {
+        if body.write_back(tune.temp_dir()).is_err() {
             assert!(body.is_ram());
             assert_eq!(body.len(), 0);
         } else {
