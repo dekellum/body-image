@@ -25,7 +25,7 @@ use async::{AsyncBodyImage,
             RequestRecord, RequestRecordableImage, request_dialog};
 
 #[cfg(feature = "mmap")]
-use async::AsyncMemMapBody;
+use async::{AsyncMemMapBody, AsyncUniBody};
 
 #[test]
 fn post_echo_async_body() {
@@ -40,6 +40,31 @@ fn post_echo_async_body() {
         .finish();
     let body = fs_body_image();
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
+        Ok(dl) => {
+            println!("{:#?}", dl);
+            assert_eq!(dl.res_body().len(), 445);
+        }
+        Err(e) => {
+            panic!("failed with: {}", e);
+        }
+    }
+    rt.shutdown_on_idle().wait().unwrap();
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn post_echo_async_unibody() {
+    assert!(*LOG_SETUP);
+
+    let mut rt = new_limited_runtime();
+    let (fut, url) = echo_server();
+    rt.spawn(fut);
+
+    let tune = Tuner::new()
+        .set_buffer_size_fs(17)
+        .finish();
+    let body = fs_body_image();
+    match rt.block_on(post_body_req::<AsyncUniBody>(&url, body, &tune)) {
         Ok(dl) => {
             println!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
@@ -92,6 +117,32 @@ fn post_echo_async_mmap_body() {
     let mut body = fs_body_image();
     body.mem_map().unwrap();
     match rt.block_on(post_body_req::<AsyncMemMapBody>(&url, body, &tune)) {
+        Ok(dl) => {
+            println!("{:#?}", dl);
+            assert_eq!(dl.res_body().len(), 445);
+        }
+        Err(e) => {
+            panic!("failed with: {}", e);
+        }
+    }
+    rt.shutdown_on_idle().wait().unwrap();
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn post_echo_async_mmap_unibody() {
+    assert!(*LOG_SETUP);
+
+    let mut rt = new_limited_runtime();
+    let (fut, url) = echo_server();
+    rt.spawn(fut);
+
+    let tune = Tuner::new()
+        .set_buffer_size_fs(17)
+        .finish();
+    let mut body = fs_body_image();
+    body.mem_map().unwrap();
+    match rt.block_on(post_body_req::<AsyncUniBody>(&url, body, &tune)) {
         Ok(dl) => {
             println!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);

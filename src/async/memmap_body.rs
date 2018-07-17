@@ -78,7 +78,7 @@ impl MemMapBuf {
 
     /// Advise the \*nix OS that we will be sequentially accessing the memory
     /// map region, and that agressive read-ahead is warranted.
-    fn advise_sequential(&self) -> Result<(), io::Error> {
+    pub(crate) fn advise_sequential(&self) -> Result<(), io::Error> {
         mem_util::advise(
             self.mm.as_ref(),
             &[mem_util::MemoryAccess::Sequential]

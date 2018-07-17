@@ -46,6 +46,9 @@ pub use self::body_image::AsyncBodyImage;
 #[cfg(feature = "mmap")] mod memmap_body;
 #[cfg(feature = "mmap")] pub use self::memmap_body::{AsyncMemMapBody, MemMapBuf};
 
+#[cfg(feature = "mmap")] mod unibody;
+#[cfg(feature = "mmap")] pub use self::unibody::{AsyncUniBody, UniBodyBuf};
+
 use std::mem;
 use std::time::Instant;
 
