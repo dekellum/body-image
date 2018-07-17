@@ -1,14 +1,22 @@
 use std::cmp;
 use std::io;
 use std::io::{Cursor, Read};
+
+#[cfg(feature = "mmap")]
 use std::sync::Arc;
+
 use std::vec::IntoIter;
 
 use ::http;
 use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use failure::Error as Flare;
+
+#[cfg(feature = "mmap")]
 use memmap::Mmap;
+
+#[cfg(feature = "mmap")]
+use ::mem_util;
 
 use async::hyper;
 use async::tokio_threadpool;
@@ -16,7 +24,7 @@ use async::futures::{Async, Poll, Stream};
 use async::{RequestRecord, RequestRecordableBytes,
             RequestRecordableEmpty, RequestRecordableImage};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
-use ::mem_util;
+
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits.

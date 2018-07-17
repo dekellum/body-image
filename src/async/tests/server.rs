@@ -52,6 +52,7 @@ fn post_echo_async_body() {
 }
 
 #[test]
+#[cfg(feature = "mmap")]
 fn post_echo_async_body_mmap_copy() {
     assert!(*LOG_SETUP);
 
