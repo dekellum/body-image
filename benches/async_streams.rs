@@ -184,24 +184,10 @@ fn stream_21_mmap_uni(b: &mut Bencher) {
     })
 }
 
-// (FIXME: Temporary?) `AsyncMemMapBody` bench
-#[bench]
-fn stream_22_mmap_body(b: &mut Bencher) {
-    let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
-    let body = sink_data(sink).unwrap();
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
-    b.iter(|| {
-        let mut body = body.clone();
-        body.mem_map().unwrap();
-        let stream = AsyncMemMapBody::new(body);
-        summarize_stream(stream, &mut rt);
-    })
-}
-
 // `AsyncBodyImage` in `MemMap`, new mmap on each iteration, and with costly
 // copy to `Bytes`.
 #[bench]
-fn stream_23_mmap_copy(b: &mut Bencher) {
+fn stream_22_mmap_copy(b: &mut Bencher) {
     let tune = Tunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();

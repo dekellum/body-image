@@ -43,8 +43,8 @@ mod body_sink;
 pub use self::body_sink::AsyncBodySink;
 pub use self::body_image::AsyncBodyImage;
 
-#[cfg(feature = "mmap")] mod memmap_body;
-#[cfg(feature = "mmap")] pub use self::memmap_body::{AsyncMemMapBody, MemMapBuf};
+#[cfg(feature = "mmap")] mod mem_map_buf;
+#[cfg(feature = "mmap")] use self::mem_map_buf::MemMapBuf;
 
 #[cfg(feature = "mmap")] mod unibody;
 #[cfg(feature = "mmap")] pub use self::unibody::{AsyncUniBody, UniBodyBuf};

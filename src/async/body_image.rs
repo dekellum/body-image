@@ -45,9 +45,12 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// `Bytes` part of the contract requires a owned copy of the memory-mapped
 /// region of memory, which contradicts the advantage of the memory-map.
 ///
-/// Consider using [`AsyncMemMapBody`](struct.AsyncMemMapBody.html) for this
-/// case. Of course, none of this ever applies if the *mmap* feature is
-/// disabled or if `BodyImage::mem_map` is never called.
+/// Instead use [`AsyncUniBody`](struct.AsyncUniBody.html) for zero-copy
+/// `MemMap` support, at the cost of some potentially factoring required with
+/// not using the default `hyper::Body` type.
+///
+/// None of this applies, of course, if the *mmap* feature is disabled or if
+/// `BodyImage::mem_map` is never called.
 #[derive(Debug)]
 pub struct AsyncBodyImage {
     state: AsyncImageState,
