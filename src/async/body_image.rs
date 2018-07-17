@@ -25,7 +25,6 @@ use async::{RequestRecord, RequestRecordableBytes,
             RequestRecordableEmpty, RequestRecordableImage};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 
-
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits.
 ///
@@ -43,9 +42,8 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 ///
 /// While it works without complaint, it is not generally advisable to adapt a
 /// `BodyImage` in `MemMap` state with this `Payload` and `Stream` type. The
-/// `Bytes` part of the contract requires a static copy of the memory-mapped
-/// region of memory, which contradicts any advantage of the
-/// memory-map.
+/// `Bytes` part of the contract requires a owned copy of the memory-mapped
+/// region of memory, which contradicts the advantage of the memory-map.
 ///
 /// Consider using [`AsyncMemMapBody`](struct.AsyncMemMapBody.html) for this
 /// case. Of course, none of this ever applies if the *mmap* feature is
