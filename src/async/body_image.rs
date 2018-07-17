@@ -128,10 +128,6 @@ impl Stream for AsyncBodyImage {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Bytes>, io::Error> {
-        let avail = self.len - self.consumed;
-        if avail == 0 {
-            return Ok(Async::Ready(None));
-        }
         match self.state {
             AsyncImageState::Ram(ref mut iter) => {
                 let n = iter.next();
@@ -141,6 +137,10 @@ impl Stream for AsyncBodyImage {
                 Ok(Async::Ready(n))
             }
             AsyncImageState::File { ref mut rs, bsize } => {
+                let avail = self.len - self.consumed;
+                if avail == 0 {
+                    return Ok(Async::Ready(None));
+                }
                 let res = unblock( || {
                     let bs = cmp::min(bsize, avail) as usize;
                     let mut buf = BytesMut::with_capacity(bs);
@@ -161,6 +161,10 @@ impl Stream for AsyncBodyImage {
             }
             #[cfg(feature = "mmap")]
             AsyncImageState::MemMap(ref mmap) => {
+                let avail = self.len - self.consumed;
+                if avail == 0 {
+                    return Ok(Async::Ready(None));
+                }
                 let res = unblock( || {
                     // This performs a copy via *bytes* crate
                     // `copy_from_slice`. There is no apparent way to achieve
@@ -184,7 +188,6 @@ impl Stream for AsyncBodyImage {
                     Ok(Some(b))
                 });
                 if let Ok(Async::Ready(Some(ref b))) = res {
-                    assert_eq!( b.len() as u64, avail);
                     self.consumed += b.len() as u64;
                     debug!("MemMap copy to chunk (blocking, len: {})", b.len())
                 }
@@ -212,7 +215,7 @@ impl hyper::body::Payload for AsyncBodyImage {
     }
 
     fn is_end_stream(&self) -> bool {
-        (self.len - self.consumed) == 0
+        self.consumed >= self.len
     }
 }
 
