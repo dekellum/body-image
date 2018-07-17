@@ -2,6 +2,7 @@
 extern crate libc;
 
 use std::io;
+use std::ops::Deref;
 use std::sync::Arc;
 
 use ::http;
@@ -107,6 +108,14 @@ impl Buf for MemMapBuf {
     fn advance(&mut self, count: usize) {
         assert!(count <= self.remaining(), "MemMapBuf::advance past end");
         self.pos += count;
+    }
+}
+
+impl Deref for MemMapBuf {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        &self.mm[self.pos..]
     }
 }
 

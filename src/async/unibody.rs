@@ -1,6 +1,7 @@
 use std::cmp;
 use std::io;
 use std::io::{Cursor, Read};
+use std::ops::Deref;
 use std::vec::IntoIter;
 
 use ::http;
@@ -95,6 +96,14 @@ impl Buf for UniBodyBuf {
             UniBodyBuf::Bytes(ref mut c)  => c.advance(count),
             UniBodyBuf::MemMap(ref mut b) => b.advance(count),
         }
+    }
+}
+
+impl Deref for UniBodyBuf {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        self.bytes()
     }
 }
 
