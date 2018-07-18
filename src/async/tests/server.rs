@@ -25,7 +25,7 @@ use async::{AsyncBodyImage,
             RequestRecord, RequestRecordableImage, request_dialog};
 
 #[cfg(feature = "mmap")]
-use async::{AsyncUniBody};
+use async::AsyncUniBody;
 
 #[test]
 fn post_echo_async_body() {
