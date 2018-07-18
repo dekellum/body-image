@@ -20,6 +20,7 @@ use {BodySink, Tunables};
 /// will appear *full*, with `start_send` returning
 /// `Ok(AsyncSink::NotReady(chunk)`, until a backup thread becomes available
 /// or any timeout occurs.
+#[derive(Debug)]
 pub struct AsyncBodySink {
     body: BodySink,
     tune: Tunables,
