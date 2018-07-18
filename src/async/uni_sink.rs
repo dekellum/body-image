@@ -8,7 +8,7 @@ use async::UniBodyBuf;
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `Stream<Item=UniBodyBuf>` to be forwarded (e.g. via
 /// `futures::Stream::forward`) to a `BodySink`, in a fully asynchronous
-/// fashion.
+/// fashion and with zero-copy `MemMap` support (*mmap* feature only).
 ///
 /// `Tunables` are used during the streaming to decide when to write back a
 /// BodySink in `Ram` to `FsWrite`.  This implementation uses

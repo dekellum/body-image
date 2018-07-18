@@ -18,10 +18,13 @@ use async::{MemMapBuf,
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
-/// `hyper::body::Payload` traits, and with zero-copy `MemMap` support.
+/// `hyper::body::Payload` traits, using the custom
+/// [`UniBodyBuf`](struct.UniBodyBuf.html) item buffer type (instead of
+/// `Bytes`) for zero-copy `MemMap` support (*mmap* feature only).
 ///
 /// The `Payload` trait (plus `Send`) makes this usable with hyper as the `B`
-/// body type of `http::Request<B>`.
+/// body type of `http::Request<B>` (client) or `http::Response<B>`
+/// (server).
 ///
 /// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
 /// state. `BodyImage` in `Ram` is made available with zero-copy using a
@@ -71,8 +74,8 @@ impl UniBodyImage {
     }
 }
 
-/// Provides zero-copy read access to both `Bytes` and `Mmap`
-/// memory. Implements `bytes::Buf`.
+/// Provides zero-copy read access to both `Bytes` and `Mmap` memory
+/// regions. Implements `bytes::Buf` (*mmap* feature only).
 pub struct UniBodyBuf {
     buf: BufState
 }

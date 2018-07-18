@@ -26,9 +26,10 @@
 //! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
 //!   asynchronous output as a `Stream` and `hyper::body::Payload`.
 //!
-//! * Alternatively, [`UniBodyImage`](struct.UniBodyImage.html) (*mmap*
-//!   feature) offers zero-copy `MemMap` support, using a custom Data/Item
-//!   type for the hyper Default `Bytes` or `Chunk`.
+//! * Alternatively, [`UniBodySink`](struct.UniBodySink.html) and
+//!   [`UniBodyImage`](struct.UniBodyImage.html) offer zero-copy `MemMap`
+//!   support, using the custom [`UniBodyBuf`](struct.UniBodyBuf.html) item
+//!   buffer type (instead of the `hyper::Chunk` or `Bytes`).
 //!
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the

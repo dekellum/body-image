@@ -29,8 +29,9 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// `hyper::body::Payload` traits.
 ///
 /// The `Payload` trait (plus `Send`) makes this usable with hyper as the `B`
-/// body type of `http::Request<B>`. The `Stream` trait is sufficient for use
-/// via `hyper::Body::with_stream`.
+/// body type of `http::Request<B>` (client) or `http::Response<B>`
+/// (server). The `Stream` trait is sufficient for use via
+/// `hyper::Body::with_stream`.
 ///
 /// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
 /// state. `BodyImage` in `Ram` is made available with zero-copy using a
@@ -43,11 +44,12 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// While it works without complaint, it is not generally advisable to adapt a
 /// `BodyImage` in `MemMap` state with this `Payload` and `Stream` type. The
 /// `Bytes` part of the contract requires a owned copy of the memory-mapped
-/// region of memory, which contradicts the advantage of the memory-map.
+/// region of memory, which contradicts the advantage of the memory-map. The
+/// cost is confirmed by the `cargo bench stream` benchmarks.
 ///
 /// Instead use [`UniBodyImage`](struct.UniBodyImage.html) for zero-copy
-/// `MemMap` support, at the cost of some potentially factoring required with
-/// not using the default `hyper::Body` type.
+/// `MemMap` support, at the cost of the adjustments required for not using
+/// the default `hyper::Body` type.
 ///
 /// None of this applies, of course, if the *mmap* feature is disabled or if
 /// `BodyImage::mem_map` is never called.

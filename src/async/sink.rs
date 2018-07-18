@@ -6,9 +6,9 @@ use failure::Error as Flare;
 use {BodySink, Tunables};
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
-/// allows a `hyper::Body` stream to be forwarded (e.g. via
-/// `futures::Stream::forward`) to a `BodySink`, in a fully asynchronous
-/// fashion.
+/// allows a `hyper::Body` (`hyper::Chunk` item) stream to be forwarded
+/// (e.g. via `futures::Stream::forward`) to a `BodySink`, in a fully
+/// asynchronous fashion.
 ///
 /// `Tunables` are used during the streaming to decide when to write back a
 /// BodySink in `Ram` to `FsWrite`.  This implementation uses
