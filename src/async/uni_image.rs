@@ -18,7 +18,7 @@ use async::{MemMapBuf,
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
-/// `hyper::body::Payload` traits.
+/// `hyper::body::Payload` traits, and with zero-copy `MemMap` support.
 ///
 /// The `Payload` trait (plus `Send`) makes this usable with hyper as the `B`
 /// body type of `http::Request<B>`.
@@ -29,29 +29,29 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// to request becoming a backup thread for blocking reads from `FsRead` state
 /// and when dereferencing from `MemMap` state.
 #[derive(Debug)]
-pub struct AsyncUniBody {
+pub struct UniBodyImage {
     state: UniBodyState,
     len: u64,
     consumed: u64,
 }
 
-impl AsyncUniBody {
+impl UniBodyImage {
     /// Wrap by consuming the `BodyImage` instance.
     ///
     /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
     /// beforehand to preserve an owned copy.
-    pub fn new(body: BodyImage, tune: &Tunables) -> AsyncUniBody {
+    pub fn new(body: BodyImage, tune: &Tunables) -> UniBodyImage {
         let len = body.len();
         match body.explode() {
             ExplodedImage::Ram(v) => {
-                AsyncUniBody {
+                UniBodyImage {
                     state: UniBodyState::Ram(v.into_iter()),
                     len,
                     consumed: 0,
                 }
             }
             ExplodedImage::FsRead(rs) => {
-                AsyncUniBody {
+                UniBodyImage {
                     state: UniBodyState::File {
                         rs,
                         bsize: tune.buffer_size_fs() as u64
@@ -61,7 +61,7 @@ impl AsyncUniBody {
                 }
             }
             ExplodedImage::MemMap(mmap) => {
-                AsyncUniBody {
+                UniBodyImage {
                     state: UniBodyState::MemMap(Some(MemMapBuf::new(mmap))),
                     len,
                     consumed: 0,
@@ -70,7 +70,9 @@ impl AsyncUniBody {
         }
     }
 }
-/// Provides zero-copy read access to both `Bytes` and `Mmap` memory.
+
+/// Provides zero-copy read access to both `Bytes` and `Mmap`
+/// memory. Implements `bytes::Buf`.
 pub struct UniBodyBuf {
     buf: BufState
 }
@@ -140,14 +142,14 @@ fn unblock<F, T>(f: F) -> Poll<T, io::Error>
         Err(_) => {
             Err(io::Error::new(
                 io::ErrorKind::Other,
-                "AsyncUniBody needs `blocking`, \
+                "UniBodyImage needs `blocking`, \
                  backup threads of Tokio threadpool"
             ))
         }
     }
 }
 
-impl Stream for AsyncUniBody {
+impl Stream for UniBodyImage {
     type Item = UniBodyBuf;
     type Error = io::Error;
 
@@ -212,7 +214,7 @@ impl Stream for AsyncUniBody {
     }
 }
 
-impl hyper::body::Payload for AsyncUniBody {
+impl hyper::body::Payload for UniBodyImage {
     type Data = UniBodyBuf;
     type Error = io::Error;
 
@@ -229,12 +231,12 @@ impl hyper::body::Payload for AsyncUniBody {
     }
 }
 
-impl RequestRecordableEmpty<AsyncUniBody> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<AsyncUniBody>, Flare> {
+impl RequestRecordableEmpty<UniBodyImage> for http::request::Builder {
+    fn record(&mut self) -> Result<RequestRecord<UniBodyImage>, Flare> {
         let request = {
             let body = BodyImage::empty();
             let tune = Tunables::default();
-            self.body(AsyncUniBody::new(body, &tune))?
+            self.body(UniBodyImage::new(body, &tune))?
         };
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -249,9 +251,9 @@ impl RequestRecordableEmpty<AsyncUniBody> for http::request::Builder {
     }
 }
 
-impl RequestRecordableBytes<AsyncUniBody> for http::request::Builder {
+impl RequestRecordableBytes<UniBodyImage> for http::request::Builder {
     fn record_body<BB>(&mut self, body: BB)
-       -> Result<RequestRecord<AsyncUniBody>, Flare>
+       -> Result<RequestRecord<UniBodyImage>, Flare>
        where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -261,7 +263,7 @@ impl RequestRecordableBytes<AsyncUniBody> for http::request::Builder {
             BodyImage::from_slice(buf)
         };
         let tune = Tunables::default();
-        let request = self.body(AsyncUniBody::new(req_body.clone(), &tune))?;
+        let request = self.body(UniBodyImage::new(req_body.clone(), &tune))?;
 
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -273,11 +275,11 @@ impl RequestRecordableBytes<AsyncUniBody> for http::request::Builder {
     }
 }
 
-impl RequestRecordableImage<AsyncUniBody> for http::request::Builder {
+impl RequestRecordableImage<UniBodyImage> for http::request::Builder {
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<AsyncUniBody>, Flare>
+        -> Result<RequestRecord<UniBodyImage>, Flare>
     {
-        let request = self.body(AsyncUniBody::new(body.clone(), tune))?;
+        let request = self.body(UniBodyImage::new(body.clone(), tune))?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
         let req_headers = request.headers().clone();

@@ -48,14 +48,14 @@ fn stream_02_ram(b: &mut Bencher) {
 }
 
 #[bench]
-// `AsyncUniBody` in `Ram`, scattered state
+// `UniBodyImage` in `Ram`, scattered state
 fn stream_03_ram_uni(b: &mut Bencher) {
     let tune = Tunables::default();
     let sink = BodySink::with_ram_buffers(1024);
     let body = sink_data(sink).unwrap();
     let mut rt = tokio::runtime::Runtime::new().unwrap();
     b.iter(|| {
-        let stream = AsyncUniBody::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
     })
 }
@@ -89,7 +89,7 @@ fn stream_10_fsread(b: &mut Bencher) {
     })
 }
 
-// `AsyncUniBody` in `FsRead`, default buffer size (64K)
+// `UniBodyImage` in `FsRead`, default buffer size (64K)
 #[bench]
 fn stream_11_fsread_uni(b: &mut Bencher) {
     let tune = Tunables::default();
@@ -97,7 +97,7 @@ fn stream_11_fsread_uni(b: &mut Bencher) {
     let body = sink_data(sink).unwrap();
     let mut rt = tokio::runtime::Runtime::new().unwrap();
     b.iter(|| {
-        let stream = AsyncUniBody::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
     })
 }
@@ -155,7 +155,7 @@ fn stream_15_fsread_4m(b: &mut Bencher) {
 }
 
 #[bench]
-// `AsyncUniBody` in `MemMap`, mmap once ahead-of-time, zero-copy
+// `UniBodyImage` in `MemMap`, mmap once ahead-of-time, zero-copy
 fn stream_20_mmap_uni_pre(b: &mut Bencher) {
     let tune = Tunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
@@ -163,12 +163,12 @@ fn stream_20_mmap_uni_pre(b: &mut Bencher) {
     let mut rt = tokio::runtime::Runtime::new().unwrap();
     body.mem_map().unwrap();
     b.iter(|| {
-        let stream = AsyncUniBody::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
     })
 }
 
-// `AsyncUniBody` in `MemMap`, new mmap on each iteration, zero-copy
+// `UniBodyImage` in `MemMap`, new mmap on each iteration, zero-copy
 #[bench]
 fn stream_21_mmap_uni(b: &mut Bencher) {
     let tune = Tunables::default();
@@ -178,7 +178,7 @@ fn stream_21_mmap_uni(b: &mut Bencher) {
     b.iter(|| {
         let mut body = body.clone();
         body.mem_map().unwrap();
-        let stream = AsyncUniBody::new(body, &tune);
+        let stream = UniBodyImage::new(body, &tune);
         summarize_stream(stream, &mut rt);
     })
 }

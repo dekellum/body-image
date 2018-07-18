@@ -21,18 +21,18 @@ use async::UniBodyBuf;
 /// `Ok(AsyncSink::NotReady(chunk)`, until a backup thread becomes available
 /// or any timeout occurs.
 #[derive(Debug)]
-pub struct AsyncUniSink {
+pub struct UniBodySink {
     body: BodySink,
     tune: Tunables,
 }
 
-impl AsyncUniSink {
+impl UniBodySink {
     /// Wrap by consuming a `BodySink` and `Tunables` instances.
     ///
     /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
     /// that can be done beforehand to preserve owned copies.
-    pub fn new(body: BodySink, tune: Tunables) -> AsyncUniSink {
-        AsyncUniSink { body, tune }
+    pub fn new(body: BodySink, tune: Tunables) -> UniBodySink {
+        UniBodySink { body, tune }
     }
 
     /// The inner `BodySink` as constructed.
@@ -63,7 +63,7 @@ macro_rules! unblock {
     })
 }
 
-impl Sink for AsyncUniSink {
+impl Sink for UniBodySink {
     type SinkItem = UniBodyBuf;
     type SinkError = Flare;
 

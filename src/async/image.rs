@@ -45,7 +45,7 @@ use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 /// `Bytes` part of the contract requires a owned copy of the memory-mapped
 /// region of memory, which contradicts the advantage of the memory-map.
 ///
-/// Instead use [`AsyncUniBody`](struct.AsyncUniBody.html) for zero-copy
+/// Instead use [`UniBodyImage`](struct.UniBodyImage.html) for zero-copy
 /// `MemMap` support, at the cost of some potentially factoring required with
 /// not using the default `hyper::Body` type.
 ///

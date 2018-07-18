@@ -10,8 +10,8 @@ use async::tokio::runtime::Runtime as DefaultRuntime;
 fn test_stream_forward_sink_empty() {
     assert!(*LOG_SETUP);
     let tune = Tunables::default();
-    let body = AsyncUniBody::new(BodyImage::empty(), &tune);
-    let asink = AsyncUniSink::new(BodySink::with_ram_buffers(0), tune.clone());
+    let body = UniBodyImage::new(BodyImage::empty(), &tune);
+    let asink = UniBodySink::new(BodySink::with_ram_buffers(0), tune.clone());
     let task = body
         .from_err::<Flare>()
         .forward(asink);
@@ -30,8 +30,8 @@ fn test_stream_forward_sink_empty() {
 fn test_stream_forward_sink_small() {
     assert!(*LOG_SETUP);
     let tune = Tunables::default();
-    let body = AsyncUniBody::new(BodyImage::from_slice("body"), &tune);
-    let asink = AsyncUniSink::new(BodySink::with_ram_buffers(1), tune.clone());
+    let body = UniBodyImage::new(BodyImage::from_slice("body"), &tune);
+    let asink = UniBodySink::new(BodySink::with_ram_buffers(1), tune.clone());
     let task = body
         .from_err::<Flare>()
         .forward(asink);
@@ -53,9 +53,11 @@ fn test_stream_forward_sink_fs() {
     let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
     let in_body = in_body.prepare().unwrap();
-    let abody = AsyncUniBody::new(in_body, &tune);
-    let asink = AsyncUniSink::new(BodySink::with_fs(tune.temp_dir()).unwrap(),
-                                  tune.clone());
+    let abody = UniBodyImage::new(in_body, &tune);
+    let asink = UniBodySink::new(
+        BodySink::with_fs(tune.temp_dir()).unwrap(),
+        tune.clone()
+    );
     let task = abody
         .from_err::<Flare>()
         .forward(asink);
@@ -80,9 +82,8 @@ fn test_stream_forward_sink_fs_back() {
     let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
     let in_body = in_body.prepare().unwrap();
-    let abody = AsyncUniBody::new(in_body, &tune);
-    let asink = AsyncUniSink::new(BodySink::with_ram_buffers(4),
-                                  tune.clone());
+    let abody = UniBodyImage::new(in_body, &tune);
+    let asink = UniBodySink::new(BodySink::with_ram_buffers(4), tune.clone());
     let task = abody
         .from_err::<Flare>()
         .forward(asink);
@@ -109,9 +110,8 @@ fn test_stream_forward_sink_fs_map() {
     let mut in_body = in_body.prepare().unwrap();
     assert!(!in_body.is_ram());
     in_body.mem_map().unwrap();
-    let abody = AsyncUniBody::new(in_body, &tune);
-    let asink = AsyncUniSink::new(BodySink::with_ram_buffers(4),
-                                  tune.clone());
+    let abody = UniBodyImage::new(in_body, &tune);
+    let asink = UniBodySink::new(BodySink::with_ram_buffers(4), tune.clone());
     let task = abody
         .from_err::<Flare>()
         .forward(asink);

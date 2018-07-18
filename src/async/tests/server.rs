@@ -25,7 +25,7 @@ use async::{AsyncBodyImage,
             RequestRecord, RequestRecordableImage, request_dialog};
 
 #[cfg(feature = "mmap")]
-use async::AsyncUniBody;
+use async::UniBodyImage;
 
 #[test]
 fn post_echo_async_body() {
@@ -64,7 +64,7 @@ fn post_echo_async_unibody() {
         .set_buffer_size_fs(17)
         .finish();
     let body = fs_body_image();
-    match rt.block_on(post_body_req::<AsyncUniBody>(&url, body, &tune)) {
+    match rt.block_on(post_body_req::<UniBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
             println!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
@@ -116,7 +116,7 @@ fn post_echo_async_unibody_mmap() {
         .finish();
     let mut body = fs_body_image();
     body.mem_map().unwrap();
-    match rt.block_on(post_body_req::<AsyncUniBody>(&url, body, &tune)) {
+    match rt.block_on(post_body_req::<UniBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
             println!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);

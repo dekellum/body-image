@@ -26,7 +26,7 @@
 //! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
 //!   asynchronous output as a `Stream` and `hyper::body::Payload`.
 //!
-//! * Alternatively, [`AsyncUniBody`](struct.AsyncUniBody.html) (*mmap*
+//! * Alternatively, [`UniBodyImage`](struct.UniBodyImage.html) (*mmap*
 //!   feature) offers zero-copy `MemMap` support, using a custom Data/Item
 //!   type for the hyper Default `Bytes` or `Chunk`.
 //!
@@ -41,20 +41,20 @@ extern crate hyperx;
 extern crate tokio;
 extern crate tokio_threadpool;
 
-mod body_image;
-mod body_sink;
+mod image;
+mod sink;
 
-pub use self::body_sink::AsyncBodySink;
-pub use self::body_image::AsyncBodyImage;
+pub use self::sink::AsyncBodySink;
+pub use self::image::AsyncBodyImage;
 
 #[cfg(feature = "mmap")] mod mem_map_buf;
 #[cfg(feature = "mmap")] use self::mem_map_buf::MemMapBuf;
 
-#[cfg(feature = "mmap")] mod unibody;
-#[cfg(feature = "mmap")] pub use self::unibody::{AsyncUniBody, UniBodyBuf};
+#[cfg(feature = "mmap")] mod uni_image;
+#[cfg(feature = "mmap")] pub use self::uni_image::{UniBodyImage, UniBodyBuf};
 
 #[cfg(feature = "mmap")] mod uni_sink;
-#[cfg(feature = "mmap")] pub use self::uni_sink::AsyncUniSink;
+#[cfg(feature = "mmap")] pub use self::uni_sink::UniBodySink;
 
 use std::mem;
 use std::time::Instant;
