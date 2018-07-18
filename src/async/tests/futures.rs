@@ -7,7 +7,7 @@ use async::tokio::runtime::current_thread::Runtime as CtRuntime;
 use async::tokio::runtime::Runtime as DefaultRuntime;
 
 #[test]
-fn test_stream_forward_sink_empty() {
+fn forward_to_sink_empty() {
     assert!(*LOG_SETUP);
     let tune = Tunables::default();
     let body = UniBodyImage::new(BodyImage::empty(), &tune);
@@ -27,7 +27,7 @@ fn test_stream_forward_sink_empty() {
 }
 
 #[test]
-fn test_stream_forward_sink_small() {
+fn forward_to_sink_small() {
     assert!(*LOG_SETUP);
     let tune = Tunables::default();
     let body = UniBodyImage::new(BodyImage::from_slice("body"), &tune);
@@ -47,7 +47,7 @@ fn test_stream_forward_sink_small() {
 }
 
 #[test]
-fn test_stream_forward_sink_fs() {
+fn forward_to_sink_fs() {
     assert!(*LOG_SETUP);
     let tune = Tuner::new().set_buffer_size_fs(173).finish();
     let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
@@ -73,7 +73,7 @@ fn test_stream_forward_sink_fs() {
 }
 
 #[test]
-fn test_stream_forward_sink_fs_back() {
+fn forward_to_sink_fs_back() {
     assert!(*LOG_SETUP);
     let tune = Tuner::new()
         .set_buffer_size_fs(173)
@@ -99,7 +99,7 @@ fn test_stream_forward_sink_fs_back() {
 }
 
 #[test]
-fn test_stream_forward_sink_fs_map() {
+fn forward_to_sink_fs_map() {
     assert!(*LOG_SETUP);
     let tune = Tuner::new()
         .set_buffer_size_fs(173)
