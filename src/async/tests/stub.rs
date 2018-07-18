@@ -43,17 +43,7 @@ fn test_fs_image_post() {
         .set_buffer_size_fs(17)
         .finish();
     let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
-    body.write_all(
-       "Lorem ipsum dolor sit amet, consectetur adipiscing elit, \
-        sed do eiusmod tempor incididunt ut labore et dolore magna \
-        aliqua. Ut enim ad minim veniam, quis nostrud exercitation \
-        ullamco laboris nisi ut aliquip ex ea commodo \
-        consequat. Duis aute irure dolor in reprehenderit in \
-        voluptate velit esse cillum dolore eu fugiat nulla \
-        pariatur. Excepteur sint occaecat cupidatat non proident, \
-        sunt in culpa qui officia deserunt mollit anim id est \
-        laborum."
-    ).unwrap();
+    body.write_all(vec![b'a'; 445]).unwrap();
     let body = body.prepare().unwrap();
 
     let rq: RequestRecord<hyper::Body> = http::Request::builder()
@@ -81,7 +71,7 @@ fn test_fs_image_post() {
 }
 
 #[test]
-fn test_byte_post() {
+fn test_small_post() {
     assert!(*LOG_SETUP);
     let tune = Tunables::new();
     let rq: RequestRecord<hyper::Body> = http::Request::builder()
@@ -97,6 +87,55 @@ fn test_byte_post() {
     match res {
         Ok(dl) => {
             assert_eq!(dl.res_body.len(), 4);
+        }
+        Err(e) => {
+            panic!("failed with: {}", e);
+        }
+    }
+}
+
+#[test]
+fn test_large_concurrent_constrained() {
+    assert!(*LOG_SETUP);
+
+    let mut pool = tokio::executor::thread_pool::Builder::new();
+    pool.name_prefix("tpool-")
+        .pool_size(1)
+        .max_blocking(2);
+    let mut rt = tokio::runtime::Builder::new()
+        .threadpool_builder(pool)
+        .build().unwrap();
+
+    let rq0 = get_request("http://foo.com/r1").unwrap();
+    let rq1 = get_request("http://for.com/r2").unwrap();
+
+    let client = {
+        hyper_stub::proxy_client_fn_ok(move |req| {
+            let tune = Tuner::new().set_buffer_size_fs(15_999).finish();
+            let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
+            if req.uri() == "http://foo.com/r1" {
+                body.write_all(vec![b'0';  74_333]).unwrap();
+            } else {
+                body.write_all(vec![b'1'; 193_400]).unwrap();
+            }
+            let body = AsyncBodyImage::new(body.prepare().unwrap(), &tune);
+            hyper::Response::new(hyper::Body::wrap_stream(body))
+        })
+    };
+
+    let tune = Tuner::new()
+        .set_max_body_ram(64 * 1024)
+        .finish();
+    let res = rt.block_on(
+        request_dialog(&client, rq0, &tune)
+            .join(request_dialog(&client, rq1, &tune))
+    );
+    match res {
+        Ok((dl0, dl1)) => {
+            assert_eq!(dl0.res_body.len(),  74_333);
+            assert_eq!(dl1.res_body.len(), 193_400);
+            assert!(!dl0.res_body.is_ram());
+            assert!(!dl1.res_body.is_ram());
         }
         Err(e) => {
             panic!("failed with: {}", e);
