@@ -529,7 +529,8 @@ impl BodyImage {
         }
     }
 
-    /// Consume self, *exploding* into the possible `ExplodedImage` variants
+    /// Consume self, *exploding* into an
+    /// [`ExplodedImage`](enum.ExplodedImage.html) variant.
     pub fn explode(self) -> ExplodedImage {
         match self.state {
             ImageState::Ram(v) => ExplodedImage::Ram(v),
@@ -710,7 +711,8 @@ impl fmt::Debug for ImageState {
     }
 }
 
-/// *Exploded* representation of the possible `BodyImage` states.
+/// *Exploded* representation of the possible `BodyImage` states, obtained via
+/// [`BodyImage::explode`](struct.BodyImage.html#method.explode).
 pub enum ExplodedImage {
     Ram(Vec<Bytes>),
     FsRead(ReadSlice),
