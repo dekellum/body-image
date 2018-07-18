@@ -107,6 +107,12 @@ impl Deref for UniBodyBuf {
     }
 }
 
+impl AsRef<[u8]> for UniBodyBuf {
+    fn as_ref(&self) -> &[u8] {
+        self.bytes()
+    }
+}
+
 #[derive(Debug)]
 enum UniBodyState {
     Ram(IntoIter<Bytes>),

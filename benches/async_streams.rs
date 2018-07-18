@@ -8,7 +8,6 @@ extern crate tokio;
 use std::cmp;
 use std::fs;
 use std::io;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use test::Bencher;
@@ -202,12 +201,12 @@ fn stream_22_mmap_copy(b: &mut Bencher) {
 
 fn summarize_stream<S>(stream: S, rt: &mut tokio::runtime::Runtime)
     where S: Stream<Error=io::Error> + Send + 'static,
-          S::Item: Deref<Target=[u8]>
+          S::Item: AsRef<[u8]>
 {
     let task = stream.fold((0u8,0), |(ml, len), item| -> Result<_,io::Error> {
         Ok((
-            cmp::max(ml, *item.last().unwrap()),
-            len + item.len()
+            cmp::max(ml, *item.as_ref().last().unwrap()),
+            len + item.as_ref().len()
         ))
     });
     let res = rt.block_on(task);

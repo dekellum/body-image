@@ -63,3 +63,9 @@ impl Deref for MemMapBuf {
         &self.mm[self.pos..]
     }
 }
+
+impl AsRef<[u8]> for MemMapBuf {
+    fn as_ref(&self) -> &[u8] {
+        &self.mm[self.pos..]
+    }
+}
