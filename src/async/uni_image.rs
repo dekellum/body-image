@@ -12,9 +12,7 @@ use failure::Error as Flare;
 use async::hyper;
 use async::tokio_threadpool;
 use async::futures::{Async, Poll, Stream};
-use async::{MemMapBuf,
-            RequestRecord, RequestRecordableBytes,
-            RequestRecordableEmpty, RequestRecordableImage};
+use async::{MemMapBuf, RequestRecord, RequestRecorder};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
@@ -234,7 +232,7 @@ impl hyper::body::Payload for UniBodyImage {
     }
 }
 
-impl RequestRecordableEmpty<UniBodyImage> for http::request::Builder {
+impl RequestRecorder<UniBodyImage> for http::request::Builder {
     fn record(&mut self) -> Result<RequestRecord<UniBodyImage>, Flare> {
         let request = {
             let body = BodyImage::empty();
@@ -252,9 +250,7 @@ impl RequestRecordableEmpty<UniBodyImage> for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body }
         })
     }
-}
 
-impl RequestRecordableBytes<UniBodyImage> for http::request::Builder {
     fn record_body<BB>(&mut self, body: BB)
        -> Result<RequestRecord<UniBodyImage>, Flare>
        where BB: Into<Bytes>
@@ -276,9 +272,7 @@ impl RequestRecordableBytes<UniBodyImage> for http::request::Builder {
             request,
             prolog: Prolog { method, url, req_headers, req_body } })
     }
-}
 
-impl RequestRecordableImage<UniBodyImage> for http::request::Builder {
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
         -> Result<RequestRecord<UniBodyImage>, Flare>
     {
