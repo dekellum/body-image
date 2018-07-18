@@ -70,31 +70,35 @@ impl AsyncUniBody {
         }
     }
 }
+/// Provides zero-copy read access to both `Bytes` and `Mmap` memory.
+pub struct UniBodyBuf {
+    buf: BufState
+}
 
-pub enum UniBodyBuf {
+enum BufState {
     Bytes(Cursor<Bytes>),
     MemMap(MemMapBuf),
 }
 
 impl Buf for UniBodyBuf {
     fn remaining(&self) -> usize {
-        match self {
-            UniBodyBuf::Bytes(ref c)  => c.remaining(),
-            UniBodyBuf::MemMap(ref b) => b.remaining(),
+        match self.buf {
+            BufState::Bytes(ref c)  => c.remaining(),
+            BufState::MemMap(ref b) => b.remaining(),
         }
     }
 
     fn bytes(&self) -> &[u8] {
-        match self {
-            UniBodyBuf::Bytes(ref c)  => c.bytes(),
-            UniBodyBuf::MemMap(ref b) => b.bytes(),
+        match self.buf {
+            BufState::Bytes(ref c)  => c.bytes(),
+            BufState::MemMap(ref b) => b.bytes(),
         }
     }
 
     fn advance(&mut self, count: usize) {
-        match self {
-            UniBodyBuf::Bytes(ref mut c)  => c.advance(count),
-            UniBodyBuf::MemMap(ref mut b) => b.advance(count),
+        match self.buf {
+            BufState::Bytes(ref mut c)  => c.advance(count),
+            BufState::MemMap(ref mut b) => b.advance(count),
         }
     }
 }
@@ -153,7 +157,9 @@ impl Stream for AsyncUniBody {
                 let n = iter.next();
                 if let Some(b) = n {
                     self.consumed += b.len() as u64;
-                    Ok(Async::Ready(Some(UniBodyBuf::Bytes(b.into_buf()))))
+                    Ok(Async::Ready(Some(UniBodyBuf {
+                        buf: BufState::Bytes(b.into_buf())
+                    })))
                 } else {
                     Ok(Async::Ready(None))
                 }
@@ -178,7 +184,9 @@ impl Stream for AsyncUniBody {
                 if let Ok(Async::Ready(Some(b))) = res {
                     self.consumed += b.len() as u64;
                     debug!("read chunk (blocking, len: {})", b.len());
-                    Ok(Async::Ready(Some(UniBodyBuf::Bytes(b.into_buf()))))
+                    Ok(Async::Ready(Some(UniBodyBuf {
+                        buf: BufState::Bytes(b.into_buf())
+                    })))
                 } else {
                     res.map(|_| Async::Ready(None))
                 }
@@ -193,7 +201,9 @@ impl Stream for AsyncUniBody {
                                mb.remaining());
                         Ok(())
                     });
-                    res.map(|_| Async::Ready(Some(UniBodyBuf::MemMap(mb))))
+                    res.map(|_| Async::Ready(Some(UniBodyBuf {
+                        buf: BufState::MemMap(mb)
+                    })))
                 } else {
                     Ok(Async::Ready(None))
                 }
