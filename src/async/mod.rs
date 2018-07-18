@@ -21,10 +21,14 @@
 //!   _tokio_ applications.
 //!
 //! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
-//!   asynchronous input from a `hyper::Body` stream.
+//!   asynchronous input from a (e.g. `hyper::Body`) `Stream`.
 //!
 //! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
-//!   asynchronous output as a body stream.
+//!   asynchronous output as a `Stream` and `hyper::body::Payload`.
+//!
+//! * Alternatively, [`AsyncUniBody`](struct.AsyncUniBody.html) offers
+//!   zero-copy `MemMap` support, using a custom Data/Item type for the
+//!   hyper Default `Bytes` or `Chunk`.
 //!
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the

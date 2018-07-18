@@ -27,7 +27,6 @@ pub struct AsyncBodySink {
 }
 
 impl AsyncBodySink {
-
     /// Wrap by consuming a `BodySink` and `Tunables` instances.
     ///
     /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
