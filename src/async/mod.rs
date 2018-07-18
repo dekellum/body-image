@@ -26,9 +26,9 @@
 //! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
 //!   asynchronous output as a `Stream` and `hyper::body::Payload`.
 //!
-//! * Alternatively, [`AsyncUniBody`](struct.AsyncUniBody.html) offers
-//!   zero-copy `MemMap` support, using a custom Data/Item type for the
-//!   hyper Default `Bytes` or `Chunk`.
+//! * Alternatively, [`AsyncUniBody`](struct.AsyncUniBody.html) (*mmap*
+//!   feature) offers zero-copy `MemMap` support, using a custom Data/Item
+//!   type for the hyper Default `Bytes` or `Chunk`.
 //!
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the
@@ -52,6 +52,9 @@ pub use self::body_image::AsyncBodyImage;
 
 #[cfg(feature = "mmap")] mod unibody;
 #[cfg(feature = "mmap")] pub use self::unibody::{AsyncUniBody, UniBodyBuf};
+
+#[cfg(feature = "mmap")] mod uni_sink;
+#[cfg(feature = "mmap")] pub use self::uni_sink::AsyncUniSink;
 
 use std::mem;
 use std::time::Instant;
@@ -554,9 +557,8 @@ impl RequestRecordableImage<hyper::Body> for http::request::Builder {
 
 #[cfg(test)]
 mod tests {
-    mod stub;
-    mod server;
-
-    #[cfg(feature = "live_test")]
-    mod live;
+    #[cfg(feature = "mmap")]        mod futures;
+                                    mod stub;
+                                    mod server;
+    #[cfg(feature = "live_test")]   mod live;
 }
