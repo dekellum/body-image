@@ -2,7 +2,7 @@ use ::logger::LOG_SETUP;
 
 use async::*;
 
-fn create_request(url: &str)
+fn get_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, Flare>
 {
     http::Request::builder()
@@ -19,7 +19,7 @@ fn create_request(url: &str)
 fn test_small_http() {
     assert!(*LOG_SETUP);
     let tune = Tunables::new();
-    let req = create_request("http://gravitext.com").unwrap();
+    let req = get_request("http://gravitext.com").unwrap();
 
     let dl = fetch(req, &tune).unwrap();
     println!("Response {:#?}", dl);
@@ -32,7 +32,7 @@ fn test_small_http() {
 fn test_small_https() {
     assert!(*LOG_SETUP);
     let tune = Tunables::new();
-    let req = create_request("https://www.usa.gov").unwrap();
+    let req = get_request("https://www.usa.gov").unwrap();
 
     let dl = fetch(req, &tune).unwrap();
     let dl = dl.clone();
@@ -46,7 +46,7 @@ fn test_small_https() {
 fn test_not_found() {
     assert!(*LOG_SETUP);
     let tune = Tunables::new();
-    let req = create_request("http://gravitext.com/no/existe").unwrap();
+    let req = get_request("http://gravitext.com/no/existe").unwrap();
 
     let dl = fetch(req, &tune).unwrap();
     println!("Response {:#?}", dl);
