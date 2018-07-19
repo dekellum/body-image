@@ -5,6 +5,7 @@ use std::net::TcpListener as StdTcpListener;
 use ::http;
 use ::http::{Request, Response};
 use ::logger::LOG_SETUP;
+
 use failure::Error as Flare;
 
 use async::futures::{Future, Stream};
@@ -20,11 +21,13 @@ use async::hyper::client::{Client, HttpConnector};
 use async::hyper::server::conn::Http;
 use async::hyper::service::service_fn_ok;
 
-use ::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 use async::{AsyncBodyImage, RequestRecord, RequestRecorder, request_dialog};
 
-#[cfg(feature = "mmap")]
-use async::UniBodyImage;
+#[cfg(feature = "mmap")] use async::UniBodyImage;
+#[cfg(feature = "mmap")] use async::hyper::service::service_fn;
+#[cfg(feature = "mmap")] use async::AsyncBodySink;
+
+use ::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 
 #[test]
 fn post_echo_async_body() {
@@ -37,7 +40,7 @@ fn post_echo_async_body() {
     let tune = Tuner::new()
         .set_buffer_size_fs(17)
         .finish();
-    let body = fs_body_image();
+    let body = fs_body_image(445);
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
             println!("{:#?}", dl);
@@ -52,7 +55,7 @@ fn post_echo_async_body() {
 
 #[test]
 #[cfg(feature = "mmap")]
-fn post_echo_async_unibody() {
+fn post_echo_async_body_mmap_copy() {
     assert!(*LOG_SETUP);
 
     let mut rt = new_limited_runtime();
@@ -62,32 +65,7 @@ fn post_echo_async_unibody() {
     let tune = Tuner::new()
         .set_buffer_size_fs(17)
         .finish();
-    let body = fs_body_image();
-    match rt.block_on(post_body_req::<UniBodyImage>(&url, body, &tune)) {
-        Ok(dl) => {
-            println!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 445);
-        }
-        Err(e) => {
-            panic!("failed with: {}", e);
-        }
-    }
-    rt.shutdown_on_idle().wait().unwrap();
-}
-
-#[test]
-#[cfg(feature = "mmap")]
-fn post_echo_async_body_image_mmap_copy() {
-    assert!(*LOG_SETUP);
-
-    let mut rt = new_limited_runtime();
-    let (fut, url) = echo_server();
-    rt.spawn(fut);
-
-    let tune = Tuner::new()
-        .set_buffer_size_fs(17)
-        .finish();
-    let mut body = fs_body_image();
+    let mut body = fs_body_image(445);
     body.mem_map().unwrap();
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
@@ -103,22 +81,32 @@ fn post_echo_async_body_image_mmap_copy() {
 
 #[test]
 #[cfg(feature = "mmap")]
-fn post_echo_async_unibody_mmap() {
+fn post_echo_uni_body() {
+    run_post_echo_uni_body(false);
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn post_echo_uni_body_mmap() {
+    run_post_echo_uni_body(true);
+}
+
+#[cfg(feature = "mmap")]
+fn run_post_echo_uni_body(mmap: bool) {
     assert!(*LOG_SETUP);
 
     let mut rt = new_limited_runtime();
-    let (fut, url) = echo_server();
+    let (fut, url) = echo_server_uni(mmap);
     rt.spawn(fut);
 
     let tune = Tuner::new()
-        .set_buffer_size_fs(17)
+        .set_buffer_size_fs(2048)
         .finish();
-    let mut body = fs_body_image();
-    body.mem_map().unwrap();
+    let body = fs_body_image(194_767);
     match rt.block_on(post_body_req::<UniBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
             println!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 445);
+            assert_eq!(dl.res_body().len(), 194_767);
         }
         Err(e) => {
             panic!("failed with: {}", e);
@@ -127,13 +115,51 @@ fn post_echo_async_unibody_mmap() {
     rt.shutdown_on_idle().wait().unwrap();
 }
 
+/// The most simple body echo'ing server, using hyper body types.
 fn echo_server() -> (impl Future<Item=(), Error=()>, String) {
     let (listener, addr) = local_bind().unwrap();
     let svc = service_fn_ok(move |req: Request<Body>| {
-        Response::builder()
-            .status(200)
-            .body(req.into_body())
-            .unwrap()
+        Response::new(req.into_body())
+    });
+
+    let fut = listener.incoming()
+        .into_future()
+        .map_err(|_| -> hyper::Error { unreachable!() })
+        .and_then(move |(item, _incoming)| {
+            let socket = item.unwrap();
+            Http::new().serve_connection(socket, svc)
+        })
+        .map_err(|_| ());
+
+    (fut, format!("http://{}", &addr))
+}
+
+/// A body echo'ing server, which buffers complete requests (potentially to
+/// disk) using AsyncBodySink and responds with them using a UniBodyImage
+#[cfg(feature = "mmap")]
+fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
+    let (listener, addr) = local_bind().unwrap();
+    let svc = service_fn(move |req: Request<Body>| {
+        let tune = Tuner::new()
+            .set_buffer_size_fs(2734)
+            .set_max_body_ram(15_000)
+            .finish();
+        let asink = AsyncBodySink::new(
+            BodySink::with_ram_buffers(4),
+            tune
+        );
+        req.into_body()
+            .from_err::<Flare>()
+            .forward(asink)
+            .and_then(move |(_strm, asink)| {
+                let tune = Tuner::new().set_buffer_size_fs(4972).finish();
+                let mut bi = asink.into_inner().prepare()?;
+                if mmap { bi.mem_map()?; }
+                Ok(Response::builder()
+                   .status(200)
+                   .body(UniBodyImage::new(bi, &tune))?)
+            })
+            .map_err(|e| e.compat())
     });
 
     let fut = listener.incoming()
@@ -156,20 +182,10 @@ fn local_bind() -> Result<(TcpListener, SocketAddr), io::Error> {
     Ok((listener, local_addr))
 }
 
-fn fs_body_image() -> BodyImage {
+fn fs_body_image(size: usize) -> BodyImage {
     let tune = Tunables::default();
     let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
-    body.write_all(
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, \
-         sed do eiusmod tempor incididunt ut labore et dolore magna \
-         aliqua. Ut enim ad minim veniam, quis nostrud exercitation \
-         ullamco laboris nisi ut aliquip ex ea commodo \
-         consequat. Duis aute irure dolor in reprehenderit in \
-         voluptate velit esse cillum dolore eu fugiat nulla \
-         pariatur. Excepteur sint occaecat cupidatat non proident, \
-         sunt in culpa qui officia deserunt mollit anim id est \
-         laborum."
-    ).unwrap();
+    body.write_all(vec![1; size]).unwrap();
     body.prepare().unwrap()
 }
 
