@@ -8,17 +8,8 @@ use async::*;
 use async::hyper::client::connect::Connect;
 use async::hyper::Client;
 
-fn get_request(url: &str)
-    -> Result<RequestRecord<hyper::Body>, Flare>
-{
-    http::Request::builder()
-        .method(http::Method::GET)
-        .uri(url)
-        .record()
-}
-
 #[test]
-fn test_small_dialog() {
+fn test_small_get() {
     assert!(*LOG_SETUP);
     let tune = Tunables::new();
     let rq = get_request(
@@ -40,44 +31,12 @@ fn test_small_dialog() {
 }
 
 #[test]
-fn test_fs_image_post() {
-    assert!(*LOG_SETUP);
-    let tune = Tuner::new()
-        .set_buffer_size_fs(17)
-        .finish();
-    let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
-    body.write_all(vec![b'a'; 445]).unwrap();
-    let body = body.prepare().unwrap();
-
-    let rq: RequestRecord<hyper::Body> = post_request(body, &tune);
-    let client = hyper_stub::proxy_client_fn_ok(|req| {
-        hyper::Response::new(req.into_body())
-    });
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
-    let res = rt.block_on(request_dialog(&client, rq, &tune));
-    match res {
-        Ok(dl) => {
-            println!("{:#?}", dl);
-            assert_eq!(dl.res_body.len(), 445);
-        }
-        Err(e) => {
-            panic!("failed with: {}", e);
-        }
-    }
-}
-
-#[test]
 fn test_small_post() {
     assert!(*LOG_SETUP);
-    let tune = Tunables::new();
-    let rq: RequestRecord<hyper::Body> = http::Request::builder()
-        .method(http::Method::POST)
-        .uri("http://foobar.com")
-        .record_body(&b"stub"[..])
-        .unwrap();
-    let client = hyper_stub::proxy_client_fn_ok(|req| {
-        hyper::Response::new(req.into_body())
-    });
+    let tune = Tunables::default();
+    let body = BodyImage::from_slice(&b"stub"[..]);
+    let rq: RequestRecord<hyper::Body> = post_request(body, &tune);
+    let client = echo_server_stub();
     let mut rt = tokio::runtime::Runtime::new().unwrap();
     let res = rt.block_on(request_dialog(&client, rq, &tune));
     match res {
@@ -91,7 +50,26 @@ fn test_small_post() {
 }
 
 #[test]
-fn test_large_concurrent_constrained() {
+fn test_large_post() {
+    assert!(*LOG_SETUP);
+    let tune = Tunables::default();
+    let body = fs_body_image(194_767);
+    let rq = post_request(body, &tune);
+    let client = echo_server_stub();
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    let res = rt.block_on(request_dialog(&client, rq, &tune));
+    match res {
+        Ok(dl) => {
+            assert_eq!(dl.res_body.len(), 194_767);
+        }
+        Err(e) => {
+            panic!("failed with: {}", e);
+        }
+    }
+}
+
+#[test]
+fn test_large_concurrent() {
     assert!(*LOG_SETUP);
 
     let mut pool = tokio::executor::thread_pool::Builder::new();
@@ -139,30 +117,21 @@ fn test_large_concurrent_constrained() {
     }
 }
 
-#[test]
-fn test_echo_server() {
-    assert!(*LOG_SETUP);
-    let tune = Tunables::default();
-    let body = fs_body_image(194_767);
-    let rq = post_request(body, &tune);
-    let client = echo_server_stub();
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
-    let res = rt.block_on(request_dialog(&client, rq, &tune));
-    match res {
-        Ok(dl) => {
-            assert_eq!(dl.res_body.len(), 194_767);
-        }
-        Err(e) => {
-            panic!("failed with: {}", e);
-        }
-    }
-}
-
 fn fs_body_image(size: usize) -> BodyImage {
     let tune = Tunables::default();
     let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
     body.write_all(vec![1; size]).unwrap();
     body.prepare().unwrap()
+}
+
+fn get_request(url: &str)
+    -> Result<RequestRecord<hyper::Body>, Flare>
+{
+    http::Request::builder()
+        .method(http::Method::GET)
+        .uri(url)
+        .header(http::header::USER_AGENT, &user_agent()[..])
+        .record()
 }
 
 fn post_request<T>(body: BodyImage, tune: &Tunables) -> RequestRecord<T>
