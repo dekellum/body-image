@@ -14,7 +14,7 @@ ecosystem components:
    RAM, or buffered to a temporary file, and optionally memory mapped. This
    effectively enables trading some file I/O cost in return for supporting
    significantly larger bodies without risk of exhausting RAM. An optional
-   _client_ module adds asynchronous support via _tokio_ and _hyper_
+   _async_ module adds asynchronous support via _futures_, _tokio_ and _hyper_
    integration.
 
 * The BARC container file format, reader and writer is implemented in the
