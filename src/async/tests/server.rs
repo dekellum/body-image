@@ -23,12 +23,11 @@ use async::hyper;
 use async::hyper::Body;
 use async::hyper::client::{Client, HttpConnector};
 use async::hyper::server::conn::Http;
-use async::hyper::service::service_fn_ok;
+use async::hyper::service::{service_fn, service_fn_ok};
 
 use async::{AsyncBodyImage, RequestRecord, RequestRecorder, request_dialog};
 
 #[cfg(feature = "mmap")] use async::UniBodyImage;
-#[cfg(feature = "mmap")] use async::hyper::service::service_fn;
 #[cfg(feature = "mmap")] use async::AsyncBodySink;
 
 use ::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
