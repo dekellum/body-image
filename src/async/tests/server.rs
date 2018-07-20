@@ -128,7 +128,7 @@ fn timeout_before_response() {
 
     let tune = Tuner::new()
         .set_res_timeout(Duration::from_millis(10))
-        .set_body_timeout(Duration::from_millis(100))
+        .set_body_timeout(Duration::from_millis(500))
         .finish();
     match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
         Ok(_) => {
@@ -152,8 +152,8 @@ fn timeout_during_streaming() {
     rt.spawn(fut);
 
     let tune = Tuner::new()
-        .set_res_timeout(Duration::from_millis(35))
-        .set_body_timeout(Duration::from_millis(40))
+        .set_res_timeout(Duration::from_millis(300))
+        .set_body_timeout(Duration::from_millis(350))
         .finish();
     match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
         Ok(_) => {
@@ -229,12 +229,12 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
 
 fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
     let svc = service_fn(move |_req: Request<Body>| {
-        let bi = fs_body_image(50_000);
+        let bi = fs_body_image(0x4000);
         let tune = Tunables::default();
         let now = Instant::now();
-        let delay1 = tokio::timer::Delay::new(now + Duration::from_millis(20))
+        let delay1 = tokio::timer::Delay::new(now + Duration::from_millis(200))
             .map_err(|e| -> http::Error { unreachable!(e) });
-        let delay2 = Delay::new(now + Duration::from_millis(60))
+        let delay2 = Delay::new(now + Duration::from_millis(400))
             .map_err(|e| -> io::Error { unreachable!(e) });
         delay1.and_then(move |()| {
             future::result(Response::builder().status(200).body(
