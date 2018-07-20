@@ -128,7 +128,6 @@ fn timeout_before_response() {
 
     let tune = Tuner::new()
         .set_res_timeout(Duration::from_millis(10))
-        .set_body_timeout(Duration::from_millis(500))
         .finish();
     match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
         Ok(_) => {
@@ -152,8 +151,8 @@ fn timeout_during_streaming() {
     rt.spawn(fut);
 
     let tune = Tuner::new()
-        .set_res_timeout(Duration::from_millis(300))
-        .set_body_timeout(Duration::from_millis(350))
+        .set_res_timeout(Duration::from_millis(500))
+        .set_body_timeout(Duration::from_millis(550))
         .finish();
     match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
         Ok(_) => {
@@ -229,12 +228,12 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
 
 fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
     let svc = service_fn(move |_req: Request<Body>| {
-        let bi = fs_body_image(0x4000);
+        let bi = ram_body_image(0x2000, 8);
         let tune = Tunables::default();
         let now = Instant::now();
         let delay1 = tokio::timer::Delay::new(now + Duration::from_millis(200))
             .map_err(|e| -> http::Error { unreachable!(e) });
-        let delay2 = Delay::new(now + Duration::from_millis(400))
+        let delay2 = Delay::new(now + Duration::from_millis(650))
             .map_err(|e| -> io::Error { unreachable!(e) });
         delay1.and_then(move |()| {
             future::result(Response::builder().status(200).body(
@@ -275,6 +274,14 @@ fn fs_body_image(size: usize) -> BodyImage {
     let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
     body.write_all(vec![1; size]).unwrap();
     body.prepare().unwrap()
+}
+
+fn ram_body_image(csize: usize, count: usize) -> BodyImage {
+    let mut bs = BodySink::with_ram_buffers(count);
+    for _ in 0..count {
+        bs.save(vec![1; csize]).expect("safe for Ram");
+    }
+    bs.prepare().expect("safe for Ram")
 }
 
 fn get_req<T>(url: &str, tune: &Tunables)
