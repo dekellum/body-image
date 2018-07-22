@@ -1,13 +1,13 @@
-//! HTTP client integration and utilities.
+//! Asynchronous HTTP integration and utilities.
 //!
-//! This optional module (via non-default _client_ feature) provides
+//! This optional module (via default _async_ feature) provides
 //! additional integration with the _futures_, _http_, _hyper_ 0.12.x., and
 //! _tokio_ crates.
 //!
-//! * Trait [`RequestRecordable`](trait.RequestRecordable.html) extends
+//! * Trait [`RequestRecorder`](trait.RequestRecorder.html) extends
 //!   `http::request::Builder` for recording a
-//!   [`RequestRecord`](struct.RequestRecord.html), which can then be passed
-//!   to `request_dialog` or `fetch`.
+//!   [`RequestRecord`](struct.RequestRecord.html) of varous body types, which
+//!   can then be passed to `request_dialog` or `fetch`.
 //!
 //! * The [`fetch`](fn.fetch.html) function runs a `RequestRecord` and returns
 //!   a completed [`Dialog`](../struct.Dialog.html) using a single-use client
@@ -19,25 +19,19 @@
 //!   _tokio_ applications.
 //!
 //! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
-//!   fully asynchronous receipt of a `hyper::Body` stream.
+//!   asynchronous input from a (e.g. `hyper::Body`) `Stream`.
+//!
+//! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
+//!   asynchronous output as a `Stream` and `hyper::body::Payload`.
+//!
+//! * Alternatively, [`UniBodySink`](struct.UniBodySink.html) and
+//!   [`UniBodyImage`](struct.UniBodyImage.html) offer zero-copy `MemMap`
+//!   support, using the custom [`UniBodyBuf`](struct.UniBodyBuf.html) item
+//!   buffer type (instead of the `hyper::Chunk` or `Bytes`).
 //!
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
-//!
-//! With the release of _hyper_ 0.12 and _tokio_ reform, the intent is to
-//! evolve this module into a more general purpose _middleware_ type facility,
-//! including:
-//!
-//! * More flexible integration of the recorded `Dialog` into more complete
-//!   _tokio_ applications (partially complete).
-//!
-//! * Asynchronous I/O adaptions for file-based bodies where appropriate and
-//!   beneficial (partially complete, see `AsyncBodySink`).
-//!
-//! * Symmetric support for `BodyImage`/`BodySink` request/response bodies.
-
-#[cfg(test)] extern crate fern;
 
 extern crate futures;
 extern crate hyper;
@@ -46,11 +40,25 @@ extern crate hyperx;
 extern crate tokio;
 extern crate tokio_threadpool;
 
+mod image;
+mod sink;
+
+pub use self::sink::AsyncBodySink;
+pub use self::image::AsyncBodyImage;
+
+#[cfg(feature = "mmap")] mod mem_map_buf;
+#[cfg(feature = "mmap")] use self::mem_map_buf::MemMapBuf;
+
+#[cfg(feature = "mmap")] mod uni_image;
+#[cfg(feature = "mmap")] pub use self::uni_image::{UniBodyImage, UniBodyBuf};
+
+#[cfg(feature = "mmap")] mod uni_sink;
+#[cfg(feature = "mmap")] pub use self::uni_sink::UniBodySink;
+
 use std::mem;
 use std::time::Instant;
 
-#[cfg(feature = "brotli")]
-use brotli;
+#[cfg(feature = "brotli")] use ::brotli;
 
 use bytes::Bytes;
 
@@ -59,9 +67,10 @@ use bytes::Bytes;
 use failure::Error as Flare;
 
 use flate2::read::{DeflateDecoder, GzDecoder};
-use self::futures::{future, Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
+use self::futures::{future, Future, Stream};
+use self::futures::future::Either;
+
 use http;
-use self::hyper::{Chunk, Client};
 use self::hyperx::header::{ContentEncoding, ContentLength,
                            Encoding as HyEncoding,
                            Header, TransferEncoding, Raw};
@@ -70,9 +79,6 @@ use self::tokio::util::FutureExt;
 
 use {BodyImage, BodySink, BodyError, Encoding,
      Prolog, Dialog, RequestRecorded, Tunables, VERSION};
-
-/// The HTTP request (with body) type
-type HyRequest = http::Request<hyper::Body>;
 
 /// Appropriate value for the HTTP accept-encoding request header, including
 /// (br)otli when the brotli feature is configured.
@@ -92,10 +98,13 @@ pub static BROWSE_ACCEPT: &str =
      */*;q=0.8";
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
-/// function constructs a default *tokio* `Runtime`, `HttpsConnector`, and
-/// *hyper* `Client` in a simplistic form internally, waiting with timeout,
-/// and dropping these on completion.
-pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
+/// function constructs a default *tokio* `Runtime`,
+/// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
+/// internally, waiting with timeout, and dropping these on completion.
+pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
+    -> Result<Dialog, Flare>
+    where B: hyper::body::Payload + Send
+{
     let mut pool = tokio::executor::thread_pool::Builder::new();
     pool.name_prefix("tpool-")
         .pool_size(2)
@@ -104,20 +113,21 @@ pub fn fetch(rr: RequestRecord, tune: &Tunables) -> Result<Dialog, Flare> {
         .threadpool_builder(pool)
         .build().unwrap();
     let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
-    let client = Client::builder().build(connector);
+    let client = hyper::Client::builder().build(connector);
     rt.block_on(request_dialog(&client, rr, tune))
     // Drop of `rt`, here, is equivalent to shutdown_now and wait
 }
 
-/// Given a suitable `Client` and `RequestRecord`, return a
+/// Given a suitable `hyper::Client` and `RequestRecord`, return a
 /// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
 /// (initial response and complete body) and if the response `BodyImage` will
 /// be in `Ram` or `FsRead`.
-pub fn request_dialog<CN>(client: &Client<CN, hyper::Body>,
-                          rr: RequestRecord,
-                          tune: &Tunables)
+pub fn request_dialog<CN, B>(client: &hyper::Client<CN, B>,
+                             rr: RequestRecord<B>,
+                             tune: &Tunables)
     -> impl Future<Item=Dialog, Error=Flare> + Send
-    where CN: hyper::client::connect::Connect + Sync + 'static
+    where CN: hyper::client::connect::Connect + Sync + 'static,
+          B: hyper::body::Payload + Send
 {
     let prolog = rr.prolog;
     let tune = tune.clone();
@@ -313,7 +323,7 @@ pub fn user_agent() -> String {
 }
 
 fn resp_future(monolog: Monolog, tune: Tunables)
-    -> Box<Future<Item=InDialog, Error=Flare> + Send>
+    -> impl Future<Item=InDialog, Error=Flare> + Send
 {
     let (resp_parts, body) = monolog.response.into_parts();
 
@@ -332,7 +342,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     // Unwrap BodySink, returning any error as Future
     let bsink = match bsink {
         Ok(b) => b,
-        Err(e) => { return Box::new(future::err(e)); }
+        Err(e) => { return Either::A(future::err(e)); }
     };
 
     let async_body = AsyncBodySink::new(bsink, tune);
@@ -345,7 +355,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
         res_body:    BodySink::empty() // tmp, swap'ed below.
     };
 
-    Box::new(
+    Either::B(
         body.from_err::<Flare>()
             .forward(async_body)
             .and_then(|(_strm, mut async_body)| {
@@ -353,98 +363,6 @@ fn resp_future(monolog: Monolog, tune: Tunables)
                 Ok(in_dialog)
             })
     )
-}
-
-/// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
-/// allows a `hyper::Body` stream to be forwarded (e.g. via
-/// `futures::Stream::forward`) to a `BodySink`, in a fully asynchronous
-/// fashion.
-///
-/// `Tunables` are used during the streaming to decide when to write back a
-/// BodySink in `Ram` to `FsWrite`.  This implementation uses
-/// `tokio_threadpool::blocking` to request becoming a backup thread for
-/// blocking operations including `BodySink::write_back` and
-/// `BodySink::write_all` (state `FsWrite`). It may thus only be used on the
-/// tokio threadpool. If the `max_blocking` number of backup threads is
-/// reached, and a blocking operation is required, then this implementation
-/// will appear *full*, with `start_send` returning
-/// `Ok(AsyncSink::NotReady(chunk)`, until a backup thread becomes available
-/// or any timeout occurs.
-pub struct AsyncBodySink {
-    body: BodySink,
-    tune: Tunables,
-}
-
-impl AsyncBodySink {
-
-    /// Wrap `BodySink` and `Tunables` instance.
-    pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
-        AsyncBodySink { body, tune }
-    }
-
-    /// The inner `BodySink` as constructed.
-    pub fn body(&self) -> &BodySink {
-        &self.body
-    }
-
-    /// A mutable reference to the inner `BodySink`.
-    pub fn body_mut(&mut self) -> &mut BodySink {
-        &mut self.body
-    }
-
-    /// Unwrap and return the `BodySink`.
-    pub fn into_inner(self) -> BodySink {
-        self.body
-    }
-}
-
-macro_rules! unblock {
-    ($c:ident, || $b:block) => (match tokio_threadpool::blocking(|| $b) {
-        Ok(Async::Ready(Ok(_))) => (),
-        Ok(Async::Ready(Err(e))) => return Err(e.into()),
-        Ok(Async::NotReady) => {
-            debug!("No blocking backup thread available -> NotReady");
-            return Ok(AsyncSink::NotReady($c));
-        }
-        Err(e) => return Err(e.into())
-    })
-}
-
-impl Sink for AsyncBodySink {
-    type SinkItem = Chunk;
-    type SinkError = Flare;
-
-    fn start_send(&mut self, chunk: Chunk) -> StartSend<Chunk, Flare> {
-        let new_len = self.body.len() + (chunk.len() as u64);
-        if new_len > self.tune.max_body() {
-            bail!("Response stream too long: {}+", new_len);
-        }
-        if self.body.is_ram() && new_len > self.tune.max_body_ram() {
-            unblock!(chunk, || {
-                debug!("to write back file (blocking, len: {})", new_len);
-                self.body.write_back(self.tune.temp_dir())
-            })
-        }
-        if self.body.is_ram() {
-            debug!("to save chunk (len: {})", chunk.len());
-            self.body.save(chunk).map_err(Flare::from)?;
-        } else {
-            unblock!(chunk, || {
-                debug!("to write chunk (blocking, len: {})", chunk.len());
-                self.body.write_all(&chunk)
-            })
-        }
-
-        Ok(AsyncSink::Ready)
-    }
-
-    fn poll_complete(&mut self) -> Poll<(), Flare> {
-        Ok(Async::Ready(()))
-    }
-
-    fn close(&mut self) -> Poll<(), Flare> {
-        Ok(Async::Ready(()))
-    }
 }
 
 fn check_length(v: &http::header::HeaderValue, max: u64)
@@ -461,15 +379,15 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
 /// methods for `RequestRecord` are found in trait implementation
 /// [`RequestRecorded`](#impl-RequestRecorded).
 ///
-/// _Limitations:_ This can't be `Clone`, because
-/// `http::Request<client::hyper::Body>` isn't `Clone`.
+/// _Limitations:_ This can't be `Clone`, because `B = client::hyper::Body`
+/// isn't `Clone`.
 #[derive(Debug)]
-pub struct RequestRecord {
-    request:      HyRequest,
+pub struct RequestRecord<B> {
+    request:      http::Request<B>,
     prolog:       Prolog,
 }
 
-impl RequestRecord {
+impl<B> RequestRecord<B> {
     /// The HTTP method (verb), e.g. `GET`, `POST`, etc.
     pub fn method(&self)  -> &http::Method         { &self.prolog.method }
 
@@ -477,10 +395,10 @@ impl RequestRecord {
     pub fn url(&self)     -> &http::Uri            { &self.prolog.url }
 
     /// Return the HTTP request.
-    pub fn request(&self) -> &HyRequest            { &self.request }
+    pub fn request(&self) -> &http::Request<B>     { &self.request }
 }
 
-impl RequestRecorded for RequestRecord {
+impl<B> RequestRecorded for RequestRecord<B> {
     fn req_headers(&self) -> &http::HeaderMap      { &self.prolog.req_headers }
     fn req_body(&self)    -> &BodyImage            { &self.prolog.req_body }
 }
@@ -525,28 +443,39 @@ impl InDialog {
     }
 }
 
-/// Extension trait for `http::request::Builder`, to enable recording
-/// key portions of the request for the final `Dialog`.
+/// Type alias for body-image ≤0.3.0 compatibility
+pub type RequestRecordable = RequestRecorder<hyper::Body>;
+
+/// Extension trait for `http::request::Builder`, to enable recording key
+/// portions of the request for the final `Dialog`.
 ///
-/// In particular any request body (e.g. POST, PUT) needs to be cloned in
-/// advance of finishing the request, though this is inexpensive via
-/// `Bytes::clone`.
-///
-/// _Limitation_: Currently only a single contiguous RAM buffer
-/// (implementing `Into<Bytes>`) is supported as the request body.
-pub trait RequestRecordable {
+/// Other request fields (`method`, `uri`, `headers`) are recorded by `clone`,
+/// after finishing the request.
+
+/// The request body is cloned in advance of finishing the request, though
+/// this is inexpensive via `Bytes::clone` or `BodyImage::clone`. Other
+/// request fields (`method`, `uri`, `headers`) are recorded by `clone`, after
+/// finishing the request.
+pub trait RequestRecorder<B>
+    where B: hyper::body::Payload + Send
+{
     /// Short-hand for completing the builder with an empty body, as is
     /// the case with many HTTP request methods (e.g. GET).
-    fn record(&mut self) -> Result<RequestRecord, Flare>;
+    fn record(&mut self) -> Result<RequestRecord<B>, Flare>;
 
-    /// Complete the builder with any request body that can be converted to a
+    /// Complete the builder with any body that can be converted to a (Ram)
     /// `Bytes` buffer.
-    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, Flare>
-        where B: Into<Bytes>;
+    fn record_body<BB>(&mut self, body: BB)
+        -> Result<RequestRecord<B>, Flare>
+        where BB: Into<Bytes>;
+
+    /// Complete the builder with a `BodyImage` for the request body.
+    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
+        -> Result<RequestRecord<B>, Flare>;
 }
 
-impl RequestRecordable for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord, Flare> {
+impl RequestRecorder<hyper::Body> for http::request::Builder {
+    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flare> {
         let request = self.body(hyper::Body::empty())?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -556,11 +485,13 @@ impl RequestRecordable for http::request::Builder {
 
         Ok(RequestRecord {
             request,
-            prolog: Prolog { method, url, req_headers, req_body } })
+            prolog: Prolog { method, url, req_headers, req_body }
+        })
     }
 
-    fn record_body<B>(&mut self, body: B) -> Result<RequestRecord, Flare>
-        where B: Into<Bytes>
+    fn record_body<BB>(&mut self, body: BB)
+       -> Result<RequestRecord<hyper::Body>, Flare>
+       where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
         let buf_copy: Bytes = buf.clone();
@@ -579,174 +510,30 @@ impl RequestRecordable for http::request::Builder {
             request,
             prolog: Prolog { method, url, req_headers, req_body } })
     }
+
+    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
+        -> Result<RequestRecord<hyper::Body>, Flare>
+    {
+        let request = if !body.is_empty() {
+            let stream = AsyncBodyImage::new(body.clone(), tune);
+            self.body(hyper::Body::wrap_stream(stream))?
+        } else {
+            self.body(hyper::Body::empty())?
+        };
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body: body } })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use ::std;
-    use ::std::time::Duration;
-
-    use ::log;
-
-    use ::Tuner;
-    use super::*;
-
-    fn create_request(url: &str) -> Result<RequestRecord, Flare> {
-        http::Request::builder()
-            .method(http::Method::GET)
-            .header(http::header::ACCEPT, BROWSE_ACCEPT)
-            .header(http::header::ACCEPT_LANGUAGE, "en")
-            .header(http::header::ACCEPT_ENCODING, ACCEPT_ENCODINGS)
-            .header(http::header::USER_AGENT, &user_agent()[..])
-            .uri(url)
-            .record()
-    }
-
-    #[test]
-    fn test_small_http() {
-        assert!(*LOG_SETUP);
-        let tune = Tunables::new();
-        let req = create_request("http://gravitext.com").unwrap();
-
-        let dl = fetch(req, &tune).unwrap();
-        println!("Response {:#?}", dl);
-
-        assert!(dl.res_body.is_ram());
-        assert!(dl.res_body.len() > 0);
-    }
-
-    #[test]
-    fn test_small_https() {
-        assert!(*LOG_SETUP);
-        let tune = Tunables::new();
-        let req = create_request("https://www.usa.gov").unwrap();
-
-        let dl = fetch(req, &tune).unwrap();
-        let dl = dl.clone();
-        println!("Response {:#?}", dl);
-
-        assert!(dl.res_body.is_ram());
-        assert!(dl.res_body.len() > 0);
-    }
-
-    #[test]
-    fn test_not_found() {
-        assert!(*LOG_SETUP);
-        let tune = Tunables::new();
-        let req = create_request("http://gravitext.com/no/existe").unwrap();
-
-        let dl = fetch(req, &tune).unwrap();
-        println!("Response {:#?}", dl);
-
-        assert_eq!(dl.status.as_u16(), 404);
-
-        assert!(dl.res_body.is_ram());
-        assert!(dl.res_body.len() > 0);
-        assert!(dl.res_body.len() < 1000);
-    }
-
-    #[test]
-    fn test_large_http() {
-        assert!(*LOG_SETUP);
-        let tune = Tuner::new()
-            .set_max_body_ram(64 * 1024)
-            .finish();
-        let req = create_request(
-            "http://gravitext.com/images/jakarta_slum.jpg"
-        ).unwrap();
-        let dl = fetch(req, &tune).unwrap();
-        println!("Response {:#?}", dl);
-
-        assert!(dl.res_body.len() > (64 * 1024));
-        assert!(!dl.res_body.is_ram());
-    }
-
-    #[test]
-    fn test_large_parallel_constrained() {
-        assert!(*LOG_SETUP);
-        let tune = Tuner::new()
-            .set_max_body_ram(64 * 1024)
-            .set_res_timeout(Duration::from_secs(15))
-            .set_body_timeout(Duration::from_secs(55))
-            .finish();
-
-        let mut pool = tokio::executor::thread_pool::Builder::new();
-        pool.name_prefix("tpool-")
-            .pool_size(1)
-            .max_blocking(2);
-        let mut rt = tokio::runtime::Builder::new()
-            .threadpool_builder(pool)
-            .build().unwrap();
-
-        let client = Client::new();
-
-        let rq0 = create_request(
-            "http://cache.ruby-lang.org/pub/ruby/1.8/ChangeLog-1.8.2"
-        ).unwrap();
-        let rq1 = create_request(
-            "http://cache.ruby-lang.org/pub/ruby/1.8/ChangeLog-1.8.3"
-        ).unwrap();
-
-        let res = rt.block_on(
-            request_dialog(&client, rq0, &tune)
-                .join(request_dialog(&client, rq1, &tune))
-        );
-        match res {
-            Ok((dl0, dl1)) => {
-                assert_eq!(dl0.res_body.len(), 333_210);
-                assert_eq!(dl1.res_body.len(), 134_827);
-                assert!(!dl0.res_body.is_ram());
-                assert!(!dl1.res_body.is_ram());
-            }
-            Err(e) => {
-                panic!("failed with: {}", e);
-            }
-        }
-    }
-
-    // Use lazy static to ensure we only setup logging once (by first test and
-    // thread)
-    lazy_static! {
-        pub static ref LOG_SETUP: bool = setup_logger();
-    }
-
-    fn setup_logger() -> bool {
-        let level = if let Ok(l) = std::env::var("TEST_LOG") {
-            l.parse().unwrap()
-        } else {
-            0
-        };
-        if level == 0 { return true; }
-
-        let mut disp = fern::Dispatch::new()
-            .format(|out, message, record| {
-                let t = std::thread::current();
-                out.finish(format_args!(
-                    "{} {} {}: {}",
-                    record.level(),
-                    record.target(),
-                    t.name().map(str::to_owned)
-                        .unwrap_or_else(|| format!("{:?}", t.id())),
-                    message
-                ))
-            });
-        disp = if level == 1 {
-            disp.level(log::LevelFilter::Info)
-        } else {
-            disp.level(log::LevelFilter::Debug)
-        };
-
-        if level < 2 {
-            // These are only for record/client deps, but are harmless if not
-            // loaded.
-            disp = disp
-                .level_for("hyper::proto",  log::LevelFilter::Info)
-                .level_for("tokio_core",    log::LevelFilter::Info)
-                .level_for("tokio_reactor", log::LevelFilter::Info);
-        }
-        disp.chain(std::io::stderr())
-            .apply().expect("setup logger");
-
-        true
-    }
+    #[cfg(feature = "mmap")]        mod futures;
+                                    mod stub;
+                                    mod server;
+    #[cfg(feature = "live_test")]   mod live;
 }

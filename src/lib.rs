@@ -1,13 +1,13 @@
 //! This crate provides a few separately usable but closely related HTTP
 //! ecosystem components.
 //!
-//! In the _root_ module, the [`BodyImage`](struct.BodyImage.html) struct
-//! and supporting types provides a strategy for safely handling
-//! potentially large HTTP request or response bodies without risk of
-//! allocation failure, or the need to impose awkwardly low size limits in the
-//! face of high concurrency. `Tunables` size thresholds can be used to decide
-//! when to accumulate the body in RAM vs the filesystem, including when the
-//! length is unknown in advance.
+//! In the _root_ module, [`BodyImage`](struct.BodyImage.html),
+//! [`BodySink`](struct.BodySink.html) and supporting types provide a
+//! strategy for safely handling potentially large HTTP request or response
+//! bodies without risk of allocation failure, or the need to impose awkwardly
+//! low size limits in the face of high concurrency. `Tunables` size
+//! thresholds can be used to decide when to accumulate the body in RAM vs the
+//! filesystem, including when the length is unknown in advance.
 //!
 //! See the top level README for additional rationale.
 //!
@@ -21,24 +21,28 @@
 //!
 //! ## Optional Features
 //!
-//! The following features may be enabled or disabled at build time:
+//! The following features may be enabled or disabled at build time. All are
+//! enabled by default.
 //!
-//! _client (non-default):_ The [client module](client/index.html) for
-//! recording of HTTP `Dialog`s via _hyper_ 0.12.x and _tokio_.
+//! _async:_ The [async module](async/index.html) for input to
+//! `BodySink`, output of `BodyImage`, and recording of HTTP `Dialog`s via
+//! _hyper_ 0.12+ and _tokio_. Originally the *async* module was named
+//! *client* , but this would be misleading as *async* is also usable in a
+//! server (request or response contexts as well).  The *client* path name,
+//! now a re-export, is deprecated as of 0.4.0 in preference to the *async*
+//! name.
 //!
-//! _cli (default):_ The `barc` command line tool for viewing
+//! _cli:_ The `barc` command line tool for viewing
 //! (e.g. compressed) records and copying records across BARC files. If the
-//! _client_ feature is enabled, than a `record` command is also provided for
+//! _async_ feature is enabled, than a `record` command is also provided for
 //! live BARC recording from the network.
 //!
-//! _brotli (default):_ Brotli transfer/content decoding in the _client_, and
-//! Brotli BARC record compression, via the native-rust _brotli_ crate. (Gzip,
+//! _brotli:_ Brotli transfer/content decoding in _async_ module, and Brotli BARC
+//! record compression (in _barc_), via the native-rust _brotli_ crate. (Gzip,
 //! via the _flate2_ crate, is standard.)
 //!
-//! _mmap (default):_ Adds `BodyImage::mem_map` support for memory mapping
+//! _mmap:_ Adds `BodyImage::mem_map` support for memory mapping
 //! from `FsRead` state.
-//!
-//! For complete functionally, build or install with `--all-features`.
 
 #[cfg(feature = "brotli")] extern crate brotli;
                            extern crate bytes;
@@ -46,15 +50,24 @@
                            extern crate flate2;
                            extern crate http;
                            extern crate httparse;
-#[cfg(all(test, feature = "client"))]
-#[macro_use]               extern crate lazy_static;
+#[cfg(test)] #[macro_use]  extern crate lazy_static;
 #[macro_use]               extern crate log;
                            extern crate olio;
 #[cfg(feature = "mmap")]   extern crate memmap;
                            extern crate tempfile;
+#[cfg(all(unix, feature = "mmap"))] extern crate libc;
 
                            pub mod barc;
-#[cfg(feature = "client")] pub mod client;
+#[cfg(feature = "async")]  pub mod async;
+#[cfg(feature = "mmap")]   pub(crate) mod mem_util;
+
+#[cfg(test)]               pub(crate) mod logger;
+
+// See note on *async* feature above. For whatever reason, rustdoc doesn't
+// currently show this deprecation in the re-exports section.
+#[cfg(feature = "async")]
+#[deprecated(since="0.4.0", note="use async module path")]
+pub use async as client;
 
 use std::env;
 use std::fmt;
@@ -424,6 +437,15 @@ impl BodyImage {
         }
     }
 
+    /// Return true if in state `MemMap`.
+    #[cfg(feature = "mmap")]
+    pub fn is_mem_map(&self) -> bool {
+        match self.state {
+            ImageState::MemMap(_) => true,
+            _ => false
+        }
+    }
+
     /// Return the current length of body in bytes.
     pub fn len(&self) -> u64 {
         self.len
@@ -495,7 +517,7 @@ impl BodyImage {
                 }
             }
             ImageState::FsRead(ref f) => {
-                BodyReader::File(ReadPos::new(f.clone(), self.len))
+                BodyReader::FileSlice(ReadSlice::new(f.clone(), 0, self.len))
             }
             ImageState::FsReadSlice(ref rslice) => {
                 BodyReader::FileSlice(rslice.clone())
@@ -504,6 +526,20 @@ impl BodyImage {
             ImageState::MemMap(ref m) => {
                 BodyReader::Contiguous(Cursor::new(m))
             }
+        }
+    }
+
+    /// Consume self, *exploding* into an
+    /// [`ExplodedImage`](enum.ExplodedImage.html) variant.
+    pub fn explode(self) -> ExplodedImage {
+        match self.state {
+            ImageState::Ram(v) => ExplodedImage::Ram(v),
+            ImageState::FsRead(f) => {
+                ExplodedImage::FsRead(ReadSlice::new(f, 0, self.len))
+            }
+            ImageState::FsReadSlice(rs) => ExplodedImage::FsRead(rs),
+            #[cfg(feature = "mmap")]
+            ImageState::MemMap(m) => ExplodedImage::MemMap(m),
         }
     }
 
@@ -579,7 +615,17 @@ impl BodyImage {
             }
             #[cfg(feature = "mmap")]
             ImageState::MemMap(ref m) => {
+                mem_util::advise(
+                    m.as_ref(),
+                    &[mem_util::MemoryAccess::Sequential]
+                )?;
+
                 out.write_all(m)?;
+
+                mem_util::advise(
+                    m.as_ref(),
+                    &[mem_util::MemoryAccess::Normal]
+                )?;
             }
             ImageState::FsRead(ref f) => {
                 let mut rp = ReadPos::new(f.clone(), self.len);
@@ -665,6 +711,15 @@ impl fmt::Debug for ImageState {
     }
 }
 
+/// *Exploded* representation of the possible `BodyImage` states, obtained via
+/// [`BodyImage::explode`](struct.BodyImage.html#method.explode).
+pub enum ExplodedImage {
+    Ram(Vec<Bytes>),
+    FsRead(ReadSlice),
+    #[cfg(feature = "mmap")]
+    MemMap(Arc<Mmap>),
+}
+
 /// Provides a `Read` reference for a `BodyImage` in any state.
 pub enum BodyReader<'a> {
     /// `Cursor` over a contiguous single RAM buffer, from `Ram` or
@@ -679,6 +734,7 @@ pub enum BodyReader<'a> {
     /// `ReadPos` providing instance independent, unbuffered `Read` and `Seek`
     /// for BodyImage `FsRead` state. Consider wrapping this in
     /// `std::io::BufReader` if performing many small reads.
+    #[deprecated(since="0.4.0", note="FileSlice is returned instead")]
     File(ReadPos),
 
     /// `ReadSlice` providing instance independent, unbuffered `Read` and
@@ -690,12 +746,16 @@ pub enum BodyReader<'a> {
 
 impl<'a> BodyReader<'a> {
     /// Return the `Read` reference.
+    #[allow(deprecated)]
     pub fn as_read(&mut self) -> &mut Read {
         match *self {
             BodyReader::Contiguous(ref mut cursor) => cursor,
             BodyReader::Scattered(ref mut gatherer) => gatherer,
-            BodyReader::File(ref mut rpos) => rpos,
             BodyReader::FileSlice(ref mut rslice) => rslice,
+            BodyReader::File(_) => {
+                unreachable!("BodyReader::File deprecated, \
+                              replaced with FileSlice")
+            }
         }
     }
 }
@@ -849,13 +909,13 @@ impl Tunables {
         self.max_body
     }
 
-    /// Return the buffer size in bytes to use when buffering for output in
-    /// RAM. Default: 8 KiB.
+    /// Return the buffer size in bytes to use when buffering to RAM.
+    /// Default: 8 KiB.
     pub fn buffer_size_ram(&self) -> usize {
         self.buffer_size_ram
     }
 
-    /// Return the buffer size in bytes to use when buffering for output to
+    /// Return the buffer size in bytes to use when buffering to/from
     /// the file-system. Default: 64 KiB.
     pub fn buffer_size_fs(&self) -> usize {
         self.buffer_size_fs
@@ -929,15 +989,15 @@ impl Tuner {
         self
     }
 
-    /// Set the buffer size in bytes to use when buffering for output in RAM.
+    /// Set the buffer size in bytes to use when buffering to RAM.
     pub fn set_buffer_size_ram(&mut self, size: usize) -> &mut Tuner {
         assert!(size > 0, "buffer_size_ram must be greater than zero");
         self.template.buffer_size_ram = size;
         self
     }
 
-    /// Set the buffer size in bytes to use when buffering for output to the
-    /// file-system.
+    /// Set the buffer size in bytes to use when buffering to/from
+    /// the file-system.
     pub fn set_buffer_size_fs(&mut self, size: usize) -> &mut Tuner {
         assert!(size > 0, "buffer_size_fs must be greater than zero");
         self.template.buffer_size_fs = size;
@@ -1191,7 +1251,7 @@ mod root {
         body.write_all("hello").unwrap();
         body.write_all(" ").unwrap();
         body.write_all("world").unwrap();
-        if let Err(_) = body.write_back(tune.temp_dir()) {
+        if body.write_back(tune.temp_dir()).is_err() {
             assert!(body.is_ram());
             assert_eq!(body.len(), 0);
         } else {

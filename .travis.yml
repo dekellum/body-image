@@ -3,6 +3,7 @@ sudo: false
 script:
   - 'if [ "$WITH_LOCK" != "true" ]; then cargo update; fi'
   - 'cargo test --no-default-features'
+  - 'cargo test --no-default-features --features client'
   - 'cargo test'
   - 'cargo test --all-features'
 cache: cargo

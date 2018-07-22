@@ -38,6 +38,7 @@ httparse   = ">=1.2.4, <2"
 hyper      = { version = ">=0.12.1, <2", optional = true }
 hyper-tls  = { version = ">=0.2.0, <2",  optional = true }
 hyperx     = { version = ">=0.12.0, <2", optional = true }
+libc       = { version = ">=0.2.42, <2", optional = true }
 log        = ">=0.4.0, <2"
 olio       = { version = ">=0.2.0, <2", default-features = false }
 memmap     = { version = ">=0.6.2, <2", optional = true }
@@ -46,11 +47,13 @@ tokio      = { version = ">=0.1.7, <0.2", optional = true }
 tokio-threadpool = { version = ">=0.1.4, <0.2", optional = true }
 
 [features]
-default = ["mmap", "brotli", "cli"]
-client = ["futures", "hyper", "hyper-tls", "hyperx",
+default = ["mmap", "brotli", "cli", "async"]
+async = ["futures", "hyper", "hyper-tls", "hyperx",
           "tokio", "tokio-threadpool"]
 cli = ["fern", "clap"]
-mmap = ["memmap", "olio/mmap"]
+mmap = ["memmap", "olio/mmap", "libc"]
+live_test = ["async"] # Internet based http(s) tests
+client = ["async"] # older synonym
 
 [lib]
 doctest = false
@@ -65,8 +68,9 @@ doc = false
 required-features = ["cli"]
 
 [package.metadata.docs.rs]
-features = ["mmap", "brotli", "client"]
+features = ["mmap", "brotli", "async"]
 
 [dev-dependencies]
 lazy_static = { version = ">=1.0.1, <2" }
 fern        = { version = ">=0.5.5, <2" }
+hyper-stub  = { version = ">=0.1.0, <2" }
