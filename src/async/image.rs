@@ -152,6 +152,7 @@ impl Stream for AsyncBodyImage {
                         Ok(0) => Ok(None),
                         Ok(len) => {
                             unsafe { buf.advance_mut(len); }
+                            debug!("read chunk (blocking, len: {})", len);
                             Ok(Some(buf.freeze()))
                         }
                         Err(e) => Err(e)
@@ -159,7 +160,6 @@ impl Stream for AsyncBodyImage {
                 });
                 if let Ok(Async::Ready(Some(ref b))) = res {
                     self.consumed += b.len() as u64;
-                    debug!("read chunk (blocking, len: {})", b.len())
                 }
                 res
             }
@@ -189,11 +189,11 @@ impl Stream for AsyncBodyImage {
                         &[mem_util::MemoryAccess::Normal]
                     ).ok();
 
+                    debug!("MemMap copy to chunk (blocking, len: {})", b.len());
                     Ok(Some(b))
                 });
                 if let Ok(Async::Ready(Some(ref b))) = res {
                     self.consumed += b.len() as u64;
-                    debug!("MemMap copy to chunk (blocking, len: {})", b.len())
                 }
                 res
             }

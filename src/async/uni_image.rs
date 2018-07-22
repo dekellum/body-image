@@ -179,20 +179,17 @@ impl Stream for UniBodyImage {
                         Ok(0) => Ok(None),
                         Ok(len) => {
                             unsafe { buf.advance_mut(len); }
-                            Ok(Some(buf.freeze()))
+                            let b = buf.freeze().into_buf();
+                            debug!("read chunk (blocking, len: {})", len);
+                            Ok(Some(UniBodyBuf { buf: BufState::Bytes(b) }))
                         }
                         Err(e) => Err(e)
                     }
                 });
-                if let Ok(Async::Ready(Some(b))) = res {
+                if let Ok(Async::Ready(Some(ref b))) = res {
                     self.consumed += b.len() as u64;
-                    debug!("read chunk (blocking, len: {})", b.len());
-                    Ok(Async::Ready(Some(UniBodyBuf {
-                        buf: BufState::Bytes(b.into_buf())
-                    })))
-                } else {
-                    res.map(|_| Async::Ready(None))
                 }
+                res
             }
             UniBodyState::MemMap(ref mut ob) => {
                 let d = ob.take();
@@ -200,13 +197,13 @@ impl Stream for UniBodyImage {
                     let res = unblock( || {
                         mb.advise_sequential()?;
                         let _b = mb.bytes()[0];
-                        debug!("read MemMapBuf (blocking, len: {})",
-                               mb.remaining());
-                        Ok(())
+                        debug!("prepared MemMap (blocking, len: {})", mb.len());
+                        Ok(Some(UniBodyBuf { buf: BufState::MemMap(mb) }))
                     });
-                    res.map(|_| Async::Ready(Some(UniBodyBuf {
-                        buf: BufState::MemMap(mb)
-                    })))
+                    if let Ok(Async::Ready(Some(ref b))) = res {
+                        self.consumed += b.len() as u64;
+                    }
+                    res
                 } else {
                     Ok(Async::Ready(None))
                 }
