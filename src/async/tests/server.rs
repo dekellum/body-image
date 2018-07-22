@@ -228,7 +228,7 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
 
 fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
     let svc = service_fn(move |_req: Request<Body>| {
-        let bi = ram_body_image(0x2000, 8);
+        let bi = ram_body_image(0x2000, 64);
         let tune = Tunables::default();
         let now = Instant::now();
         let delay1 = tokio::timer::Delay::new(now + Duration::from_millis(200))
