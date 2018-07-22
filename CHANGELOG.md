@@ -1,20 +1,25 @@
 ## 0.4.0 (TBD)
 
-* The _client_ module is sigificantly expanded per below. The module and
+* The _client_ module is significantly expanded per below. The module and
   feature are renamed _async_ and made a default feature.  A deprecated
-  _client_ re-export and feature alias are remain available.
+  _client_ re-export and feature alias remain available.
 
-* New `AsyncBodyImage` (symetric with `AsyncBodySink`) implements
+* New `AsyncBodyImage` (symmetric with `AsyncBodySink`) implements
  `futures::Stream` and `hyper::body::Payload` traits. The `Payload` trait
  makes this usable with hyper as the `B` body type of `http::Request<B>`
- (client) or `http::Response<B>` (server). The `Stream` trait is
- sufficient for use via `hyper::Body::with_stream`.
+ (client) or `http::Response<B>` (server). The `Stream` trait is sufficient
+ for use via `hyper::Body::with_stream`.
 
 * Alternative new `UniBodyImage` and `UniBodySink` implement the same
   traits with a custom `UniBodyBuf` item buffer type, allowing zero-copy
   including when in `MemMap` state, at the the cost of the adjustments
   required for not using the default `hyper::Body` type. (*mmap* feature
   only)
+
+* Deprecate the `BodyReader::File(ReadPos)` variant, instead using
+  `BodyReader::FileSlice(ReadSlice)` for this case. This variant is an
+  additional complexity with no performance (see _olio_ crate benchmarks)
+  or other usage advantage.
 
 * Replace the last Box<Future> with `Either` to avoid heap allocation.
 
@@ -45,6 +50,23 @@
    test stream_20_mmap_uni_pre  ... bench:      14,161 ns/iter (+/- 385)
    test stream_21_mmap_uni      ... bench:      29,410 ns/iter (+/- 3,950)
    test stream_22_mmap_copy     ... bench:   8,110,105 ns/iter (+/- 4,213,807)
+   ```
+
+   dev i7-5600U, rustc 1.29.0-nightly (e06c87544 2018-07-06)
+   ```text
+   test stream_01_ram_pregather ... bench:      10,251 ns/iter (+/- 2,635)
+   test stream_02_ram           ... bench:     194,331 ns/iter (+/- 38,777)
+   test stream_03_ram_uni       ... bench:     189,187 ns/iter (+/- 34,600)
+   test stream_04_ram_gather    ... bench:   5,215,946 ns/iter (+/- 1,017,285)
+   test stream_10_fsread        ... bench:   1,870,418 ns/iter (+/- 539,152)
+   test stream_11_fsread_uni    ... bench:   1,877,602 ns/iter (+/- 548,321)
+   test stream_12_fsread_8k     ... bench:   2,353,714 ns/iter (+/- 529,643)
+   test stream_13_fsread_128k   ... bench:   1,895,554 ns/iter (+/- 597,936)
+   test stream_14_fsread_1m     ... bench:   2,149,782 ns/iter (+/- 451,390)
+   test stream_15_fsread_4m     ... bench:   5,347,392 ns/iter (+/- 1,449,456)
+   test stream_20_mmap_uni_pre  ... bench:      14,292 ns/iter (+/- 1,740)
+   test stream_21_mmap_uni      ... bench:      28,359 ns/iter (+/- 3,726)
+   test stream_22_mmap_copy     ... bench:   6,369,469 ns/iter (+/- 1,314,055)
    ```
 
 ## 0.3.0 (2018-6-26)
