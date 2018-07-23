@@ -122,9 +122,10 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
 /// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
 /// (initial response and complete body) and if the response `BodyImage` will
 /// be in `Ram` or `FsRead`.
-pub fn request_dialog<CN, B>(client: &hyper::Client<CN, B>,
-                             rr: RequestRecord<B>,
-                             tune: &Tunables)
+pub fn request_dialog<CN, B>(
+    client: &hyper::Client<CN, B>,
+    rr: RequestRecord<B>,
+    tune: &Tunables)
     -> impl Future<Item=Dialog, Error=Flare> + Send
     where CN: hyper::client::connect::Connect + Sync + 'static,
           B: hyper::body::Payload + Send
