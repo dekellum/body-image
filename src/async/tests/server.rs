@@ -178,7 +178,7 @@ macro_rules! one_service {
                 socket.set_nodelay(true).unwrap();
                 Http::new().serve_connection(socket, $s)
             })
-            .map_err(|_| ());
+            .map_err(|e| warn!("On serve connection: {}", e));
         (fut, format!("http://{}", &addr))
     }}
 }
@@ -220,6 +220,8 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
     one_service!(svc)
 }
 
+/// Like above, but with delays before the initial response and before
+/// completing the body.
 fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
     let svc = service_fn(move |_req: Request<Body>| {
         let bi = ram_body_image(0x2000, 64);
