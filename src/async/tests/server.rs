@@ -254,6 +254,7 @@ fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
         .map_err(|e| -> hyper::Error { panic!("{:?}", e) })
         .and_then(move |(item, _incoming)| {
             let socket = item.unwrap();
+            socket.set_nodelay(true).unwrap();
             Http::new().serve_connection(socket, svc)
         })
         .map_err(|_| ());
