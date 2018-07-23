@@ -167,30 +167,34 @@ fn timeout_during_streaming() {
     rt.shutdown_on_idle().wait().unwrap();
 }
 
+macro_rules! one_service {
+    ($s:ident) => {{
+        let (listener, addr) = local_bind().unwrap();
+        let fut = listener.incoming()
+            .into_future()
+            .map_err(|_| -> hyper::Error { unreachable!() })
+            .and_then(move |(item, _incoming)| {
+                let socket = item.unwrap();
+                socket.set_nodelay(true).unwrap();
+                Http::new().serve_connection(socket, $s)
+            })
+            .map_err(|_| ());
+        (fut, format!("http://{}", &addr))
+    }}
+}
+
 /// The most simple body echo'ing server, using hyper body types.
 fn echo_server() -> (impl Future<Item=(), Error=()>, String) {
-    let (listener, addr) = local_bind().unwrap();
     let svc = service_fn_ok(move |req: Request<Body>| {
         Response::new(req.into_body())
     });
-
-    let fut = listener.incoming()
-        .into_future()
-        .map_err(|_| -> hyper::Error { unreachable!() })
-        .and_then(move |(item, _incoming)| {
-            let socket = item.unwrap();
-            Http::new().serve_connection(socket, svc)
-        })
-        .map_err(|_| ());
-
-    (fut, format!("http://{}", &addr))
+    one_service!(svc)
 }
 
 /// A body echo'ing server, which buffers complete requests (potentially to
 /// disk) using AsyncBodySink and responds with them using a UniBodyImage
 #[cfg(feature = "mmap")]
 fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
-    let (listener, addr) = local_bind().unwrap();
     let svc = service_fn(move |req: Request<Body>| {
         let tune = Tuner::new()
             .set_buffer_size_fs(2734)
@@ -213,17 +217,7 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
             })
             .map_err(|e| e.compat())
     });
-
-    let fut = listener.incoming()
-        .into_future()
-        .map_err(|_| -> hyper::Error { unreachable!() })
-        .and_then(move |(item, _incoming)| {
-            let socket = item.unwrap();
-            Http::new().serve_connection(socket, svc)
-        })
-        .map_err(|_| ());
-
-    (fut, format!("http://{}", &addr))
+    one_service!(svc)
 }
 
 fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
@@ -247,19 +241,7 @@ fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
             ))
         })
     });
-
-    let (listener, addr) = local_bind().unwrap();
-    let fut = listener.incoming()
-        .into_future()
-        .map_err(|e| -> hyper::Error { panic!("{:?}", e) })
-        .and_then(move |(item, _incoming)| {
-            let socket = item.unwrap();
-            socket.set_nodelay(true).unwrap();
-            Http::new().serve_connection(socket, svc)
-        })
-        .map_err(|_| ());
-
-    (fut, format!("http://{}", &addr))
+    one_service!(svc)
 }
 
 fn local_bind() -> Result<(TcpListener, SocketAddr), io::Error> {
