@@ -128,6 +128,7 @@ fn timeout_before_response() {
 
     let tune = Tuner::new()
         .set_res_timeout(Duration::from_millis(10))
+        .set_body_timeout(Duration::from_millis(600))
         .finish();
     match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
         Ok(_) => {
@@ -151,8 +152,8 @@ fn timeout_during_streaming() {
     rt.spawn(fut);
 
     let tune = Tuner::new()
-        .set_res_timeout(Duration::from_millis(600))
-        .set_body_timeout(Duration::from_millis(601))
+        .unset_res_timeout()
+        .set_body_timeout(Duration::from_millis(600))
         .finish();
     match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
         Ok(_) => {
