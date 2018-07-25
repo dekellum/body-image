@@ -152,7 +152,9 @@ fn timeout_during_streaming() {
     rt.spawn(fut);
 
     let tune = Tuner::new()
-        .unset_res_timeout()
+        .unset_res_timeout() // workaround
+        // FIXME: Correct, but may fail on CI due to timing issues
+        // .set_res_timeout(Duration::from_millis(590))
         .set_body_timeout(Duration::from_millis(600))
         .finish();
     match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
