@@ -52,7 +52,7 @@ async = ["futures", "hyper", "hyper-tls", "hyperx",
           "tokio", "tokio-threadpool"]
 cli = ["fern", "clap"]
 mmap = ["memmap", "olio/mmap", "libc"]
-live_test = ["async"] # Internet based http(s) tests
+may_fail = [] # Tests which may fail
 client = ["async"] # older synonym
 
 [lib]
