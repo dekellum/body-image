@@ -152,9 +152,35 @@ fn timeout_during_streaming() {
     rt.spawn(fut);
 
     let tune = Tuner::new()
-        .unset_res_timeout() // workaround
-        // FIXME: Correct, but may fail on CI due to timing issues
-        // .set_res_timeout(Duration::from_millis(590))
+        .unset_res_timeout() // workaround, see *_race version of test below
+        .set_body_timeout(Duration::from_millis(600))
+        .finish();
+    match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
+        Ok(_) => {
+            panic!("should have timed-out!");
+        }
+        Err(e) => {
+            let em = e.to_string();
+            assert!(em.starts_with("timeout"), em);
+            assert!(em.contains("streaming"), em);
+        }
+    }
+    rt.shutdown_on_idle().wait().unwrap();
+}
+
+#[test]
+#[cfg(feature = "may_fail")]
+fn timeout_during_streaming_race() {
+    assert!(*LOG_SETUP);
+
+    let mut rt = new_limited_runtime();
+    let (fut, url) = delayed_server();
+    rt.spawn(fut);
+
+    let tune = Tuner::new()
+        // Correct test assertion, but this may fail on CI due to timing
+        // issues
+        .set_res_timeout(Duration::from_millis(590))
         .set_body_timeout(Duration::from_millis(600))
         .finish();
     match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
