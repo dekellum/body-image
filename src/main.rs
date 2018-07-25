@@ -221,11 +221,12 @@ fn cat(barc_path: &str, start: &StartPos, count: usize, parts: &Parts)
 }
 
 // The `cp` command implementation.
-fn cp(barc_in: &str,
-      barc_out: &str,
-      start: &StartPos,
-      count: usize,
-      strategy: &CompressStrategy)
+fn cp(
+    barc_in: &str,
+    barc_out: &str,
+    start: &StartPos,
+    count: usize,
+    strategy: &CompressStrategy)
     -> Result<(), Flare>
 {
     if barc_in == barc_out {

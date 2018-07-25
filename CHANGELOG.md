@@ -21,10 +21,15 @@
   additional complexity with no performance (see _olio_ crate benchmarks)
   or other usage advantage.
 
-* Replace the last Box<Future> with `Either` to avoid heap allocation.
+* Replace the only remaining use of Box<Future> with `Either` to avoid
+  heap allocation.
 
 * Broaden and improve _async_ module tests and catalog by type as _stub_,
   _server_, _futures_, and (non-default, further limited) _live_.
+
+* Both `Tunables` timeouts are now optional, with the initial
+  (res)ponse timeout now defaulting to `None`. Thus by default only
+  the full body timeout is used in `request_dialog`.
 
 * New benchmarks of `AsyncBodyImage` and `UniBodyImage` stream transfer of
   8MiB bodies, from states `Ram` (also incl. "pregather" as in prior and

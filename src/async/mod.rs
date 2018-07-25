@@ -122,9 +122,10 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
 /// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
 /// (initial response and complete body) and if the response `BodyImage` will
 /// be in `Ram` or `FsRead`.
-pub fn request_dialog<CN, B>(client: &hyper::Client<CN, B>,
-                             rr: RequestRecord<B>,
-                             tune: &Tunables)
+pub fn request_dialog<CN, B>(
+    client: &hyper::Client<CN, B>,
+    rr: RequestRecord<B>,
+    tune: &Tunables)
     -> impl Future<Item=Dialog, Error=Flare> + Send
     where CN: hyper::client::connect::Connect + Sync + 'static,
           B: hyper::body::Payload + Send
@@ -136,25 +137,43 @@ pub fn request_dialog<CN, B>(client: &hyper::Client<CN, B>,
     let body_timeout = tune.body_timeout();
     let now = Instant::now();
 
-    client.request(rr.request)
+    let futr = client
+        .request(rr.request)
         .from_err::<Flare>()
-        .map(|response| Monolog { prolog, response })
-        .deadline(now + res_timeout)
-        .map_err(move |de| {
-            deadline_to_flare(de, || {
-                format_err!("timeout before initial response ({:?})",
-                            res_timeout)
+        .map(|response| Monolog { prolog, response });
+
+    let futr = if let Some(t) = res_timeout {
+        Either::A(futr
+            .deadline(now + t)
+            .map_err(move |de| {
+                deadline_to_flare(de, || {
+                    format_err!("timeout before initial response ({:?})", t)
+                })
             })
-        })
-        .and_then(|monolog| resp_future(monolog, tune))
-        .deadline(now + body_timeout)
-        .map_err(move |de| {
-            deadline_to_flare(de, || {
-                format_err!("timeout before streaming body complete ({:?})",
-                            body_timeout)
+        )
+    } else {
+        Either::B(futr)
+    };
+
+    let futr = futr.and_then(|monolog| resp_future(monolog, tune));
+
+    let futr = if let Some(t) = body_timeout {
+        Either::A(futr
+            .deadline(now + t)
+            .map_err(move |de| {
+                deadline_to_flare(de, || {
+                    format_err!(
+                        "timeout before streaming body complete ({:?})",
+                        t
+                    )
+                })
             })
-        })
-        .and_then(InDialog::prepare)
+        )
+    } else {
+        Either::B(futr)
+    };
+
+    futr.and_then(InDialog::prepare)
 }
 
 fn deadline_to_flare<F>(de: DeadlineError<Flare>, on_elapsed: F) -> Flare
