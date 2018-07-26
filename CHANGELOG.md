@@ -32,12 +32,12 @@
   _server_, _futures_, and (non-default, further limited) _live_.
 
 * New benchmarks of `AsyncBodyImage` and `UniBodyImage` stream transfer of
-  8MiB bodies, from states `Ram` (also incl. "pregather" as in prior and
+  8MiB bodies, from states `Ram` (also incl. "pregather", as in prior, and
   per-iteration `gather`), `FsRead` incl. various read buffer sizes, and
   `MemMap` (also incl. "pre-" as in prior). `AsyncBodyImage` `MemMap`
   performance is the worst ("stream_22_mmap_copy"), as it combines a copy
   with a cache-busting 8MiB buffer size.  Note that `FsRead` and `MemMap`
-  also benefit from OS file-system caching as the same file is used
+  states also benefit from OS file-system caching, as the same file is used
   per-iteration. Results:
 
    dev i7-2640M, rustc 1.29.0-nightly (e06c87544 2018-07-06):
@@ -59,19 +59,19 @@
 
    dev i7-5600U, rustc 1.29.0-nightly (e06c87544 2018-07-06)
    ```text
-   test stream_01_ram_pregather ... bench:      10,251 ns/iter (+/- 2,635)
-   test stream_02_ram           ... bench:     194,331 ns/iter (+/- 38,777)
-   test stream_03_ram_uni       ... bench:     189,187 ns/iter (+/- 34,600)
-   test stream_04_ram_gather    ... bench:   5,215,946 ns/iter (+/- 1,017,285)
-   test stream_10_fsread        ... bench:   1,870,418 ns/iter (+/- 539,152)
-   test stream_11_fsread_uni    ... bench:   1,877,602 ns/iter (+/- 548,321)
-   test stream_12_fsread_8k     ... bench:   2,353,714 ns/iter (+/- 529,643)
-   test stream_13_fsread_128k   ... bench:   1,895,554 ns/iter (+/- 597,936)
-   test stream_14_fsread_1m     ... bench:   2,149,782 ns/iter (+/- 451,390)
-   test stream_15_fsread_4m     ... bench:   5,347,392 ns/iter (+/- 1,449,456)
-   test stream_20_mmap_uni_pre  ... bench:      14,292 ns/iter (+/- 1,740)
-   test stream_21_mmap_uni      ... bench:      28,359 ns/iter (+/- 3,726)
-   test stream_22_mmap_copy     ... bench:   6,369,469 ns/iter (+/- 1,314,055)
+   test stream_01_ram_pregather ... bench:       8,804 ns/iter (+/- 562)
+   test stream_02_ram           ... bench:     166,857 ns/iter (+/- 21,211)
+   test stream_03_ram_uni       ... bench:     136,611 ns/iter (+/- 13,210)
+   test stream_04_ram_gather    ... bench:   4,126,621 ns/iter (+/- 455,756)
+   test stream_10_fsread        ... bench:   1,736,561 ns/iter (+/- 49,826)
+   test stream_11_fsread_uni    ... bench:   1,668,397 ns/iter (+/- 302,932)
+   test stream_12_fsread_8k     ... bench:   2,067,941 ns/iter (+/- 347,120)
+   test stream_13_fsread_128k   ... bench:   1,673,039 ns/iter (+/- 263,239)
+   test stream_14_fsread_1m     ... bench:   1,858,807 ns/iter (+/- 130,426)
+   test stream_15_fsread_4m     ... bench:   4,847,966 ns/iter (+/- 2,029,237)
+   test stream_20_mmap_uni_pre  ... bench:      12,412 ns/iter (+/- 1,269)
+   test stream_21_mmap_uni      ... bench:      24,792 ns/iter (+/- 2,377)
+   test stream_22_mmap_copy     ... bench:   5,179,590 ns/iter (+/- 2,074,730)
    ```
 
 ## 0.3.0 (2018-6-26)
