@@ -177,7 +177,7 @@ impl Fail for BarcError {
         match *self {
             BarcError::Body(ref be)               => Some(be),
             BarcError::Io(ref e)                  => Some(e),
-            BarcError::InvalidHeader(ref flr) => Some(flr.cause()),
+            BarcError::InvalidHeader(ref flr)     => Some(flr.as_fail()),
             _ => None
         }
     }
