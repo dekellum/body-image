@@ -169,8 +169,8 @@ fn test_timeout_streaming() {
 fn test_timeout_streaming_race() {
     assert!(*LOG_SETUP);
     let tune = Tuner::new()
-        // Correct test assertions, but this may fail on CI due to timing
-        // issues
+        // Correct test conditions, but this may fail CI with timing issues,
+        // thus feature cfg.
         .set_res_timeout(Duration::from_millis(590))
         .set_body_timeout(Duration::from_millis(600))
         .finish();
