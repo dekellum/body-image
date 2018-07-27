@@ -203,11 +203,15 @@ fn summarize_stream<S>(stream: S, rt: &mut tokio::runtime::Runtime)
     where S: Stream<Error=io::Error> + Send + 'static,
           S::Item: AsRef<[u8]>
 {
-    let task = stream.fold((0u8,0), |(ml, len), item| -> Result<_,io::Error> {
-        Ok((
-            cmp::max(ml, *item.as_ref().last().unwrap()),
-            len + item.as_ref().len()
-        ))
+    let task = stream.fold((0u8,0), |(mut ml, len), item| -> Result<_,io::Error> {
+        let item = item.as_ref();
+        let mut i = 0;
+        let e = item.len();
+        while i < e {
+            ml = cmp::max(ml, item[i]);
+            i += 1973; // prime < (0x1000/2)
+        }
+        Ok((ml, len + item.len()))
     });
     let res = rt.block_on(task);
     if let Ok((mlast, len)) = res {
@@ -221,7 +225,7 @@ fn summarize_stream<S>(stream: S, rt: &mut tokio::runtime::Runtime)
 fn sink_data(mut body: BodySink) -> Result<BodyImage, Flare> {
     let reps = 1024;
     for i in 0..reps {
-        body.write_all(vec![i as u8; 8192])?;
+        body.write_all(vec![i as u8; 0x2000])?;
     }
     let body = body.prepare()?;
     Ok(body)
