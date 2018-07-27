@@ -148,20 +148,7 @@ fn test_timeout_streaming() {
         .unset_res_timeout() //workaround, see *_race version below
         .set_body_timeout(Duration::from_millis(600))
         .finish();
-    let rq: RequestRecord<hyper::Body> = get_request("http://foo.com/");
-    let client = delayed_server();
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
-    let res = rt.block_on(request_dialog(&client, rq, &tune));
-    match res {
-        Ok(_) => {
-            panic!("should have timed-out!");
-        }
-        Err(e) => {
-            let em = e.to_string();
-            assert!(em.starts_with("timeout"), em);
-            assert!(em.contains("streaming"), em);
-        }
-    }
+    assert_timeout_streaming(&tune).unwrap();
 }
 
 #[test]
@@ -174,9 +161,13 @@ fn test_timeout_streaming_race() {
         .set_res_timeout(Duration::from_millis(590))
         .set_body_timeout(Duration::from_millis(600))
         .finish();
+    assert_timeout_streaming(&tune).unwrap();
+}
+
+fn assert_timeout_streaming(tune: &Tunables) -> Result<(), Flare> {
     let rq: RequestRecord<hyper::Body> = get_request("http://foo.com/");
     let client = delayed_server();
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    let mut rt = tokio::runtime::Runtime::new()?;
     let res = rt.block_on(request_dialog(&client, rq, &tune));
     match res {
         Ok(_) => {
@@ -188,6 +179,7 @@ fn test_timeout_streaming_race() {
             assert!(em.contains("streaming"), em);
         }
     }
+    Ok(())
 }
 
 fn fs_body_image(size: usize) -> BodyImage {
