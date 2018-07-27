@@ -4,6 +4,7 @@ extern crate body_image;
 extern crate failure;
 extern crate futures;
 extern crate tokio;
+extern crate rand;
 
 use std::cmp;
 use std::fs;
@@ -15,6 +16,8 @@ use test::Bencher;
 use failure::Error as Flare;
 
 use futures::Stream;
+
+use rand::Rng;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 use body_image::async::*;
@@ -224,8 +227,11 @@ fn summarize_stream<S>(stream: S, rt: &mut tokio::runtime::Runtime)
 
 fn sink_data(mut body: BodySink) -> Result<BodyImage, Flare> {
     let reps = 1024;
-    for i in 0..reps {
-        body.write_all(vec![i as u8; 0x2000])?;
+    let mut vals: Vec<u8> = (0..reps).map(|v| (v % 256) as u8).collect();
+    rand::thread_rng().shuffle(&mut vals);
+    assert!(vals.contains(&255));
+    for i in vals {
+        body.write_all(vec![i; 0x2000])?;
     }
     let body = body.prepare()?;
     Ok(body)
