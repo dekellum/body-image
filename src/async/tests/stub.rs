@@ -1,7 +1,7 @@
 extern crate hyper_stub;
 
-use std::io;
-use std::time::Duration;
+#[cfg(feature = "may_fail")] use std::io;
+#[cfg(feature = "may_fail")] use std::time::Duration;
 
 use ::logger::LOG_SETUP;
 use ::Tuner;
@@ -166,6 +166,7 @@ fn test_timeout_streaming_race() {
     assert_timeout_streaming(&tune).unwrap();
 }
 
+#[cfg(feature = "may_fail")]
 fn assert_timeout_streaming(tune: &Tunables) -> Result<(), Flare> {
     let rq: RequestRecord<hyper::Body> = get_request("http://foo.com/");
     let client = delayed_server();
@@ -191,6 +192,7 @@ fn fs_body_image(size: usize) -> BodyImage {
     body.prepare().unwrap()
 }
 
+#[cfg(feature = "may_fail")]
 fn ram_body_image(csize: usize, count: usize) -> BodyImage {
     let mut bs = BodySink::with_ram_buffers(count);
     for _ in 0..count {
@@ -255,6 +257,7 @@ fn echo_server_stub() -> Client<impl Connect> {
 /// A `Client` stub to a server always returning a 1 MiB response body, after
 /// delaying before the initial response, and before completing the body. For
 /// testing timeouts.
+#[cfg(feature = "may_fail")]
 fn delayed_server() -> Client<impl Connect> {
     hyper_stub::proxy_client_fn(|_req| {
         let now = Instant::now();
