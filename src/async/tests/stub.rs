@@ -119,6 +119,7 @@ fn test_large_concurrent() {
 }
 
 #[test]
+#[cfg(feature = "may_fail")]
 fn test_timeout_pre() {
     assert!(*LOG_SETUP);
     let tune = Tuner::new()
@@ -142,6 +143,7 @@ fn test_timeout_pre() {
 }
 
 #[test]
+#[cfg(feature = "may_fail")]
 fn test_timeout_streaming() {
     assert!(*LOG_SETUP);
     let tune = Tuner::new()
