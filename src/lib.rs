@@ -43,6 +43,7 @@
 //!
 //! _mmap:_ Adds `BodyImage::mem_map` support for memory mapping
 //! from `FsRead` state.
+#![deny(dead_code, unused_imports)]
 
 #[cfg(feature = "brotli")] extern crate brotli;
                            extern crate bytes;
