@@ -28,7 +28,7 @@ use body_image::barc::BrotliCompressStrategy;
 fn main() {
     let r = run();
     if let Err(e) = r {
-        error!("{}; (backtrace) {}", e.cause(), e.backtrace());
+        error!("{}; (backtrace) {}", e.as_fail(), e.backtrace());
         process::exit(2);
     }
 }
