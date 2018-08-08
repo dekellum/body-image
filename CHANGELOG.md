@@ -34,8 +34,8 @@
 * Replace the only remaining use of `Box<Future>` with `Either` to avoid
   heap allocation.
 
-* Broaden and improve module tests, cataloged by type as _stub_, _server_,
-  _futures_, and (non-default, further reduced) _live_.
+* Broaden and improve _async_ module tests and catalog by type as _stub_,
+  _server_, _futures_, and (non-default, further limited) _live_.
 
 * New benchmarks of `AsyncBodyImage` and `UniBodyImage` stream transfer of
   8MiB bodies, from states `Ram` (also incl. "pregather", as in prior, and
