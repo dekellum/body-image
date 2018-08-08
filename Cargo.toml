@@ -75,3 +75,6 @@ lazy_static = { version = ">=1.0.1, <2" }
 fern        = { version = ">=0.5.5, <2" }
 hyper-stub  = { version = ">=0.1.0, <2" }
 rand        = { version = ">=0.4.2, <2" }
+
+[patch.crates-io]
+olio = { path = "../olio" }
