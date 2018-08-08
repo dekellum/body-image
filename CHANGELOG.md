@@ -11,10 +11,10 @@
 * All internal `Mmap` (*mmap* feature) access has been optimized using the
   concurrent-aware `olio::mem::MemHandle.advise` for `Sequential` access where
   appropriate. As of _olio_ 0.4.0, this is limited to \*nix platforms via
-  `libc::posix_madvise`.  This feature comes with compatibility breakage:
+  `libc::posix_madvise`.  This feature comes with a compatibility breakage:
   * `BodyImage` and therefore `Dialog` are no-longer `Sync`. They remain
     `Send` with inexpensive `Clone`, so any required changes should be
-    minimal.
+    minimal. (*mmap* feature only)
 
 * Deprecate the `BodyReader::File(ReadPos)` variant, instead using
   `BodyReader::FileSlice(ReadSlice)` for this case. This variant is an

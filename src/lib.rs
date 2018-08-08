@@ -1125,6 +1125,13 @@ mod root {
         assert!(is_sync::<BodyReader>());
     }
 
+    #[cfg(not(feature = "mmap"))]
+    #[test]
+    fn test_send_sync_not_mmap() {
+        assert!(is_sync::<BodyImage>());
+        assert!(is_sync::<Dialog>());
+    }
+
     #[test]
     fn test_body_empty_read() {
         let body = BodyImage::empty();
