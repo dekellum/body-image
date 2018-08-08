@@ -1,8 +1,19 @@
 ## 0.4.0 (TBD)
 
-* The _client_ module is significantly expanded per below. The module and
-  feature are renamed _async_ and made a default feature.  A deprecated
-  _client_ re-export and feature alias remain available.
+* The _client_ module and feature are renamed _async_, made a default feature
+  and significantly expanded. See the _async_ module subsection below for
+  further details. A deprecated _client_ re-export and feature alias remain
+  available.
+
+* New `BodyImage::explode` returning an `ExplodedImage` for raw access to
+  individual states.
+
+* Deprecate the `BodyReader::File(ReadPos)` variant, instead using
+  `BodyReader::FileSlice(ReadSlice)` for this case. This variant is an
+  additional complexity with no performance (see _olio_ crate benchmarks)
+  or other usage advantage.
+
+### _async_ module
 
 * New `AsyncBodyImage` (symmetric with `AsyncBodySink`) implements
  `futures::Stream` and `hyper::body::Payload` traits. The `Payload` trait
@@ -19,11 +30,6 @@
 * Both `Tunables` timeouts are now optional, with the initial
   (res)ponse timeout now defaulting to `None`. Thus by default only
   the full body timeout is used in `request_dialog`.
-
-* Deprecate the `BodyReader::File(ReadPos)` variant, instead using
-  `BodyReader::FileSlice(ReadSlice)` for this case. This variant is an
-  additional complexity with no performance (see _olio_ crate benchmarks)
-  or other usage advantage.
 
 * Replace the only remaining use of Box<Future> with `Either` to avoid
   heap allocation.
