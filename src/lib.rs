@@ -1089,13 +1089,11 @@ mod root {
     #[test]
     fn test_send_sync() {
         assert!(is_send::<BodyImage>());
-        assert!(is_sync::<BodyImage>());
 
         assert!(is_send::<Tunables>());
         assert!(is_sync::<Tunables>());
 
         assert!(is_send::<Dialog>());
-        assert!(is_sync::<Dialog>());
 
         assert!(is_send::<BodyReader>());
         assert!(is_sync::<BodyReader>());
