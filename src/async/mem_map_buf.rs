@@ -3,41 +3,32 @@ extern crate libc;
 
 use std::io;
 use std::ops::Deref;
-use std::sync::Arc;
 
 use bytes::Buf;
 use memmap::Mmap;
+use olio::mem::{MemAdvice, MemHandle};
 
-use ::mem_util;
-
-/// New-type for zero-copy `Buf` trait implementation of `Mmap`
+/// New-type for zero-copy `Buf` trait implementation of `MemHandle<Mmap>`
 #[derive(Debug)]
 pub struct MemMapBuf {
-    mm: Arc<Mmap>,
+    mm: MemHandle<Mmap>,
     pos: usize,
 }
 
 impl MemMapBuf {
-    pub(crate) fn new(mmap: Arc<Mmap>) -> MemMapBuf {
+    pub(crate) fn new(mmap: MemHandle<Mmap>) -> MemMapBuf {
         MemMapBuf { mm: mmap, pos: 0 }
     }
 
-    /// Advise the \*nix OS that we will be sequentially accessing the memory
-    /// map region, and that agressive read-ahead is warranted.
+    /// Advise that we will be sequentially accessing the memory map region,
+    /// and that agressive read-ahead is warranted.
     pub(crate) fn advise_sequential(&self) -> Result<(), io::Error> {
-        mem_util::advise(
-            self.mm.as_ref(),
-            &[mem_util::MemoryAccess::Sequential]
-        )
-    }
-}
-
-impl Drop for MemMapBuf {
-    fn drop(&mut self) {
-        mem_util::advise(
-            self.mm.as_ref(),
-            &[mem_util::MemoryAccess::Normal]
-        ).ok();
+        let _new_advice = self.mm.advise(MemAdvice::Sequential)?;
+        #[cfg(unix)]
+        {
+            debug!("MemMapBuf advise Sequential, obtained {:?}", _new_advice);
+        }
+        Ok(())
     }
 }
 
