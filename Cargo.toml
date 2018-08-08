@@ -77,4 +77,4 @@ hyper-stub  = { version = ">=0.1.0, <2" }
 rand        = { version = ">=0.4.2, <2" }
 
 [patch.crates-io]
-olio = { path = "../olio" }
+olio = { git = "https://github.com/dekellum/olio", branch = "mem-handle-advise-atomic" }
