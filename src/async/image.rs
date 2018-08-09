@@ -9,17 +9,15 @@ use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use failure::Error as Flare;
 
-#[cfg(feature = "mmap")]
-use memmap::Mmap;
-
-#[cfg(feature = "mmap")]
-use olio::mem::{MemAdvice, MemHandle};
-
 use async::hyper;
 use async::tokio_threadpool;
 use async::futures::{Async, Poll, Stream};
 use async::{RequestRecord, RequestRecorder};
-use ::{BodyImage, ExplodedImage, MemHandleExt, Prolog, Tunables};
+use ::{BodyImage, ExplodedImage, Prolog, Tunables};
+
+#[cfg(feature = "mmap")] use memmap::Mmap;
+#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
+#[cfg(feature = "mmap")] use ::MemHandleExt;
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits.

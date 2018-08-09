@@ -74,7 +74,6 @@ use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::ops::Deref;
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -83,11 +82,9 @@ use bytes::{Bytes, BytesMut, BufMut};
 use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
 
-#[cfg(feature = "mmap")]
-use memmap::{Mmap};
-
-#[cfg(feature = "mmap")]
-use olio::mem::{MemAdvice, MemAdviseError, MemHandle};
+#[cfg(feature = "mmap")] use std::ops::Deref;
+#[cfg(feature = "mmap")] use memmap::{Mmap};
+#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemAdviseError, MemHandle};
 
 use tempfile::tempfile_in;
 
@@ -121,6 +118,7 @@ impl From<io::Error> for BodyError {
     }
 }
 
+#[cfg(feature = "mmap")]
 impl From<MemAdviseError> for BodyError {
     fn from(err: MemAdviseError) -> BodyError {
         BodyError::Io(err.into())
@@ -1078,12 +1076,14 @@ impl Default for Tuner {
     fn default() -> Self { Tuner::new() }
 }
 
+#[cfg(feature = "mmap")]
 pub(crate) trait MemHandleExt {
     fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R,S>
         where F: FnOnce() -> Result<R,S>,
               S: From<olio::mem::MemAdviseError>;
 }
 
+#[cfg(feature = "mmap")]
 impl<T> MemHandleExt for MemHandle<T>
 where T: Deref<Target=[u8]>
 {
@@ -1115,11 +1115,10 @@ mod root {
     #[test]
     fn test_send_sync() {
         assert!(is_send::<BodyImage>());
+        assert!(is_send::<Dialog>());
 
         assert!(is_send::<Tunables>());
         assert!(is_sync::<Tunables>());
-
-        assert!(is_send::<Dialog>());
 
         assert!(is_send::<BodyReader>());
         assert!(is_sync::<BodyReader>());
@@ -1127,7 +1126,7 @@ mod root {
 
     #[cfg(not(feature = "mmap"))]
     #[test]
-    fn test_send_sync_not_mmap() {
+    fn test_sync_not_mmap() {
         assert!(is_sync::<BodyImage>());
         assert!(is_sync::<Dialog>());
     }
