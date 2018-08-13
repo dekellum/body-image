@@ -67,7 +67,7 @@ dependencies = [
  "libc 0.2.43 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "olio 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "olio 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -531,9 +531,10 @@ dependencies = [
 
 [[package]]
 name = "olio"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
+ "libc 0.2.43 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -1025,7 +1026,7 @@ dependencies = [
 "checksum net2 0.2.33 (registry+https://github.com/rust-lang/crates.io-index)" = "42550d9fb7b6684a6d404d9fa7250c2eb2646df731d1c06afc06dcee9e1bcf88"
 "checksum nodrop 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)" = "9a2228dca57108069a5262f2ed8bd2e82496d2e074a06d1ccc7ce1687b6ae0a2"
 "checksum num_cpus 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c51a3322e4bca9d212ad9a158a02abc6934d005490c054a2778df73a70aa0a30"
-"checksum olio 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a2ce00126373a96a8475074c8b086d687f3bfa6d1c5662b803fe282a71b78194"
+"checksum olio 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "87139c4fc8e25660ebfb6ec513a0776ba31d7ca2b00f509e1be9c778c1b227be"
 "checksum openssl 0.10.11 (registry+https://github.com/rust-lang/crates.io-index)" = "6c24d3508b4fb6da175c10baac54c578b33f09c89ae90c6fe9788b3b4768efdc"
 "checksum openssl-probe 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"
 "checksum openssl-sys 0.9.35 (registry+https://github.com/rust-lang/crates.io-index)" = "912f301a749394e1025d9dcddef6106ddee9252620e6d0a0e5f8d0681de9b129"
