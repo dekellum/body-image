@@ -5,8 +5,16 @@
   further details. A deprecated _client_ re-export and feature alias remain
   available.
 
-* New `BodyImage::explode` returning an `ExplodedImage` for raw access to
+* New `BodyImage::explode` returning an `ExplodedImage` enum for raw access to
   individual states.
+
+* All internal `Mmap` (*mmap* feature) access has been optimized using the
+  concurrent-aware `olio::mem::MemHandle::advise` for `Sequential` access where
+  appropriate. As of _olio_ 0.4.0, this is limited to \*nix platforms via
+  `libc::posix_madvise`.  This feature comes with compatibility breakage:
+  * `BodyImage` and therefore `Dialog` are no-longer `Sync`. They remain
+    `Send` with inexpensive `Clone`, so any required changes should be
+    minimal.
 
 * Deprecate the `BodyReader::File(ReadPos)` variant, instead using
   `BodyReader::FileSlice(ReadSlice)` for this case. This variant is an
@@ -34,8 +42,8 @@
 * Replace the only remaining use of `Box<Future>` with `Either` to avoid
   heap allocation.
 
-* Broaden and improve module tests, cataloged by type as _stub_, _server_,
-  _futures_, and (non-default, further reduced) _live_.
+* Broaden and improve _async_ module tests and catalog by type as _stub_,
+  _server_, _futures_, and (non-default, further limited) _live_.
 
 * New benchmarks of `AsyncBodyImage` and `UniBodyImage` stream transfer of
   8MiB bodies, from states `Ram` (also incl. "pregather", as in prior, and

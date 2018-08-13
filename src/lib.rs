@@ -60,7 +60,6 @@
 
                            pub mod barc;
 #[cfg(feature = "async")]  pub mod async;
-#[cfg(feature = "mmap")]   pub(crate) mod mem_util;
 
 #[cfg(test)]               pub(crate) mod logger;
 
@@ -83,8 +82,9 @@ use bytes::{Bytes, BytesMut, BufMut};
 use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
 
-#[cfg(feature = "mmap")]
-use memmap::{Mmap};
+#[cfg(feature = "mmap")] use std::ops::Deref;
+#[cfg(feature = "mmap")] use memmap::{Mmap};
+#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemAdviseError, MemHandle};
 
 use tempfile::tempfile_in;
 
@@ -115,6 +115,13 @@ pub enum BodyError {
 impl From<io::Error> for BodyError {
     fn from(err: io::Error) -> BodyError {
         BodyError::Io(err)
+    }
+}
+
+#[cfg(feature = "mmap")]
+impl From<MemAdviseError> for BodyError {
+    fn from(err: MemAdviseError) -> BodyError {
+        BodyError::Io(err.into())
     }
 }
 
@@ -155,7 +162,7 @@ enum ImageState {
     FsRead(Arc<File>),
     FsReadSlice(ReadSlice),
     #[cfg(feature = "mmap")]
-    MemMap(Arc<Mmap>),
+    MemMap(MemHandle<Mmap>),
 }
 
 /// A logical buffer of bytes, which may or may not be RAM resident, in the
@@ -472,7 +479,7 @@ impl BodyImage {
             _ => return Ok(self)
         };
 
-        self.state = ImageState::MemMap(Arc::new(map));
+        self.state = ImageState::MemMap(MemHandle::new(map));
         Ok(self)
     }
 
@@ -615,18 +622,8 @@ impl BodyImage {
                 }
             }
             #[cfg(feature = "mmap")]
-            ImageState::MemMap(ref m) => {
-                mem_util::advise(
-                    m.as_ref(),
-                    &[mem_util::MemoryAccess::Sequential]
-                )?;
-
-                out.write_all(m)?;
-
-                mem_util::advise(
-                    m.as_ref(),
-                    &[mem_util::MemoryAccess::Normal]
-                )?;
+            ImageState::MemMap(ref mh) => {
+                mh.tmp_advise(MemAdvice::Sequential, || out.write_all(mh) )?;
             }
             ImageState::FsRead(ref f) => {
                 let mut rp = ReadPos::new(f.clone(), self.len);
@@ -718,7 +715,7 @@ pub enum ExplodedImage {
     Ram(Vec<Bytes>),
     FsRead(ReadSlice),
     #[cfg(feature = "mmap")]
-    MemMap(Arc<Mmap>),
+    MemMap(MemHandle<Mmap>),
 }
 
 /// Provides a `Read` reference for a `BodyImage` in any state.
@@ -1079,6 +1076,35 @@ impl Default for Tuner {
     fn default() -> Self { Tuner::new() }
 }
 
+#[cfg(feature = "mmap")]
+pub(crate) trait MemHandleExt {
+    fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R,S>
+        where F: FnOnce() -> Result<R,S>,
+              S: From<olio::mem::MemAdviseError>;
+}
+
+#[cfg(feature = "mmap")]
+impl<T> MemHandleExt for MemHandle<T>
+where T: Deref<Target=[u8]>
+{
+    fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R,S>
+        where F: FnOnce() -> Result<R,S>,
+              S: From<olio::mem::MemAdviseError>
+    {
+        let new_advice = self.advise(advice)?;
+
+        #[cfg(unix)]
+        {
+            debug!("MemHandle tmp_advise {:?}, obtained {:?}",
+                   advice, new_advice);
+        }
+
+        let res = f();
+        self.advise(MemAdvice::Normal)?;
+        res
+    }
+}
+
 #[cfg(test)]
 mod root {
     use super::*;
@@ -1089,16 +1115,20 @@ mod root {
     #[test]
     fn test_send_sync() {
         assert!(is_send::<BodyImage>());
-        assert!(is_sync::<BodyImage>());
+        assert!(is_send::<Dialog>());
 
         assert!(is_send::<Tunables>());
         assert!(is_sync::<Tunables>());
 
-        assert!(is_send::<Dialog>());
-        assert!(is_sync::<Dialog>());
-
         assert!(is_send::<BodyReader>());
         assert!(is_sync::<BodyReader>());
+    }
+
+    #[cfg(not(feature = "mmap"))]
+    #[test]
+    fn test_sync_not_mmap() {
+        assert!(is_sync::<BodyImage>());
+        assert!(is_sync::<Dialog>());
     }
 
     #[test]

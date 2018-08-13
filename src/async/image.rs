@@ -2,9 +2,6 @@ use std::cmp;
 use std::io;
 use std::io::{Cursor, Read};
 
-#[cfg(feature = "mmap")]
-use std::sync::Arc;
-
 use std::vec::IntoIter;
 
 use ::http;
@@ -12,17 +9,15 @@ use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use failure::Error as Flare;
 
-#[cfg(feature = "mmap")]
-use memmap::Mmap;
-
-#[cfg(feature = "mmap")]
-use ::mem_util;
-
 use async::hyper;
 use async::tokio_threadpool;
 use async::futures::{Async, Poll, Stream};
 use async::{RequestRecord, RequestRecorder};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
+
+#[cfg(feature = "mmap")] use memmap::Mmap;
+#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
+#[cfg(feature = "mmap")] use ::MemHandleExt;
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits.
@@ -101,7 +96,7 @@ enum AsyncImageState {
     Ram(IntoIter<Bytes>),
     File { rs: ReadSlice, bsize: u64 },
     #[cfg(feature = "mmap")]
-    MemMap(Arc<Mmap>),
+    MemMap(MemHandle<Mmap>),
 }
 
 fn unblock<F, T>(f: F) -> Poll<T, io::Error>
@@ -177,18 +172,11 @@ impl Stream for AsyncBodyImage {
                     // contract is guarunteed fullfilled here, unless of
                     // course swap is enabled and the copy is so large as to
                     // cause it to be swapped out before it is written!
-                    mem_util::advise(
-                        mmap.as_ref(),
-                        &[mem_util::MemoryAccess::Sequential]
+                    let b = mmap.tmp_advise(
+                        MemAdvice::Sequential, || -> Result<_, io::Error> {
+                            Ok(Bytes::from(&mmap[..]))
+                        }
                     )?;
-
-                    let b = Bytes::from(&mmap[..]);
-
-                    mem_util::advise(
-                        mmap.as_ref(),
-                        &[mem_util::MemoryAccess::Normal]
-                    ).ok();
-
                     debug!("MemMap copy to chunk (blocking, len: {})", b.len());
                     Ok(Some(b))
                 });
