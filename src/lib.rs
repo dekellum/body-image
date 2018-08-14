@@ -34,7 +34,7 @@
 //!
 //! _cli:_ The `barc` command line tool for viewing
 //! (e.g. compressed) records and copying records across BARC files. If the
-//! _async_ feature is enabled, than a `record` command is also provided for
+//! _async_ feature is enabled, then a `record` command is also provided for
 //! live BARC recording from the network.
 //!
 //! _brotli:_ Brotli transfer/content decoding in _async_ module, and Brotli BARC

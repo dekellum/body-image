@@ -8,7 +8,7 @@
 * New `BodyImage::explode` returning an `ExplodedImage` enum for raw access to
   individual states.
 
-* All internal `Mmap` (*mmap* feature) access has been optimized using the
+* All internal `Mmap` (*mmap* feature) reads have been optimized using the
   concurrent-aware `olio::mem::MemHandle::advise` for `Sequential` access where
   appropriate. As of _olio_ 0.4.0, this is limited to \*nix platforms via
   `libc::posix_madvise`.  This feature comes with compatibility breakage:
