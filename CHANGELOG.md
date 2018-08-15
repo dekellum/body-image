@@ -21,6 +21,11 @@
   additional complexity with no performance (see _olio_ crate benchmarks)
   or other usage advantage.
 
+* Remove dependency on the *failure_derive* crate, and disable the _derive_
+  feature of the *failure* crate dependency, by removing all existing use of
+  auto-derive `Fail`.  `BodyError` now has manual implementations of `Display`
+  and `Fail`.
+
 ### _async_ module
 
 * New `AsyncBodyImage` (symmetric with `AsyncBodySink`) implements
