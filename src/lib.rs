@@ -47,7 +47,9 @@
 
 #[cfg(feature = "brotli")] extern crate brotli;
                            extern crate bytes;
-#[macro_use]               extern crate failure;
+
+#[cfg_attr(feature = "async", macro_use)] extern crate failure;
+
                            extern crate flate2;
                            extern crate http;
                            extern crate httparse;
