@@ -54,6 +54,7 @@ cli = ["fern", "clap"]
 mmap = ["memmap", "olio/mmap", "libc"]
 may_fail = [] # Tests which may fail
 client = ["async"] # older synonym
+failure_derive = ["failure/derive"]
 
 [lib]
 doctest = false
