@@ -47,7 +47,9 @@
 
 #[cfg(feature = "brotli")] extern crate brotli;
                            extern crate bytes;
-#[macro_use]               extern crate failure;
+
+#[cfg_attr(feature = "async", macro_use)] extern crate failure;
+
                            extern crate flate2;
                            extern crate http;
                            extern crate httparse;
@@ -79,6 +81,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use bytes::{Bytes, BytesMut, BufMut};
+use failure::Fail;
 use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
 
@@ -94,22 +97,42 @@ pub static VERSION: &str               = env!("CARGO_PKG_VERSION");
 /// Error enumeration for `BodyImage` and `BodySink` types.  This may be
 /// extended in the future so exhaustive matching is gently discouraged with
 /// an unused variant.
-#[derive(Fail, Debug)]
+#[derive(Debug)]
 pub enum BodyError {
     /// Error for when `Tunables::max_body` length is exceeded.
-    #[fail(display = "Body length of {}+ bytes exceeds Tunables::max_body",
-           _0)]
     BodyTooLong(u64),
 
     /// IO error associated with file creation/writes `FsWrite`, reads
     /// `FsRead`, or memory mapping.
-    #[fail(display = "{}", _0)]
-    Io(#[cause] io::Error),
+    Io(io::Error),
 
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
-    #[fail(display = "The future!")]
     _FutureProof,
+}
+
+impl fmt::Display for BodyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BodyError::BodyTooLong(l) =>
+                write!(
+                    f, "Body length of {}+ bytes exceeds Tunables::max_body",
+                    l
+                ),
+            BodyError::Io(ref e) =>
+                write!(f, "Body I/O: {}", e),
+            BodyError::_FutureProof => unreachable!()
+        }
+    }
+}
+
+impl Fail for BodyError {
+    fn cause(&self) -> Option<&Fail> {
+        match *self {
+            BodyError::Io(ref e)     => Some(e),
+            _ => None
+        }
+    }
 }
 
 impl From<io::Error> for BodyError {
