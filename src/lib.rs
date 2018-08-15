@@ -120,7 +120,7 @@ impl fmt::Display for BodyError {
                     l
                 ),
             BodyError::Io(ref e) =>
-                write!(f, "{}", e),
+                write!(f, "Body I/O: {}", e),
             BodyError::_FutureProof => unreachable!()
         }
     }
