@@ -1,4 +1,5 @@
 //! The `barc` command line tool
+#![deny(dead_code, unused_imports)]
 
              extern crate body_image;
 #[macro_use] extern crate clap;
