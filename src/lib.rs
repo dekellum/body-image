@@ -1101,8 +1101,8 @@ impl Default for Tuner {
 
 #[cfg(feature = "mmap")]
 pub(crate) trait MemHandleExt {
-    fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R,S>
-        where F: FnOnce() -> Result<R,S>,
+    fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R, S>
+        where F: FnOnce() -> Result<R, S>,
               S: From<olio::mem::MemAdviseError>;
 }
 
@@ -1110,8 +1110,8 @@ pub(crate) trait MemHandleExt {
 impl<T> MemHandleExt for MemHandle<T>
 where T: Deref<Target=[u8]>
 {
-    fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R,S>
-        where F: FnOnce() -> Result<R,S>,
+    fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R, S>
+        where F: FnOnce() -> Result<R, S>,
               S: From<olio::mem::MemAdviseError>
     {
         let new_advice = self.advise(advice)?;
