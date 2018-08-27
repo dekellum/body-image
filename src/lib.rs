@@ -166,12 +166,13 @@ impl From<MemAdviseError> for BodyError {
 /// : Body in a (temporary) file, ready for position based, sequential read.
 ///
 /// `MemMap`
-/// : Body in a memory mapped file, ready for random access read (optional
-///   feature _memmap_)
+/// : Body in a memory mapped file, ready for random access read (default
+///   *mmap* feature)
 ///
-/// All states support concurrent reads. `BodyImage` is `Sync` and `Send`, and
-/// supports low-cost shallow `Clone` via internal (atomic) reference
-/// counting.
+/// All states support concurrent reads. `BodyImage` is `Send` and supports
+/// low-cost shallow `Clone` via internal (atomic) reference
+/// counting. `BodyImage` is not `Sync` (with the default *mmap* feature
+/// enabled).
 #[derive(Clone, Debug)]
 pub struct BodyImage {
     state: ImageState,
