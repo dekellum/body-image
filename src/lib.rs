@@ -427,14 +427,17 @@ impl BodyImage {
     /// `BodyImage::empty()` instead. Attempts to read from the returned
     /// `BodyImage` can fail if the file is not open for read.
     ///
+    /// ### Safety
+    ///
     /// Use of this constructor is potentially unsafe when the *mmap* feature
-    /// enabled:
+    /// enabled and once `mem_map` is called:
     ///
     /// * The `mem_map` call will fail if the file is zero length or not open
     /// for read.
     ///
-    /// * Any concurrent writes or file system modifications while used in
-    /// `MemMap` state may lead to *Undifined Behavior* (UB).
+    /// * Any concurrent writes to the file, or file system modifications
+    /// while under use in `MemMap` state may lead to *Undefined Behavior*
+    /// (UB).
     #[cfg(feature = "mmap")]
     pub unsafe fn from_file(file: File, length: u64) -> BodyImage {
         image_from_file(file, length)
