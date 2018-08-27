@@ -424,18 +424,31 @@ impl BodyImage {
     /// Create a new `FsRead` instance based on an existing `File`. The fixed
     /// length is used to report `BodyImage::len` and may be obtained using
     /// `File::metadata`. If the provided length is zero, this returns as per
+    /// `BodyImage::empty()` instead. Attempts to read from the returned
+    /// `BodyImage` can fail if the file is not open for read.
+    ///
+    /// Use of this constructor is potentially unsafe when the *mmap* feature
+    /// enabled:
+    ///
+    /// * The `mem_map` call will fail if the file is zero length or not open
+    /// for read.
+    ///
+    /// * Any concurrent writes or file system modifications while used in
+    /// `MemMap` state may lead to *Undifined Behavior* (UB).
+    #[cfg(feature = "mmap")]
+    pub unsafe fn from_file(file: File, length: u64) -> BodyImage {
+        image_from_file(file, length)
+    }
+
+    /// Create a new `FsRead` instance based on an existing `File`. The fixed
+    /// length is used to report `BodyImage::len` and may be obtained using
+    /// `File::metadata`. If the provided length is zero, this returns as per
     /// `BodyImage::empty()` instead. Attempts to read from or `mem_map` the
     /// returned `BodyImage` can fail if the file is not open for read or is
     /// zero length.
+    #[cfg(not(feature = "mmap"))]
     pub fn from_file(file: File, length: u64) -> BodyImage {
-        if length > 0 {
-            BodyImage {
-                state: ImageState::FsRead(Arc::new(file)),
-                len: length
-            }
-        } else {
-            BodyImage::empty()
-        }
+        image_from_file(file, length)
     }
 
     /// Create new instance from a single byte slice.
@@ -488,8 +501,12 @@ impl BodyImage {
         self.len == 0
     }
 
-    /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
-    /// other states.
+    /// If `FsRead`, convert to `MemMap` by memory mapping the file.
+    ///
+    /// Under normal construction via `BodySink` in `FsWrite` state, this
+    /// method is safe, because no other thread or process has access to the
+    /// underlying file. Note the potential safety requirements via
+    /// [`from_file`](#method-from_file) however.
     #[cfg(feature = "mmap")]
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
         let map = match self.state {
@@ -659,6 +676,18 @@ impl BodyImage {
             }
         }
         Ok(self.len)
+    }
+}
+
+// Create a new `FsRead` instance based on an existing `File`.
+fn image_from_file(file: File, length: u64) -> BodyImage {
+    if length > 0 {
+        BodyImage {
+            state: ImageState::FsRead(Arc::new(file)),
+            len: length
+        }
+    } else {
+        BodyImage::empty()
     }
 }
 
