@@ -3,6 +3,8 @@ extern crate hyper_stub;
 #[cfg(feature = "may_fail")] use std::io;
 #[cfg(feature = "may_fail")] use std::time::Duration;
 
+use std::time::Instant;
+
 use ::logger::LOG_SETUP;
 use ::Tuner;
 

@@ -56,7 +56,6 @@ pub use self::image::AsyncBodyImage;
 #[cfg(feature = "mmap")] pub use self::uni_sink::UniBodySink;
 
 use std::mem;
-use std::time::Instant;
 
 #[cfg(feature = "brotli")] use ::brotli;
 
@@ -74,7 +73,7 @@ use http;
 use self::hyperx::header::{ContentEncoding, ContentLength,
                            Encoding as HyEncoding,
                            Header, TransferEncoding, Raw};
-use self::tokio::timer::DeadlineError;
+use self::tokio::timer::timeout;
 use self::tokio::util::FutureExt;
 
 use {BodyImage, BodySink, BodyError, Encoding,
@@ -135,7 +134,6 @@ pub fn request_dialog<CN, B>(
 
     let res_timeout = tune.res_timeout();
     let body_timeout = tune.body_timeout();
-    let now = Instant::now();
 
     let futr = client
         .request(rr.request)
@@ -144,9 +142,9 @@ pub fn request_dialog<CN, B>(
 
     let futr = if let Some(t) = res_timeout {
         Either::A(futr
-            .deadline(now + t)
-            .map_err(move |de| {
-                deadline_to_flare(de, || {
+            .timeout(t)
+            .map_err(move |te| {
+                timeout_to_flare(te, || {
                     format_err!("timeout before initial response ({:?})", t)
                 })
             })
@@ -159,9 +157,9 @@ pub fn request_dialog<CN, B>(
 
     let futr = if let Some(t) = body_timeout {
         Either::A(futr
-            .deadline(now + t)
-            .map_err(move |de| {
-                deadline_to_flare(de, || {
+            .timeout(t)
+            .map_err(move |te| {
+                timeout_to_flare(te, || {
                     format_err!(
                         "timeout before streaming body complete ({:?})",
                         t
@@ -176,15 +174,15 @@ pub fn request_dialog<CN, B>(
     futr.and_then(InDialog::prepare)
 }
 
-fn deadline_to_flare<F>(de: DeadlineError<Flare>, on_elapsed: F) -> Flare
+fn timeout_to_flare<F>(te: timeout::Error<Flare>, on_elapsed: F) -> Flare
     where F: FnOnce() -> Flare
 {
-    if de.is_elapsed() {
+    if te.is_elapsed() {
         on_elapsed()
-    } else if de.is_timer() {
-        Flare::from(de.into_timer().unwrap())
+    } else if te.is_timer() {
+        Flare::from(te.into_timer().unwrap())
     } else {
-        de.into_inner().expect("inner")
+        te.into_inner().expect("inner")
     }
 }
 
