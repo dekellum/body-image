@@ -55,7 +55,7 @@
                            extern crate httparse;
 #[cfg(test)] #[macro_use]  extern crate lazy_static;
 #[macro_use]               extern crate log;
-                           extern crate olio;
+                       pub extern crate olio;
 #[cfg(feature = "mmap")]   extern crate memmap;
                            extern crate tempfile;
 
@@ -165,12 +165,13 @@ impl From<MemAdviseError> for BodyError {
 /// : Body in a (temporary) file, ready for position based, sequential read.
 ///
 /// `MemMap`
-/// : Body in a memory mapped file, ready for random access read (optional
-///   feature _memmap_)
+/// : Body in a memory mapped file, ready for random access read (default
+///   *mmap* feature)
 ///
-/// All states support concurrent reads. `BodyImage` is `Sync` and `Send`, and
-/// supports low-cost shallow `Clone` via internal (atomic) reference
-/// counting.
+/// All states support concurrent reads. `BodyImage` is `Send` and supports
+/// low-cost shallow `Clone` via internal (atomic) reference
+/// counting. `BodyImage` is not `Sync` (with the default *mmap* feature
+/// enabled).
 #[derive(Clone, Debug)]
 pub struct BodyImage {
     state: ImageState,
@@ -422,18 +423,34 @@ impl BodyImage {
     /// Create a new `FsRead` instance based on an existing `File`. The fixed
     /// length is used to report `BodyImage::len` and may be obtained using
     /// `File::metadata`. If the provided length is zero, this returns as per
+    /// `BodyImage::empty()` instead. Attempts to read from the returned
+    /// `BodyImage` can fail if the file is not open for read.
+    ///
+    /// ### Safety
+    ///
+    /// Use of this constructor is potentially unsafe when the *mmap* feature
+    /// enabled and once `mem_map` is called:
+    ///
+    /// * The `mem_map` call will fail if the file is zero length or not open
+    /// for read.
+    ///
+    /// * Any concurrent writes to the file, or file system modifications
+    /// while under use in `MemMap` state may lead to *Undefined Behavior*
+    /// (UB).
+    #[cfg(feature = "mmap")]
+    pub unsafe fn from_file(file: File, length: u64) -> BodyImage {
+        image_from_file(file, length)
+    }
+
+    /// Create a new `FsRead` instance based on an existing `File`. The fixed
+    /// length is used to report `BodyImage::len` and may be obtained using
+    /// `File::metadata`. If the provided length is zero, this returns as per
     /// `BodyImage::empty()` instead. Attempts to read from or `mem_map` the
     /// returned `BodyImage` can fail if the file is not open for read or is
     /// zero length.
+    #[cfg(not(feature = "mmap"))]
     pub fn from_file(file: File, length: u64) -> BodyImage {
-        if length > 0 {
-            BodyImage {
-                state: ImageState::FsRead(Arc::new(file)),
-                len: length
-            }
-        } else {
-            BodyImage::empty()
-        }
+        image_from_file(file, length)
     }
 
     /// Create new instance from a single byte slice.
@@ -486,8 +503,12 @@ impl BodyImage {
         self.len == 0
     }
 
-    /// If `FsRead`, convert to `MemMap` by memory mapping the file. No-op for
-    /// other states.
+    /// If `FsRead`, convert to `MemMap` by memory mapping the file.
+    ///
+    /// Under normal construction via `BodySink` in `FsWrite` state, this
+    /// method is safe, because no other thread or process has access to the
+    /// underlying file. Note the potential safety requirements via
+    /// [`from_file`](#method-from_file) however.
     #[cfg(feature = "mmap")]
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
         let map = match self.state {
@@ -657,6 +678,18 @@ impl BodyImage {
             }
         }
         Ok(self.len)
+    }
+}
+
+// Create a new `FsRead` instance based on an existing `File`.
+fn image_from_file(file: File, length: u64) -> BodyImage {
+    if length > 0 {
+        BodyImage {
+            state: ImageState::FsRead(Arc::new(file)),
+            len: length
+        }
+    } else {
+        BodyImage::empty()
     }
 }
 
