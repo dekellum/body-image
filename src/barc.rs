@@ -1123,7 +1123,12 @@ fn slice_body(rp: &mut ReadPos, len: u64) -> Result<BodyImage, BarcError> {
     rp.seek(SeekFrom::Current(len as i64))?;
 
     let rslice = rp.subslice(offset, offset + len - 2); // - CRLF
-    Ok(BodyImage::from_read_slice(rslice))
+
+    // Safety: There is only appending writes, so within reason, the slice
+    // (and any later memory mapping) should be safe from concurrent
+    // modification and UB.
+    Ok(unsafe { BodyImage::from_read_slice(rslice) })
+
 }
 
 #[cfg(test)]
