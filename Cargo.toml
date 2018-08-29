@@ -42,7 +42,7 @@ log        = { version = ">=0.4.0, <2" }
 memmap     = { version = ">=0.6.2, <2", optional = true }
 olio       = { version = ">=0.4.0, <2", default-features = false }
 tempfile   = { version = ">=2.2.0, <4" }
-tokio      = { version = ">=0.1.7, <0.2", optional = true }
+tokio      = { version = ">=0.1.8, <0.2", optional = true }
 tokio-threadpool = { version = ">=0.1.4, <0.2", optional = true }
 
 [features]
