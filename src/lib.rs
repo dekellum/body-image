@@ -465,16 +465,33 @@ impl BodyImage {
 
     /// Create a new instance based on a `ReadSlice`. The `BodyImage::len`
     /// will be as per `ReadSlice::len`, and if zero, this returns as per
+    /// `BodyImage::empty()`. Attempts to read from the returned
+    /// `BodyImage` can fail if the file is not open for read.
+    ///
+    /// ### Safety
+    ///
+    /// Use of this constructor is potentially unsafe when the *mmap* feature
+    /// enabled and once `mem_map` is called:
+    ///
+    /// * The `mem_map` call will fail if the file is zero length or not open
+    /// for read.
+    ///
+    /// * Any concurrent writes to the file, or file system modifications
+    /// while under use in `MemMap` state may lead to *Undefined Behavior*
+    /// (UB).
+    #[cfg(feature = "mmap")]
+    pub unsafe fn from_read_slice(rslice: ReadSlice) -> BodyImage {
+        image_from_read_slice(rslice)
+    }
+
+    /// Create a new instance based on a `ReadSlice`. The `BodyImage::len`
+    /// will be as per `ReadSlice::len`, and if zero, this returns as per
     /// `BodyImage::empty()`. Attempts to read from or `mem_map` the returned
     /// `BodyImage` can fail if the file is not open for read or is zero
     /// length.
+    #[cfg(not(feature = "mmap"))]
     pub fn from_read_slice(rslice: ReadSlice) -> BodyImage {
-        let len = rslice.len();
-        if len > 0 {
-            BodyImage { state: ImageState::FsReadSlice(rslice), len }
-        } else {
-            BodyImage::empty()
-        }
+        image_from_read_slice(rslice)
     }
 
     /// Return true if in state `Ram`.
@@ -689,6 +706,16 @@ fn image_from_file(file: File, length: u64) -> BodyImage {
             state: ImageState::FsRead(Arc::new(file)),
             len: length
         }
+    } else {
+        BodyImage::empty()
+    }
+}
+
+// Create a new `FsRead` instance based on an existing `ReadSlice`.
+fn image_from_read_slice(rslice: ReadSlice) -> BodyImage {
+    let len = rslice.len();
+    if len > 0 {
+        BodyImage { state: ImageState::FsReadSlice(rslice), len }
     } else {
         BodyImage::empty()
     }
