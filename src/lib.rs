@@ -85,7 +85,7 @@ use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
 
 #[cfg(feature = "mmap")] use std::ops::Deref;
-#[cfg(feature = "mmap")] use memmap::{Mmap};
+#[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemAdviseError, MemHandle};
 
 use tempfile::tempfile_in;
