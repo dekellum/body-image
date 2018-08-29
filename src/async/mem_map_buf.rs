@@ -1,6 +1,3 @@
-#[cfg(unix)]
-extern crate libc;
-
 use std::io;
 use std::ops::Deref;
 

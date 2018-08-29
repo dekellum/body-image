@@ -58,7 +58,6 @@
                            extern crate olio;
 #[cfg(feature = "mmap")]   extern crate memmap;
                            extern crate tempfile;
-#[cfg(all(unix, feature = "mmap"))] extern crate libc;
 
                            pub mod barc;
 #[cfg(feature = "async")]  pub mod async;
