@@ -25,6 +25,8 @@ matrix:
       os: osx
     - rust: 1.26.2
       env: WITH_LOCK=true
+    - rust: 1.27.2
+      env: WITH_LOCK=true
     - rust: stable
     - rust: nightly
       env: WITH_LOCK=true
