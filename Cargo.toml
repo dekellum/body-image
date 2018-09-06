@@ -1,6 +1,6 @@
 [package]
 name          = "body-image"
-version       = "0.4.1"
+version       = "0.5.0"
 authors       = ["David Kellum <dek-oss@gravitext.com>"]
 license       = "MIT/Apache-2.0"
 description   = "Adaptive RAM/file-backed HTTP bodies and BARC serialization."

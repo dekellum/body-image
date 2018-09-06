@@ -1,16 +1,18 @@
-## 0.4.1 (TBD)
+## 0.5.0 (TBD)
 
 * Mark `BodyImage::from_file` and `BodyImage::from_read_slice` as *unsafe* when
   the default *mmap* feature is enabled, since once `BodyImage::mem_map` is
   called, any concurrent write to the file or other file system modifications
-  may lead to *Undefined Behavior*. This is a breaking change, but treated
-  (apologies) as a preventative bug fix in a patch release. (#5)
+  may lead to *Undefined Behavior*. This is a breaking change as compared with
+  0.4.0, though it could also be considered a fix to a regression introduced in
+  0.3.0 (#5).
 
 * Replace use of "deadline" with "timeout" per tokio-rs/tokio#558. This was
   released as tokio 0.1.8 (and tokio-timer 0.2.6) patch releases, which
   therefore become our new minimum.
 
-* Re-export the *olio* crate, public dependency.
+* Re-export the *olio* crate, public dependency (a low probability breaking
+  change.)
 
 ## 0.4.0 (2018-8-15)
 
