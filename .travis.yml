@@ -6,7 +6,14 @@ script:
   - 'cargo test --no-default-features --features client'
   - 'if [ "$MAY_FAIL" != "true" ]; then cargo test; fi'
   - 'if [ "$MAY_FAIL" == "true" ]; then cargo test --all-features; fi'
-cache: cargo
+
+# See https://levans.fr/rust_travis_cache.html
+cache:
+  directories:
+    - /home/travis/.cargo
+before_cache:
+  - rm -rf /home/travis/.cargo/registry
+
 rust: 1.26.2
 env: # important!
 matrix:
