@@ -7,12 +7,11 @@
   0.4.0, though it could also be considered a fix to a regression introduced in
   0.3.0 (#5).
 
-* Replace use of "deadline" with "timeout" per tokio-rs/tokio#558. This was
-  released as tokio 0.1.8 (and tokio-timer 0.2.6) patch releases, which
-  therefore become our new minimum.
+* Replace use of "deadline" with "timeout", per the deprecation of the former in
+  tokio-rs/tokio#558, which was released as tokio 0.1.8 (and tokio-timer 0.2.6)
+  patch releases. These versions therefore become our new minimums.
 
-* Re-export the *olio* crate, public dependency (a low probability breaking
-  change.)
+* Re-export the *olio* crate, public dependency.
 
 ## 0.4.0 (2018-8-15)
 
