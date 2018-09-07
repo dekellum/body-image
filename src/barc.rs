@@ -1126,9 +1126,13 @@ fn slice_body(rp: &mut ReadPos, len: u64) -> Result<BodyImage, BarcError> {
 
     // Safety: There is only appending writes, so within reason, the slice
     // (and any later memory mapping) should be safe from concurrent
-    // modification and UB.
-    Ok(unsafe { BodyImage::from_read_slice(rslice) })
-
+    // modification and UB. The `allow(unused_unsafe)` is because the method
+    // is actually not flagged as `unsafe` when the *memmap* feature is
+    // disabled.
+    #[allow(unused_unsafe)]
+    {
+        Ok(unsafe { BodyImage::from_read_slice(rslice) })
+    }
 }
 
 #[cfg(test)]
