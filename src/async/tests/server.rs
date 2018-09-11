@@ -32,6 +32,38 @@ use async::{AsyncBodyImage, RequestRecord, RequestRecorder, request_dialog};
 use ::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 
 #[test]
+fn large_concurrent_gets() {
+    assert!(*LOG_SETUP);
+
+    let mut rt = new_limited_runtime();
+    let (fut1, url1) = simple_server(174_333);
+    rt.spawn(fut1);
+    let (fut2, url2) = simple_server(1_393_400);
+    rt.spawn(fut2);
+
+    let tune = Tuner::new()
+        .set_max_body_ram(64 * 1024)
+        .finish();
+
+    let res = rt.block_on(
+        get_req::<Body>(&url1, &tune)
+            .join(get_req::<Body>(&url2, &tune))
+    );
+    match res {
+        Ok((dl0, dl1)) => {
+            assert_eq!(dl0.res_body.len(),   174_333);
+            assert_eq!(dl1.res_body.len(), 1_393_400);
+            assert!(!dl0.res_body.is_ram());
+            assert!(!dl1.res_body.is_ram());
+        }
+        Err(e) => {
+            panic!("failed with: {}", e);
+        }
+    }
+    rt.shutdown_on_idle().wait().unwrap();
+}
+
+#[test]
 fn post_echo_async_body() {
     assert!(*LOG_SETUP);
 
@@ -270,6 +302,17 @@ fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
                 )
             ))
         })
+    });
+    one_service!(svc)
+}
+
+fn simple_server(size: usize) -> (impl Future<Item=(), Error=()>, String) {
+    let svc = service_fn( move |_req| {
+        let bi = fs_body_image(size);
+        let tune = Tunables::default();
+        Response::builder()
+           .status(200)
+           .body(AsyncBodyImage::new(bi, &tune))
     });
     one_service!(svc)
 }
