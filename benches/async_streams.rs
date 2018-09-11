@@ -171,6 +171,34 @@ fn stream_20_mmap_uni_pre(b: &mut Bencher) {
     })
 }
 
+#[bench]
+fn stream_210_mmap_uni_htmp(b: &mut Bencher) {
+    let tune = Tuner::new().set_temp_dir("/mnt/htmp").finish();
+    let sink = BodySink::with_fs(tune.temp_dir()).unwrap();
+    let body = sink_data(sink).unwrap();
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    b.iter(|| {
+        let mut body = body.clone();
+        body.mem_map().unwrap();
+        let stream = UniBodyImage::new(body, &tune);
+        summarize_stream(stream, &mut rt);
+    })
+}
+
+#[bench]
+fn stream_211_mmap_uni_tmp(b: &mut Bencher) {
+    let tune = Tuner::new().set_temp_dir("/tmp").finish();
+    let sink = BodySink::with_fs(tune.temp_dir()).unwrap();
+    let body = sink_data(sink).unwrap();
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    b.iter(|| {
+        let mut body = body.clone();
+        body.mem_map().unwrap();
+        let stream = UniBodyImage::new(body, &tune);
+        summarize_stream(stream, &mut rt);
+    })
+}
+
 // `UniBodyImage` in `MemMap`, new mmap on each iteration, zero-copy
 #[bench]
 fn stream_21_mmap_uni(b: &mut Bencher) {
