@@ -25,7 +25,8 @@ use async::hyper::client::{Client, HttpConnector};
 use async::hyper::server::conn::Http;
 use async::hyper::service::{service_fn, service_fn_ok};
 
-use async::{AsyncBodyImage, RequestRecord, RequestRecorder, request_dialog};
+use async::{AsyncBodyImage, RequestRecord, RequestRecorder,
+            request_dialog, user_agent};
 
 #[cfg(feature = "mmap")] use async::{AsyncBodySink, UniBodyImage};
 
@@ -348,6 +349,7 @@ fn get_req<T>(url: &str, tune: &Tunables)
     let req: RequestRecord<T> = http::Request::builder()
         .method(http::Method::GET)
         .uri(url)
+        .header(http::header::USER_AGENT, &user_agent()[..])
         .record()
         .unwrap();
     let connector = HttpConnector::new(1 /*DNS threads*/);
