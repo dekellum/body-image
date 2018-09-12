@@ -65,6 +65,30 @@ fn large_concurrent_gets() {
 }
 
 #[test]
+fn post_echo_body() {
+    assert!(*LOG_SETUP);
+
+    let mut rt = new_limited_runtime();
+    let (fut, url) = echo_server();
+    rt.spawn(fut);
+
+    let tune = Tuner::new()
+        .set_buffer_size_fs(17)
+        .finish();
+    let body = fs_body_image(445);
+    match rt.block_on(post_body_req::<Body>(&url, body, &tune)) {
+        Ok(dl) => {
+            println!("{:#?}", dl);
+            assert_eq!(dl.res_body().len(), 445);
+        }
+        Err(e) => {
+            panic!("failed with: {}", e);
+        }
+    }
+    rt.shutdown_on_idle().wait().unwrap();
+}
+
+#[test]
 fn post_echo_async_body() {
     assert!(*LOG_SETUP);
 
