@@ -1736,6 +1736,8 @@ mod tests {
         if let Err(e) = reader.read(&tune) {
             if let BarcError::ReadIncompleteRecHead(l) = e {
                 assert_eq!(l, V2_HEAD_SIZE - 1);
+                let em = e.to_string();
+                assert!(em.contains("Incomplete"), em)
             } else {
                 panic!("Other error: {}", e);
             }
