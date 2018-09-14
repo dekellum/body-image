@@ -524,7 +524,7 @@ impl RecordType {
     }
 
     /// Return variant for (byte) flag, or fail.
-    fn try_from(f: u8) -> Result<Self, BarcError> {
+    fn from_byte(f: u8) -> Result<Self, BarcError> {
         match f {
             b'R' => Ok(RecordType::Reserved),
             b'D' => Ok(RecordType::Dialog),
@@ -562,7 +562,7 @@ impl Compression {
     }
 
     /// Return variant for (byte) flag, or fail.
-    fn try_from(f: u8) -> Result<Self, BarcError> {
+    fn from_byte(f: u8) -> Result<Self, BarcError> {
         match f {
             b'P' => Ok(Compression::Plain),
             b'Z' => Ok(Compression::Gzip),
@@ -1118,8 +1118,8 @@ fn read_record_head(r: &mut Read)
     }
 
     let len       = parse_hex(&buf[6..18])?;
-    let rec_type  = RecordType::try_from(buf[19])?;
-    let compress  = Compression::try_from(buf[20])?;
+    let rec_type  = RecordType::from_byte(buf[19])?;
+    let compress  = Compression::from_byte(buf[20])?;
     let meta      = parse_hex(&buf[22..27])?;
     let req_h     = parse_hex(&buf[28..33])?;
     let req_b     = parse_hex(&buf[34..44])?;
