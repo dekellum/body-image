@@ -363,16 +363,40 @@ impl TryFrom<Dialog> for Record {
     }
 }
 
+/// Error enumeration for failures when converting from a `Record` to a
+/// `Dialog`. This may be extended in the future, so exhaustive matching is
+/// gently discouraged with an unused variant.
 #[derive(Debug)]
 pub enum DialogConvertError {
+    /// No url meta header found.
     NoMetaUrl,
-    InvalidUri(http::uri::InvalidUriBytes),
+
+    /// The url meta header failed to parse as an `http::Uri`.
+    InvalidUrl(http::uri::InvalidUriBytes),
+
+    /// No method meta header found.
     NoMetaMethod,
+
+    /// The method meta header failed to parse as an `http::Method`.
     InvalidMethod(http::method::InvalidMethod),
+
+    /// No response-version meta header found.
     NoMetaResVersion,
+
+    /// The response-version meta header did not match a known value.
     InvalidVersion(Vec<u8>),
+
+    /// No response-status meta header found.
     NoMetaResStatus,
+
+    /// The response-status meta header is not in a recognized format.
+    MalformedMetaResStatus,
+
+    /// The response-status meta header failed to be parsed as an
+    /// `http::StatusCode`.
     InvalidStatusCode(http::status::InvalidStatusCode),
+
+    /// The response-decoded meta header failed to be parsed.
     InvalidResDecoded(String),
 
     /// Unused variant to both enable non-exhaustive matching and warn against
@@ -385,7 +409,7 @@ impl fmt::Display for DialogConvertError {
         match *self {
             DialogConvertError::NoMetaUrl =>
                 write!(f, "No url meta header found"),
-            DialogConvertError::InvalidUri(ref iub) =>
+            DialogConvertError::InvalidUrl(ref iub) =>
                 write!(f, "Invalid URI: {}", iub),
             DialogConvertError::NoMetaMethod =>
                 write!(f, "No method meta header found"),
@@ -402,8 +426,10 @@ impl fmt::Display for DialogConvertError {
             }
             DialogConvertError::NoMetaResStatus =>
                 write!(f, "No response-status meta header found"),
+            DialogConvertError::MalformedMetaResStatus =>
+                write!(f, "The response-status meta header is malformed"),
             DialogConvertError::InvalidStatusCode(ref isc) =>
-                write!(f, "Invalid HTTP statuc code: {}", isc),
+                write!(f, "Invalid HTTP status code: {}", isc),
             DialogConvertError::InvalidResDecoded(ref d) =>
                 write!(f, "Invalid response-decoded header value: {}", d),
             DialogConvertError::_FutureProof => unreachable!()
@@ -414,7 +440,7 @@ impl fmt::Display for DialogConvertError {
 impl Fail for DialogConvertError {
     fn cause(&self) -> Option<&Fail> {
         match *self {
-            DialogConvertError::InvalidUri(ref iub)           => Some(iub),
+            DialogConvertError::InvalidUrl(ref iub)           => Some(iub),
             DialogConvertError::InvalidMethod(ref im)         => Some(im),
             DialogConvertError::InvalidStatusCode(ref isc)    => Some(isc),
             _ => None
@@ -432,7 +458,7 @@ impl TryFrom<Record> for Dialog {
     fn try_from(rec: Record) -> Result<Self, Self::Err> {
         let url = if let Some(uv) = rec.meta.get(hname_meta_url()) {
             http::Uri::from_shared(uv.as_bytes().into())
-                .map_err(DialogConvertError::InvalidUri)
+                .map_err(DialogConvertError::InvalidUrl)
         } else {
             Err(DialogConvertError::NoMetaUrl)
         }?;
@@ -460,8 +486,13 @@ impl TryFrom<Record> for Dialog {
         };
 
         let status = if let Some(v) = rec.meta.get(hname_meta_res_status()) {
-            http::StatusCode::from_bytes(&v.as_bytes()[0..3])
-                .map_err(DialogConvertError::InvalidStatusCode)
+            let vbs = v.as_bytes();
+            if vbs.len() >= 3 {
+                http::StatusCode::from_bytes(&vbs[0..3])
+                    .map_err(DialogConvertError::InvalidStatusCode)
+            } else {
+                Err(DialogConvertError::MalformedMetaResStatus)
+            }
         } else {
             Err(DialogConvertError::NoMetaResStatus)
         }?;
