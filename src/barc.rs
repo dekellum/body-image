@@ -363,6 +363,146 @@ impl TryFrom<Dialog> for Record {
     }
 }
 
+#[derive(Debug)]
+pub enum DialogConvertError {
+    NoMetaUrl,
+    InvalidUri(http::uri::InvalidUriBytes),
+    NoMetaMethod,
+    InvalidMethod(http::method::InvalidMethod),
+    NoMetaResVersion,
+    InvalidVersion(Vec<u8>),
+    NoMetaResStatus,
+    InvalidStatusCode(http::status::InvalidStatusCode),
+    InvalidResDecoded(String),
+
+    /// Unused variant to both enable non-exhaustive matching and warn against
+    /// exhaustive matching.
+    _FutureProof
+}
+
+impl fmt::Display for DialogConvertError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            DialogConvertError::NoMetaUrl =>
+                write!(f, "No url meta header found"),
+            DialogConvertError::InvalidUri(ref iub) =>
+                write!(f, "Invalid URI: {}", iub),
+            DialogConvertError::NoMetaMethod =>
+                write!(f, "No method meta header found"),
+            DialogConvertError::InvalidMethod(ref im) =>
+                write!(f, "Invalid HTTP Method: {}", im),
+            DialogConvertError::NoMetaResVersion =>
+                write!(f, "No response-version meta header found"),
+            DialogConvertError::InvalidVersion(ref bs) => {
+                if let Ok(s) = String::from_utf8(bs.clone()) {
+                    write!(f, "Invalid HTTP Version: {}", s)
+                } else {
+                    write!(f, "Invalid HTTP Version: {:x?}", bs)
+                }
+            }
+            DialogConvertError::NoMetaResStatus =>
+                write!(f, "No response-status meta header found"),
+            DialogConvertError::InvalidStatusCode(ref isc) =>
+                write!(f, "Invalid HTTP statuc code: {}", isc),
+            DialogConvertError::InvalidResDecoded(ref d) =>
+                write!(f, "Invalid response-decoded header value: {}", d),
+            DialogConvertError::_FutureProof => unreachable!()
+        }
+    }
+}
+
+impl Fail for DialogConvertError {
+    fn cause(&self) -> Option<&Fail> {
+        match *self {
+            DialogConvertError::InvalidUri(ref iub)           => Some(iub),
+            DialogConvertError::InvalidMethod(ref im)         => Some(im),
+            DialogConvertError::InvalidStatusCode(ref isc)    => Some(isc),
+            _ => None
+        }
+    }
+}
+
+impl TryFrom<Record> for Dialog {
+    type Err = DialogConvertError;
+
+    /// Attempt to convert `Record` to `Dialog`. This parses various meta
+    /// header values to produce Dialog equivalents such as http::StatusCode
+    /// and http::Method, which could fail, if the `Record` was not originally
+    /// produced from a `Dialog` or was otherwise modified.
+    fn try_from(rec: Record) -> Result<Self, Self::Err> {
+        let url = if let Some(uv) = rec.meta.get(hname_meta_url()) {
+            http::Uri::from_shared(uv.as_bytes().into())
+                .map_err(DialogConvertError::InvalidUri)
+        } else {
+            Err(DialogConvertError::NoMetaUrl)
+        }?;
+
+        let method = if let Some(v) = rec.meta.get(hname_meta_method()) {
+            http::Method::from_bytes(v.as_bytes())
+                .map_err(DialogConvertError::InvalidMethod)
+        } else {
+            Err(DialogConvertError::NoMetaMethod)
+        }?;
+
+        let version = if let Some(v) = rec.meta.get(hname_meta_res_version()) {
+            let vb = v.as_bytes();
+            match vb {
+                b"HTTP/0.9" => http::Version::HTTP_09,
+                b"HTTP/1.0" => http::Version::HTTP_10,
+                b"HTTP/1.1" => http::Version::HTTP_11,
+                b"HTTP/2.0" => http::Version::HTTP_2,
+                _ => {
+                    return Err(DialogConvertError::InvalidVersion(vb.to_vec()));
+                }
+            }
+        } else {
+            return Err(DialogConvertError::NoMetaResVersion);
+        };
+
+        let status = if let Some(v) = rec.meta.get(hname_meta_res_status()) {
+            http::StatusCode::from_bytes(&v.as_bytes()[0..3])
+                .map_err(DialogConvertError::InvalidStatusCode)
+        } else {
+            Err(DialogConvertError::NoMetaResStatus)
+        }?;
+
+        let res_decoded = if let Some(v) = rec.meta.get(hname_meta_res_decoded()) {
+            let dcds = v.to_str().expect("utf-8");
+            let mut encodes = Vec::with_capacity(4);
+            for enc in dcds.split(", ") {
+                encodes.push(match enc {
+                    "chunked" => Encoding::Chunked,
+                    "deflate" => Encoding::Deflate,
+                    "gzip"    => Encoding::Gzip,
+                    "br"      => Encoding::Brotli,
+                    _ => {
+                        return Err(DialogConvertError::InvalidResDecoded(
+                            enc.to_string()
+                        ));
+                    }
+                })
+            }
+            encodes
+        } else {
+            Vec::with_capacity(0)
+        };
+
+        Ok(Dialog {
+            prolog: Prolog {
+                method,
+                url,
+                req_headers: rec.req_headers,
+                req_body:    rec.req_body,
+            },
+            version,
+            status,
+            res_decoded,
+            res_headers: rec.res_headers,
+            res_body:    rec.res_body,
+        })
+    }
+}
+
 /// BARC record type.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RecordType {
@@ -1185,7 +1325,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use http::header::{AGE, REFERER, VIA};
     use super::*;
-    use ::Tuner;
+    use ::{TryInto, Tuner};
     use failure::Error as Flare;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
@@ -1478,6 +1618,23 @@ mod tests {
 
         let record = reader.read(&tune).unwrap();
         assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_record_convert_dialog() {
+        let tune = Tunables::new();
+        let bfile = BarcFile::new("sample/example.barc");
+        let mut reader = bfile.reader().unwrap();
+        let rc1 = reader.read(&tune).unwrap().unwrap();
+
+        let dl: Dialog = rc1.clone().try_into().unwrap();
+        let rc2: Record = dl.try_into().unwrap();
+        assert_eq!(rc1.rec_type, rc2.rec_type);
+        assert_eq!(rc1.meta, rc2.meta);
+        assert_eq!(rc1.req_headers, rc2.req_headers);
+        assert_eq!(rc1.req_body.len(), rc2.req_body.len());
+        assert_eq!(rc1.res_headers, rc2.res_headers);
+        assert_eq!(rc1.res_body.len(), rc2.res_body.len());
     }
 
     #[test]
