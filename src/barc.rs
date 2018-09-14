@@ -67,26 +67,72 @@ pub const V2_MAX_HBLOCK: usize =        0xff_fff;
 /// 2<sup>40</sup> (1 TiB) - 1.
 pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
 
-/// Meta `HeaderName` for the complete URL used in the request.
+/// Meta header name bytes for the complete URL used in the request.
+#[deprecated(since="0.5.0", note="use hname_meta_url() instead")]
 pub static META_URL: &[u8]             = b"url";
+
+/// Meta `HeaderName` for the complete URL used in the request.
+#[inline]
+pub fn hname_meta_url() -> http::header::HeaderName {
+    static NAME: &str = "url";
+    HeaderName::from_static(NAME)
+}
+
+/// Meta header name bytes for the HTTP method used in the request,
+/// e.g. "GET", "POST", etc.
+#[deprecated(since="0.5.0", note="use hname_meta_method() instead")]
+pub static META_METHOD: &[u8]          = b"method";
 
 /// Meta `HeaderName` for the HTTP method used in the request, e.g. "GET",
 /// "POST", etc.
-pub static META_METHOD: &[u8]          = b"method";
+#[inline]
+pub fn hname_meta_method() -> http::header::HeaderName {
+    static NAME: &str = "method";
+    HeaderName::from_static(NAME)
+}
+
+/// Meta header name bytes for the response version, e.g. "HTTP/1.1",
+/// "HTTP/2.0", etc.
+#[deprecated(since="0.5.0", note="use hname_meta_res_version() instead")]
+pub static META_RES_VERSION: &[u8]     = b"response-version";
 
 /// Meta `HeaderName` for the response version, e.g. "HTTP/1.1", "HTTP/2.0",
 /// etc.
-pub static META_RES_VERSION: &[u8]     = b"response-version";
+#[inline]
+pub fn hname_meta_res_version() -> http::header::HeaderName {
+    static NAME: &str = "response-version";
+    HeaderName::from_static(NAME)
+}
+
+/// Meta header name bytes for the response numeric status code, SPACE,
+/// and then a standardized _reason phrase_, e.g. "200 OK". The later is
+/// intended only for human readers.
+#[deprecated(since="0.5.0", note="use hname_meta_res_status() instead")]
+pub static META_RES_STATUS: &[u8]      = b"response-status";
 
 /// Meta `HeaderName` for the response numeric status code, SPACE, and then a
 /// standardized _reason phrase_, e.g. "200 OK". The later is intended only
 /// for human readers.
-pub static META_RES_STATUS: &[u8]      = b"response-status";
+#[inline]
+pub fn hname_meta_res_status() -> http::header::HeaderName {
+    static NAME: &str = "response-status";
+    HeaderName::from_static(NAME)
+}
+
+/// Meta header name bytes for a list of content or transfer encodings
+/// decoded for the current response body. The value is in HTTP
+/// content-encoding header format, e.g. "chunked, gzip".
+#[deprecated(since="0.5.0", note="use hname_meta_res_decoded() instead")]
+pub static META_RES_DECODED: &[u8]     = b"response-decoded";
 
 /// Meta `HeaderName` for a list of content or transfer encodings decoded for
 /// the current response body. The value is in HTTP content-encoding header
 /// format, e.g. "chunked, gzip".
-pub static META_RES_DECODED: &[u8]     = b"response-decoded";
+#[inline]
+pub fn hname_meta_res_decoded() -> http::header::HeaderName {
+    static NAME: &str = "response-decoded";
+    HeaderName::from_static(NAME)
+}
 
 /// Reference to a BARC File by `Path`, supporting up to 1 writer and N
 /// readers concurrently.
@@ -272,11 +318,11 @@ impl TryFrom<Dialog> for Record {
         let efn = &|e| BarcError::InvalidHeader(Flare::from(e));
 
         meta.append(
-            HeaderName::from_lowercase(META_URL).unwrap(),
+            hname_meta_url(),
             dialog.prolog.url.to_string().parse().map_err(efn)?
         );
         meta.append(
-            HeaderName::from_lowercase(META_METHOD).unwrap(),
+            hname_meta_method(),
             dialog.prolog.method.to_string().parse().map_err(efn)?
         );
 
@@ -285,12 +331,12 @@ impl TryFrom<Dialog> for Record {
         // to match on, only constants.
         let v = format!("{:?}", dialog.version);
         meta.append(
-            HeaderName::from_lowercase(META_RES_VERSION).unwrap(),
+            hname_meta_res_version(),
             v.parse().map_err(efn)?
         );
 
         meta.append(
-            HeaderName::from_lowercase(META_RES_STATUS).unwrap(),
+            hname_meta_res_status(),
             dialog.status.to_string().parse().map_err(efn)?
         );
 
@@ -301,7 +347,7 @@ impl TryFrom<Dialog> for Record {
                 joined.push_str(&e.to_string());
             }
             meta.append(
-                HeaderName::from_lowercase(META_RES_DECODED).unwrap(),
+                hname_meta_res_decoded(),
                 joined.parse().map_err(efn)?
             );
         }
