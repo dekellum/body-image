@@ -45,8 +45,8 @@ use olio::fs::rc::{ReadPos, ReadSlice};
 #[cfg(feature = "brotli")]
 use brotli;
 
-use {BodyError, BodyImage, BodySink, Dialog,
-     Recorded, RequestRecorded, Tunables};
+use ::{BodyError, BodyImage, BodySink, Dialog, Encoding,
+       Prolog, Recorded, RequestRecorded, TryFrom, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -261,15 +261,13 @@ impl MetaRecorded for Record {
     fn meta(&self)        -> &http::HeaderMap  { &self.meta }
 }
 
-impl Record {
+impl TryFrom<Dialog> for Record {
+    type Err = BarcError;
 
-    /// Attempt to convert Dialog to Record. This derives meta headers from
+    /// Attempt to convert `Dialog` to `Record`. This derives meta headers from
     /// various dialog components, and could potentially fail when parsing
-    /// these values as header values.  Once rust `TryFrom` stabilizes, this
-    /// should be implemented as that trait instead.
-    pub fn try_from(dialog: Dialog) -> Result<Record, BarcError> {
-        use http::header::HeaderName;
-
+    /// these values as header values.
+    fn try_from(dialog: Dialog) -> Result<Self, Self::Err> {
         let mut meta = http::HeaderMap::with_capacity(6);
         let efn = &|e| BarcError::InvalidHeader(Flare::from(e));
 
