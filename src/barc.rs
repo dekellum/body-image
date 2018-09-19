@@ -45,8 +45,8 @@ use olio::fs::rc::{ReadPos, ReadSlice};
 #[cfg(feature = "brotli")]
 use brotli;
 
-use {BodyError, BodyImage, BodySink, Dialog,
-     Recorded, RequestRecorded, Tunables};
+use ::{BodyError, BodyImage, BodySink, Dialog, Encoding,
+       Prolog, Recorded, RequestRecorded, TryFrom, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -67,26 +67,72 @@ pub const V2_MAX_HBLOCK: usize =        0xff_fff;
 /// 2<sup>40</sup> (1 TiB) - 1.
 pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
 
-/// Meta `HeaderName` for the complete URL used in the request.
+/// Meta header name bytes for the complete URL used in the request.
+#[deprecated(since="0.5.0", note="use hname_meta_url() instead")]
 pub static META_URL: &[u8]             = b"url";
+
+/// Meta `HeaderName` for the complete URL used in the request.
+#[inline]
+pub fn hname_meta_url() -> http::header::HeaderName {
+    static NAME: &str = "url";
+    HeaderName::from_static(NAME)
+}
+
+/// Meta header name bytes for the HTTP method used in the request,
+/// e.g. "GET", "POST", etc.
+#[deprecated(since="0.5.0", note="use hname_meta_method() instead")]
+pub static META_METHOD: &[u8]          = b"method";
 
 /// Meta `HeaderName` for the HTTP method used in the request, e.g. "GET",
 /// "POST", etc.
-pub static META_METHOD: &[u8]          = b"method";
+#[inline]
+pub fn hname_meta_method() -> http::header::HeaderName {
+    static NAME: &str = "method";
+    HeaderName::from_static(NAME)
+}
+
+/// Meta header name bytes for the response version, e.g. "HTTP/1.1",
+/// "HTTP/2.0", etc.
+#[deprecated(since="0.5.0", note="use hname_meta_res_version() instead")]
+pub static META_RES_VERSION: &[u8]     = b"response-version";
 
 /// Meta `HeaderName` for the response version, e.g. "HTTP/1.1", "HTTP/2.0",
 /// etc.
-pub static META_RES_VERSION: &[u8]     = b"response-version";
+#[inline]
+pub fn hname_meta_res_version() -> http::header::HeaderName {
+    static NAME: &str = "response-version";
+    HeaderName::from_static(NAME)
+}
+
+/// Meta header name bytes for the response numeric status code, SPACE,
+/// and then a standardized _reason phrase_, e.g. "200 OK". The later is
+/// intended only for human readers.
+#[deprecated(since="0.5.0", note="use hname_meta_res_status() instead")]
+pub static META_RES_STATUS: &[u8]      = b"response-status";
 
 /// Meta `HeaderName` for the response numeric status code, SPACE, and then a
 /// standardized _reason phrase_, e.g. "200 OK". The later is intended only
 /// for human readers.
-pub static META_RES_STATUS: &[u8]      = b"response-status";
+#[inline]
+pub fn hname_meta_res_status() -> http::header::HeaderName {
+    static NAME: &str = "response-status";
+    HeaderName::from_static(NAME)
+}
+
+/// Meta header name bytes for a list of content or transfer encodings
+/// decoded for the current response body. The value is in HTTP
+/// content-encoding header format, e.g. "chunked, gzip".
+#[deprecated(since="0.5.0", note="use hname_meta_res_decoded() instead")]
+pub static META_RES_DECODED: &[u8]     = b"response-decoded";
 
 /// Meta `HeaderName` for a list of content or transfer encodings decoded for
 /// the current response body. The value is in HTTP content-encoding header
 /// format, e.g. "chunked, gzip".
-pub static META_RES_DECODED: &[u8]     = b"response-decoded";
+#[inline]
+pub fn hname_meta_res_decoded() -> http::header::HeaderName {
+    static NAME: &str = "response-decoded";
+    HeaderName::from_static(NAME)
+}
 
 /// Reference to a BARC File by `Path`, supporting up to 1 writer and N
 /// readers concurrently.
@@ -261,24 +307,26 @@ impl MetaRecorded for Record {
     fn meta(&self)        -> &http::HeaderMap  { &self.meta }
 }
 
-impl Record {
+impl TryFrom<Dialog> for Record {
+    type Err = BarcError;
 
-    /// Attempt to convert Dialog to Record. This derives meta headers from
-    /// various dialog components, and could potentially fail when parsing
-    /// these values as header values.  Once rust `TryFrom` stabilizes, this
-    /// should be implemented as that trait instead.
-    pub fn try_from(dialog: Dialog) -> Result<Record, BarcError> {
-        use http::header::HeaderName;
-
+    /// Attempt to convert `Dialog` to `Record`.  This derives meta headers
+    /// from various `Dialog` fields, and could potentially fail, based on
+    /// header value constraints, with `BarcError::InvalidHeader`. Converting
+    /// `Dialog::url` to the meta *url* header has the most potential, given
+    /// `http::Uri` validation complexity, but any conversion failure would
+    /// suggest an *http* crate bug or breaking change—as currently stated,
+    /// allowed `Uri` bytes are a subset of allowed `HeaderValue` bytes.
+    fn try_from(dialog: Dialog) -> Result<Self, Self::Err> {
         let mut meta = http::HeaderMap::with_capacity(6);
         let efn = &|e| BarcError::InvalidHeader(Flare::from(e));
 
         meta.append(
-            HeaderName::from_lowercase(META_URL).unwrap(),
+            hname_meta_url(),
             dialog.prolog.url.to_string().parse().map_err(efn)?
         );
         meta.append(
-            HeaderName::from_lowercase(META_METHOD).unwrap(),
+            hname_meta_method(),
             dialog.prolog.method.to_string().parse().map_err(efn)?
         );
 
@@ -287,12 +335,12 @@ impl Record {
         // to match on, only constants.
         let v = format!("{:?}", dialog.version);
         meta.append(
-            HeaderName::from_lowercase(META_RES_VERSION).unwrap(),
+            hname_meta_res_version(),
             v.parse().map_err(efn)?
         );
 
         meta.append(
-            HeaderName::from_lowercase(META_RES_STATUS).unwrap(),
+            hname_meta_res_status(),
             dialog.status.to_string().parse().map_err(efn)?
         );
 
@@ -303,7 +351,7 @@ impl Record {
                 joined.push_str(&e.to_string());
             }
             meta.append(
-                HeaderName::from_lowercase(META_RES_DECODED).unwrap(),
+                hname_meta_res_decoded(),
                 joined.parse().map_err(efn)?
             );
         }
@@ -315,6 +363,183 @@ impl Record {
             req_body:    dialog.prolog.req_body,
             res_headers: dialog.res_headers,
             res_body:    dialog.res_body,
+        })
+    }
+}
+
+/// Error enumeration for failures when converting from a `Record` to a
+/// `Dialog`. This may be extended in the future, so exhaustive matching is
+/// gently discouraged with an unused variant.
+#[derive(Debug)]
+pub enum DialogConvertError {
+    /// No url meta header found.
+    NoMetaUrl,
+
+    /// The url meta header failed to parse as an `http::Uri`.
+    InvalidUrl(http::uri::InvalidUriBytes),
+
+    /// No method meta header found.
+    NoMetaMethod,
+
+    /// The method meta header failed to parse as an `http::Method`.
+    InvalidMethod(http::method::InvalidMethod),
+
+    /// No response-version meta header found.
+    NoMetaResVersion,
+
+    /// The response-version meta header did not match a known value.
+    InvalidVersion(Vec<u8>),
+
+    /// No response-status meta header found.
+    NoMetaResStatus,
+
+    /// The response-status meta header is not in a recognized format.
+    MalformedMetaResStatus,
+
+    /// The response-status meta header failed to be parsed as an
+    /// `http::StatusCode`.
+    InvalidStatusCode(http::status::InvalidStatusCode),
+
+    /// The response-decoded meta header failed to be parsed.
+    InvalidResDecoded(String),
+
+    /// Unused variant to both enable non-exhaustive matching and warn against
+    /// exhaustive matching.
+    _FutureProof
+}
+
+impl fmt::Display for DialogConvertError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            DialogConvertError::NoMetaUrl =>
+                write!(f, "No url meta header found"),
+            DialogConvertError::InvalidUrl(ref iub) =>
+                write!(f, "Invalid URI: {}", iub),
+            DialogConvertError::NoMetaMethod =>
+                write!(f, "No method meta header found"),
+            DialogConvertError::InvalidMethod(ref im) =>
+                write!(f, "Invalid HTTP Method: {}", im),
+            DialogConvertError::NoMetaResVersion =>
+                write!(f, "No response-version meta header found"),
+            DialogConvertError::InvalidVersion(ref bs) => {
+                if let Ok(s) = String::from_utf8(bs.clone()) {
+                    write!(f, "Invalid HTTP Version: {}", s)
+                } else {
+                    write!(f, "Invalid HTTP Version: {:x?}", bs)
+                }
+            }
+            DialogConvertError::NoMetaResStatus =>
+                write!(f, "No response-status meta header found"),
+            DialogConvertError::MalformedMetaResStatus =>
+                write!(f, "The response-status meta header is malformed"),
+            DialogConvertError::InvalidStatusCode(ref isc) =>
+                write!(f, "Invalid HTTP status code: {}", isc),
+            DialogConvertError::InvalidResDecoded(ref d) =>
+                write!(f, "Invalid response-decoded header value: {}", d),
+            DialogConvertError::_FutureProof => unreachable!()
+        }
+    }
+}
+
+impl Fail for DialogConvertError {
+    fn cause(&self) -> Option<&Fail> {
+        match *self {
+            DialogConvertError::InvalidUrl(ref iub)           => Some(iub),
+            DialogConvertError::InvalidMethod(ref im)         => Some(im),
+            DialogConvertError::InvalidStatusCode(ref isc)    => Some(isc),
+            _ => None
+        }
+    }
+}
+
+impl TryFrom<Record> for Dialog {
+    type Err = DialogConvertError;
+
+    /// Attempt to convert `Record` to `Dialog`. This parses various meta
+    /// header values to produce `Dialog` equivalents such as
+    /// `http::StatusCode` and `http::Method`, which could fail, if the
+    /// `Record` was not originally produced from a `Dialog` or was otherwise
+    /// modified in an unsupported way.
+    fn try_from(rec: Record) -> Result<Self, Self::Err> {
+        let url = if let Some(uv) = rec.meta.get(hname_meta_url()) {
+            http::Uri::from_shared(uv.as_bytes().into())
+                .map_err(DialogConvertError::InvalidUrl)
+        } else {
+            Err(DialogConvertError::NoMetaUrl)
+        }?;
+
+        let method = if let Some(v) = rec.meta.get(hname_meta_method()) {
+            http::Method::from_bytes(v.as_bytes())
+                .map_err(DialogConvertError::InvalidMethod)
+        } else {
+            Err(DialogConvertError::NoMetaMethod)
+        }?;
+
+        let version = if let Some(v) = rec.meta.get(hname_meta_res_version()) {
+            let vb = v.as_bytes();
+            match vb {
+                b"HTTP/0.9" => http::Version::HTTP_09,
+                b"HTTP/1.0" => http::Version::HTTP_10,
+                b"HTTP/1.1" => http::Version::HTTP_11,
+                b"HTTP/2.0" => http::Version::HTTP_2,
+                _ => {
+                    return Err(DialogConvertError::InvalidVersion(vb.to_vec()));
+                }
+            }
+        } else {
+            return Err(DialogConvertError::NoMetaResVersion);
+        };
+
+        let status = if let Some(v) = rec.meta.get(hname_meta_res_status()) {
+            let vbs = v.as_bytes();
+            if vbs.len() >= 3 {
+                http::StatusCode::from_bytes(&vbs[0..3])
+                    .map_err(DialogConvertError::InvalidStatusCode)
+            } else {
+                Err(DialogConvertError::MalformedMetaResStatus)
+            }
+        } else {
+            Err(DialogConvertError::NoMetaResStatus)
+        }?;
+
+        let res_decoded = if let Some(v) = rec.meta.get(hname_meta_res_decoded()) {
+            if let Ok(dcds) = v.to_str() {
+                let mut encodes = Vec::with_capacity(4);
+                for enc in dcds.split(", ") {
+                    encodes.push(match enc {
+                        "chunked" => Encoding::Chunked,
+                        "deflate" => Encoding::Deflate,
+                        "gzip"    => Encoding::Gzip,
+                        "br"      => Encoding::Brotli,
+                        _ => {
+                            return Err(DialogConvertError::InvalidResDecoded(
+                                enc.to_string()
+                            ));
+                        }
+                    })
+                }
+                encodes
+            } else {
+                return Err(DialogConvertError::InvalidResDecoded(
+                    format!("{:x?}", v.as_bytes())
+                ));
+            }
+        } else {
+            Vec::with_capacity(0)
+        };
+
+        Ok(Dialog {
+            prolog: Prolog {
+                method,
+                url,
+                req_headers: rec.req_headers,
+                req_body:    rec.req_body,
+            },
+            version,
+            status,
+            res_decoded,
+            res_headers: rec.res_headers,
+            res_body:    rec.res_body,
         })
     }
 }
@@ -340,7 +565,7 @@ impl RecordType {
     }
 
     /// Return variant for (byte) flag, or fail.
-    fn try_from(f: u8) -> Result<Self, BarcError> {
+    fn from_byte(f: u8) -> Result<Self, BarcError> {
         match f {
             b'R' => Ok(RecordType::Reserved),
             b'D' => Ok(RecordType::Dialog),
@@ -378,7 +603,7 @@ impl Compression {
     }
 
     /// Return variant for (byte) flag, or fail.
-    fn try_from(f: u8) -> Result<Self, BarcError> {
+    fn from_byte(f: u8) -> Result<Self, BarcError> {
         match f {
             b'P' => Ok(Compression::Plain),
             b'Z' => Ok(Compression::Gzip),
@@ -934,8 +1159,8 @@ fn read_record_head(r: &mut Read)
     }
 
     let len       = parse_hex(&buf[6..18])?;
-    let rec_type  = RecordType::try_from(buf[19])?;
-    let compress  = Compression::try_from(buf[20])?;
+    let rec_type  = RecordType::from_byte(buf[19])?;
+    let compress  = Compression::from_byte(buf[20])?;
     let meta      = parse_hex(&buf[22..27])?;
     let req_h     = parse_hex(&buf[28..33])?;
     let req_b     = parse_hex(&buf[34..44])?;
@@ -1141,7 +1366,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use http::header::{AGE, REFERER, VIA};
     use super::*;
-    use ::Tuner;
+    use ::{TryInto, Tuner};
     use failure::Error as Flare;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
@@ -1437,6 +1662,40 @@ mod tests {
     }
 
     #[test]
+    fn test_record_convert_dialog() {
+        let tune = Tunables::new();
+        let bfile = BarcFile::new("sample/example.barc");
+        let mut reader = bfile.reader().unwrap();
+        let rc1 = reader.read(&tune).unwrap().unwrap();
+
+        let dl: Dialog = rc1.clone().try_into().unwrap();
+        let rc2: Record = dl.try_into().unwrap();
+        assert_eq!(rc1.rec_type, rc2.rec_type);
+        assert_eq!(rc1.meta, rc2.meta);
+        assert_eq!(rc1.req_headers, rc2.req_headers);
+        assert_eq!(rc1.req_body.len(), rc2.req_body.len());
+        assert_eq!(rc1.res_headers, rc2.res_headers);
+        assert_eq!(rc1.res_body.len(), rc2.res_body.len());
+    }
+
+    #[test]
+    fn test_record_convert_dialog_204() {
+        let tune = Tunables::new();
+        let bfile = BarcFile::new("sample/204_no_body.barc");
+        let mut reader = bfile.reader().unwrap();
+        let rc1 = reader.read(&tune).unwrap().unwrap();
+
+        let dl: Dialog = rc1.clone().try_into().unwrap();
+        let rc2: Record = dl.try_into().unwrap();
+        assert_eq!(rc1.rec_type, rc2.rec_type);
+        assert_eq!(rc1.meta, rc2.meta);
+        assert_eq!(rc1.req_headers, rc2.req_headers);
+        assert_eq!(rc1.req_body.len(), rc2.req_body.len());
+        assert_eq!(rc1.res_headers, rc2.res_headers);
+        assert_eq!(rc1.res_body.len(), rc2.res_body.len());
+    }
+
+    #[test]
     fn test_read_sample_larger() {
         let record = {
             let mut tune = Tuner::new()
@@ -1535,6 +1794,8 @@ mod tests {
         if let Err(e) = reader.read(&tune) {
             if let BarcError::ReadIncompleteRecHead(l) = e {
                 assert_eq!(l, V2_HEAD_SIZE - 1);
+                let em = e.to_string();
+                assert!(em.contains("Incomplete"), em)
             } else {
                 panic!("Other error: {}", e);
             }
