@@ -33,7 +33,7 @@ failure    = { version = ">=0.1.2, <2", default-features = false, features = ["s
 fern       = { version = ">=0.5.5, <2", optional = true }
 flate2     = { version = ">=1.0.1, <2" }
 futures    = { version = ">=0.1.20, <0.2", optional = true }
-http       = { version = ">=0.1.4, <2" }
+http       = { version = ">=0.1.6, <2" }
 httparse   = { version = ">=1.2.4, <2" }
 hyper      = { version = ">=0.12.1, <2", optional = true }
 hyper-tls  = { version = ">=0.2.0, <2",  optional = true }
