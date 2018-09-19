@@ -310,9 +310,13 @@ impl MetaRecorded for Record {
 impl TryFrom<Dialog> for Record {
     type Err = BarcError;
 
-    /// Attempt to convert `Dialog` to `Record`. This derives meta headers from
-    /// various dialog components, and could potentially fail when parsing
-    /// these values as header values.
+    /// Attempt to convert `Dialog` to `Record`.  This derives meta headers
+    /// from various `Dialog` fields, and could potentially fail, based on
+    /// header value constraints, with `BarcError::InvalidHeader`. Converting
+    /// `Dialog::url` to the meta *url* header has the most potential, given
+    /// `http::Uri` validation complexity, but any conversion failure would
+    /// suggest an *http* crate bug or breaking change—as currently stated,
+    /// allowed `Uri` bytes are a subset of allowed `HeaderValue` bytes.
     fn try_from(dialog: Dialog) -> Result<Self, Self::Err> {
         let mut meta = http::HeaderMap::with_capacity(6);
         let efn = &|e| BarcError::InvalidHeader(Flare::from(e));
@@ -452,9 +456,10 @@ impl TryFrom<Record> for Dialog {
     type Err = DialogConvertError;
 
     /// Attempt to convert `Record` to `Dialog`. This parses various meta
-    /// header values to produce Dialog equivalents such as http::StatusCode
-    /// and http::Method, which could fail, if the `Record` was not originally
-    /// produced from a `Dialog` or was otherwise modified.
+    /// header values to produce `Dialog` equivalents such as
+    /// `http::StatusCode` and `http::Method`, which could fail, if the
+    /// `Record` was not originally produced from a `Dialog` or was otherwise
+    /// modified in an unsupported way.
     fn try_from(rec: Record) -> Result<Self, Self::Err> {
         let url = if let Some(uv) = rec.meta.get(hname_meta_url()) {
             http::Uri::from_shared(uv.as_bytes().into())
