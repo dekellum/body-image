@@ -1,11 +1,24 @@
 ## 0.5.0 (TBD)
 
+* Provide placeholder `body_image::TryFrom` and blanket `TryInto` (still
+  awaiting std stabilization), relocate `barc::Record::try_from(Dialog)` to the
+  trait, and add new `TryFrom<barc::Record> for Dialog` for the opposite
+  conversion. The relocation is a minor breaking change in that current users
+  need to either import `body_image::TryFrom` or start using `try_into`. The
+  new `barc::Record` → `Dialog` conversion enables using BARC files as test
+  fixtures for `Dialog` processing code.
+
 * Mark `BodyImage::from_file` and `BodyImage::from_read_slice` as *unsafe* when
   the default *mmap* feature is enabled, since once `BodyImage::mem_map` is
   called, any concurrent write to the file or other file system modifications
   may lead to *Undefined Behavior*. This is a breaking change as compared with
   0.4.0, though it could also be considered a fix to a regression introduced in
   0.3.0 (#5).
+
+* Deprecate the `barc::META_*` header constants, replacing with `barc::hname_*`
+  helper functions which internally use `HeaderName::from_static`. This is more
+  ergonomic and found to be somewhat faster. The *http* crate version minimum
+  is now 0.1.6.
 
 * Replace use of "deadline" with "timeout", per the deprecation of the former in
   tokio-rs/tokio#558, which was released as tokio 0.1.8 (and tokio-timer 0.2.6)
