@@ -498,22 +498,27 @@ impl TryFrom<Record> for Dialog {
         }?;
 
         let res_decoded = if let Some(v) = rec.meta.get(hname_meta_res_decoded()) {
-            let dcds = v.to_str().expect("utf-8");
-            let mut encodes = Vec::with_capacity(4);
-            for enc in dcds.split(", ") {
-                encodes.push(match enc {
-                    "chunked" => Encoding::Chunked,
-                    "deflate" => Encoding::Deflate,
-                    "gzip"    => Encoding::Gzip,
-                    "br"      => Encoding::Brotli,
-                    _ => {
-                        return Err(DialogConvertError::InvalidResDecoded(
-                            enc.to_string()
-                        ));
-                    }
-                })
+            if let Ok(dcds) = v.to_str() {
+                let mut encodes = Vec::with_capacity(4);
+                for enc in dcds.split(", ") {
+                    encodes.push(match enc {
+                        "chunked" => Encoding::Chunked,
+                        "deflate" => Encoding::Deflate,
+                        "gzip"    => Encoding::Gzip,
+                        "br"      => Encoding::Brotli,
+                        _ => {
+                            return Err(DialogConvertError::InvalidResDecoded(
+                                enc.to_string()
+                            ));
+                        }
+                    })
+                }
+                encodes
+            } else {
+                return Err(DialogConvertError::InvalidResDecoded(
+                    format!("{:x?}", v.as_bytes())
+                ));
             }
-            encodes
         } else {
             Vec::with_capacity(0)
         };
@@ -1655,6 +1660,23 @@ mod tests {
     fn test_record_convert_dialog() {
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/example.barc");
+        let mut reader = bfile.reader().unwrap();
+        let rc1 = reader.read(&tune).unwrap().unwrap();
+
+        let dl: Dialog = rc1.clone().try_into().unwrap();
+        let rc2: Record = dl.try_into().unwrap();
+        assert_eq!(rc1.rec_type, rc2.rec_type);
+        assert_eq!(rc1.meta, rc2.meta);
+        assert_eq!(rc1.req_headers, rc2.req_headers);
+        assert_eq!(rc1.req_body.len(), rc2.req_body.len());
+        assert_eq!(rc1.res_headers, rc2.res_headers);
+        assert_eq!(rc1.res_body.len(), rc2.res_body.len());
+    }
+
+    #[test]
+    fn test_record_convert_dialog_204() {
+        let tune = Tunables::new();
+        let bfile = BarcFile::new("sample/204_no_body.barc");
         let mut reader = bfile.reader().unwrap();
         let rc1 = reader.read(&tune).unwrap().unwrap();
 
