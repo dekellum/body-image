@@ -1,5 +1,4 @@
 ## 0.5.0 (TBD)
-
 * Provide placeholder `body_image::TryFrom` and blanket `TryInto` (still
   awaiting std stabilization), relocate `barc::Record::try_from(Dialog)` to the
   trait, and add new `TryFrom<barc::Record> for Dialog` for the opposite
@@ -27,7 +26,6 @@
 * Re-export the *olio* crate, public dependency.
 
 ## 0.4.0 (2018-8-15)
-
 * The _client_ module and feature are renamed _async_, made a default feature
   and significantly expanded. See the _async_ module subsection below for
   further details. A deprecated _client_ re-export and feature alias remain
