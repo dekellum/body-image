@@ -25,6 +25,8 @@
 
 * Re-export the *olio* crate, public dependency.
 
+* Minimum supported rust version is now 1.27.2.
+
 ## 0.4.0 (2018-8-15)
 * The _client_ module and feature are renamed _async_, made a default feature
   and significantly expanded. See the _async_ module subsection below for
