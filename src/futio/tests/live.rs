@@ -1,6 +1,9 @@
-use crate::logger::LOG_SETUP;
+use failure::Error as Flare;
 
-use crate::futio::*;
+use crate::Tunables;
+use crate::futio::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
+                   RequestRecord, RequestRecorder, user_agent};
+use crate::logger::LOG_SETUP;
 
 fn get_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, Flare>
