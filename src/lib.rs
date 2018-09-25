@@ -24,20 +24,19 @@
 //! The following features may be enabled or disabled at build time. All are
 //! enabled by default.
 //!
-//! _async:_ The [async module](async/index.html) for input to
-//! `BodySink`, output of `BodyImage`, and recording of HTTP `Dialog`s via
-//! _hyper_ 0.12+ and _tokio_. Originally the *async* module was named
-//! *client* , but this would be misleading as *async* is also usable in a
-//! server (request or response contexts as well).  The *client* path name,
-//! now a re-export, is deprecated as of 0.4.0 in preference to the *async*
-//! name.
+//! _futio:_ The [futio module](futio/index.html) for input to `BodySink`,
+//! output of `BodyImage`, and recording of HTTP `Dialog`s via _hyper_ 0.12+,
+//! _futures_ and _tokio_. The *futio* module was previously named *client*
+//! (became misleading as *futio* is also usable in a server, e.g. request or
+//! response contexts), and then *async* (became a reserved keyword in rust
+//! 2018 edition). But who else could want the _futio_ name?
 //!
 //! _cli:_ The `barc` command line tool for viewing
 //! (e.g. compressed) records and copying records across BARC files. If the
-//! _async_ feature is enabled, then a `record` command is also provided for
+//! _futio_ feature is enabled, then a `record` command is also provided for
 //! live BARC recording from the network.
 //!
-//! _brotli:_ Brotli transfer/content decoding in _async_ module, and Brotli BARC
+//! _brotli:_ Brotli transfer/content decoding in _futio_ module, and Brotli BARC
 //! record compression (in _barc_), via the native-rust _brotli_ crate. (Gzip,
 //! via the _flate2_ crate, is standard.)
 //!
@@ -49,7 +48,7 @@
 #[cfg(feature = "brotli")] extern crate brotli;
                            extern crate bytes;
 
-#[cfg_attr(feature = "async", macro_use)] extern crate failure;
+#[cfg_attr(feature = "futio", macro_use)] extern crate failure;
 
                            extern crate flate2;
                            extern crate http;
@@ -61,15 +60,19 @@
                            extern crate tempfile;
 
                            pub mod barc;
-#[cfg(feature = "async")]  pub mod async;
+#[cfg(feature = "futio")]  pub mod futio;
 
 #[cfg(test)]               pub(crate) mod logger;
 
-// See note on *async* feature above. For whatever reason, rustdoc doesn't
+// See note on *futio* feature above. For whatever reason, rustdoc doesn't
 // currently show this deprecation in the re-exports section.
-#[cfg(feature = "async")]
-#[deprecated(since="0.4.0", note="use async module path")]
-pub use async as client;
+#[cfg(feature = "futio")]
+#[deprecated(since="0.4.0", note="use futio module path")]
+pub use futio as client;
+
+#[cfg(feature = "futio")]
+#[deprecated(since="0.5.0", note="use futio module path")]
+pub use futio as r#async;
 
 use std::env;
 use std::fmt;

@@ -1,6 +1,6 @@
 use ::logger::LOG_SETUP;
 
-use async::*;
+use futio::*;
 
 fn get_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, Flare>

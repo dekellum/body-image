@@ -9,10 +9,10 @@ use olio::fs::rc::ReadSlice;
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use failure::Error as Flare;
 
-use async::hyper;
-use async::tokio_threadpool;
-use async::futures::{Async, Poll, Stream};
-use async::{MemMapBuf, RequestRecord, RequestRecorder};
+use futio::hyper;
+use futio::tokio_threadpool;
+use futio::futures::{Async, Poll, Stream};
+use futio::{MemMapBuf, RequestRecord, RequestRecorder};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and

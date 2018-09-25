@@ -9,10 +9,10 @@ use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use failure::Error as Flare;
 
-use async::hyper;
-use async::tokio_threadpool;
-use async::futures::{Async, Poll, Stream};
-use async::{RequestRecord, RequestRecorder};
+use futio::hyper;
+use futio::tokio_threadpool;
+use futio::futures::{Async, Poll, Stream};
+use futio::{RequestRecord, RequestRecorder};
 use ::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 #[cfg(feature = "mmap")] use memmap::Mmap;

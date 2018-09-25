@@ -1,14 +1,13 @@
-use async::tokio_threadpool;
-use async::futures::{Async, AsyncSink, Poll, Sink, StartSend};
+use futio::hyper;
+use futio::tokio_threadpool;
+use futio::futures::{Async, AsyncSink, Poll, Sink, StartSend};
 use failure::Error as Flare;
-use bytes::Buf;
 use {BodySink, Tunables};
-use async::UniBodyBuf;
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
-/// allows a `Stream<Item=UniBodyBuf>` to be forwarded (e.g. via
-/// `futures::Stream::forward`) to a `BodySink`, in a fully asynchronous
-/// fashion and with zero-copy `MemMap` support (*mmap* feature only).
+/// allows a `hyper::Body` (`hyper::Chunk` item) stream to be forwarded
+/// (e.g. via `futures::Stream::forward`) to a `BodySink`, in a fully
+/// asynchronous fashion.
 ///
 /// `Tunables` are used during the streaming to decide when to write back a
 /// BodySink in `Ram` to `FsWrite`.  This implementation uses
@@ -21,18 +20,18 @@ use async::UniBodyBuf;
 /// `Ok(AsyncSink::NotReady(chunk)`, until a backup thread becomes available
 /// or any timeout occurs.
 #[derive(Debug)]
-pub struct UniBodySink {
+pub struct AsyncBodySink {
     body: BodySink,
     tune: Tunables,
 }
 
-impl UniBodySink {
+impl AsyncBodySink {
     /// Wrap by consuming a `BodySink` and `Tunables` instances.
     ///
     /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
     /// that can be done beforehand to preserve owned copies.
-    pub fn new(body: BodySink, tune: Tunables) -> UniBodySink {
-        UniBodySink { body, tune }
+    pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
+        AsyncBodySink { body, tune }
     }
 
     /// The inner `BodySink` as constructed.
@@ -63,30 +62,30 @@ macro_rules! unblock {
     })
 }
 
-impl Sink for UniBodySink {
-    type SinkItem = UniBodyBuf;
+impl Sink for AsyncBodySink {
+    type SinkItem = hyper::Chunk;
     type SinkError = Flare;
 
-    fn start_send(&mut self, buf: UniBodyBuf)
-        -> StartSend<UniBodyBuf, Flare>
+    fn start_send(&mut self, chunk: hyper::Chunk)
+        -> StartSend<hyper::Chunk, Flare>
     {
-        let new_len = self.body.len() + (buf.remaining() as u64);
+        let new_len = self.body.len() + (chunk.len() as u64);
         if new_len > self.tune.max_body() {
             bail!("Response stream too long: {}+", new_len);
         }
         if self.body.is_ram() && new_len > self.tune.max_body_ram() {
-            unblock!(buf, || {
+            unblock!(chunk, || {
                 debug!("to write back file (blocking, len: {})", new_len);
                 self.body.write_back(self.tune.temp_dir())
             })
         }
         if self.body.is_ram() {
-            debug!("to save buf (len: {})", buf.remaining());
-            self.body.write_all(&buf).map_err(Flare::from)?;
+            debug!("to save chunk (len: {})", chunk.len());
+            self.body.save(chunk).map_err(Flare::from)?;
         } else {
-            unblock!(buf, || {
-                debug!("to write buf (blocking, len: {})", buf.remaining());
-                self.body.write_all(&buf)
+            unblock!(chunk, || {
+                debug!("to write chunk (blocking, len: {})", chunk.len());
+                self.body.write_all(&chunk)
             })
         }
 
