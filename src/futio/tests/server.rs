@@ -3,34 +3,32 @@ use std::io;
 use std::net::TcpListener as StdTcpListener;
 use std::time::{Duration, Instant};
 
-use ::bytes::Bytes;
+use bytes::Bytes;
 
-use ::http;
-use ::http::{Request, Response};
-use crate::logger::LOG_SETUP;
-
+use http;
+use http::{Request, Response};
 use failure::Error as Flare;
+use futures::{future, Future, Stream};
 
-use crate::futio::futures::{future, Future, Stream};
+use tokio;
+use tokio::net::TcpListener;
+use tokio::runtime::Runtime;
+use tokio::reactor::Handle;
+use tokio::timer::Delay;
 
-use crate::futio::tokio;
-use crate::futio::tokio::net::TcpListener;
-use crate::futio::tokio::runtime::Runtime;
-use crate::futio::tokio::reactor::Handle;
-use crate::futio::tokio::timer::Delay;
+use hyper;
+use hyper::Body;
+use hyper::client::{Client, HttpConnector};
+use hyper::server::conn::Http;
+use hyper::service::{service_fn, service_fn_ok};
 
-use crate::futio::hyper;
-use crate::futio::hyper::Body;
-use crate::futio::hyper::client::{Client, HttpConnector};
-use crate::futio::hyper::server::conn::Http;
-use crate::futio::hyper::service::{service_fn, service_fn_ok};
-
-use crate::futio::{AsyncBodyImage, RequestRecord, RequestRecorder,
-                   request_dialog, user_agent};
-
-#[cfg(feature = "mmap")] use crate::r#async::{AsyncBodySink, UniBodyImage};
+use log::warn;
 
 use crate::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
+use crate::logger::LOG_SETUP;
+use crate::futio::{AsyncBodyImage, RequestRecord, RequestRecorder,
+                   request_dialog, user_agent};
+#[cfg(feature = "mmap")] use crate::futio::{AsyncBodySink, UniBodyImage};
 
 #[test]
 fn large_concurrent_gets() {

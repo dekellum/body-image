@@ -33,12 +33,33 @@
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
 
-extern crate futures;
-extern crate hyper;
-extern crate hyper_tls;
-extern crate hyperx;
-extern crate tokio;
-extern crate tokio_threadpool;
+use std::mem;
+
+#[cfg(feature = "brotli")] use brotli;
+
+use bytes::Bytes;
+use failure::{
+    bail,
+    // Convenient alias and "a sudden brief burst of bright flame or light."
+    Error as Flare,
+    format_err
+};
+use flate2::read::{DeflateDecoder, GzDecoder};
+use futures::{future, Future, Stream};
+use futures::future::Either;
+use http;
+use hyper;
+use hyper_tls;
+use hyperx::header::{ContentEncoding, ContentLength,
+                     Encoding as HyEncoding,
+                     Header, TransferEncoding, Raw};
+use log::{debug, warn};
+use tokio;
+use tokio::timer::timeout;
+use tokio::util::FutureExt;
+
+use crate::{BodyImage, BodySink, BodyError, Encoding,
+            Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
 mod image;
 mod sink;
@@ -54,30 +75,6 @@ pub use self::image::AsyncBodyImage;
 
 #[cfg(feature = "mmap")] mod uni_sink;
 #[cfg(feature = "mmap")] pub use self::uni_sink::UniBodySink;
-
-use std::mem;
-
-#[cfg(feature = "brotli")] use ::brotli;
-
-use bytes::Bytes;
-
-/// Convenient and non-repetitive alias.
-/// Also: "a sudden brief burst of bright flame or light."
-use failure::Error as Flare;
-
-use flate2::read::{DeflateDecoder, GzDecoder};
-use self::futures::{future, Future, Stream};
-use self::futures::future::Either;
-
-use http;
-use self::hyperx::header::{ContentEncoding, ContentLength,
-                           Encoding as HyEncoding,
-                           Header, TransferEncoding, Raw};
-use self::tokio::timer::timeout;
-use self::tokio::util::FutureExt;
-
-use crate::{BodyImage, BodySink, BodyError, Encoding,
-            Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
 /// Appropriate value for the HTTP accept-encoding request header, including
 /// (br)otli when the brotli feature is configured.

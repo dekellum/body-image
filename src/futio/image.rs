@@ -4,14 +4,15 @@ use std::io::{Cursor, Read};
 
 use std::vec::IntoIter;
 
-use ::http;
+use http;
 use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use failure::Error as Flare;
+use log::debug;
 
-use crate::futio::hyper;
-use crate::futio::tokio_threadpool;
-use crate::futio::futures::{Async, Poll, Stream};
+use hyper;
+use tokio_threadpool;
+use futures::{Async, Poll, Stream};
 use crate::futio::{RequestRecord, RequestRecorder};
 use crate::{BodyImage, ExplodedImage, Prolog, Tunables};
 

@@ -40,6 +40,7 @@ use flate2::read::GzDecoder;
 use http;
 use httparse;
 use http::header::{HeaderName, HeaderValue};
+use log::{debug, warn};
 use olio::fs::rc::{ReadPos, ReadSlice};
 
 #[cfg(feature = "brotli")]
