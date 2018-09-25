@@ -1,9 +1,9 @@
 
-use futio::hyper;
-use futio::tokio_threadpool;
-use futio::futures::{Async, AsyncSink, Poll, Sink, StartSend};
+use crate::futio::hyper;
+use crate::futio::tokio_threadpool;
+use crate::futio::futures::{Async, AsyncSink, Poll, Sink, StartSend};
 use failure::Error as Flare;
-use {BodySink, Tunables};
+use crate::{BodySink, Tunables};
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `hyper::Body` (`hyper::Chunk` item) stream to be forwarded

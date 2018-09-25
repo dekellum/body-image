@@ -76,8 +76,8 @@ use self::hyperx::header::{ContentEncoding, ContentLength,
 use self::tokio::timer::timeout;
 use self::tokio::util::FutureExt;
 
-use {BodyImage, BodySink, BodyError, Encoding,
-     Prolog, Dialog, RequestRecorded, Tunables, VERSION};
+use crate::{BodyImage, BodySink, BodyError, Encoding,
+            Prolog, Dialog, RequestRecorded, Tunables, VERSION};
 
 /// Appropriate value for the HTTP accept-encoding request header, including
 /// (br)otli when the brotli feature is configured.

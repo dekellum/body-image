@@ -1,10 +1,10 @@
-use ::logger::LOG_SETUP;
-use ::{BodySink, BodyImage, Tunables, Tuner};
+use crate::logger::LOG_SETUP;
+use crate::{BodySink, BodyImage, Tunables, Tuner};
 
-use futio::*;
+use crate::futio::*;
 
-use futio::tokio::runtime::current_thread::Runtime as CtRuntime;
-use futio::tokio::runtime::Runtime as DefaultRuntime;
+use crate::futio::tokio::runtime::current_thread::Runtime as CtRuntime;
+use crate::futio::tokio::runtime::Runtime as DefaultRuntime;
 
 #[test]
 fn forward_to_sink_empty() {

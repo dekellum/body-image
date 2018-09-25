@@ -9,15 +9,15 @@ use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use failure::Error as Flare;
 
-use futio::hyper;
-use futio::tokio_threadpool;
-use futio::futures::{Async, Poll, Stream};
-use futio::{RequestRecord, RequestRecorder};
-use ::{BodyImage, ExplodedImage, Prolog, Tunables};
+use crate::futio::hyper;
+use crate::futio::tokio_threadpool;
+use crate::futio::futures::{Async, Poll, Stream};
+use crate::futio::{RequestRecord, RequestRecorder};
+use crate::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
-#[cfg(feature = "mmap")] use ::MemHandleExt;
+#[cfg(feature = "mmap")] use crate::MemHandleExt;
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits.

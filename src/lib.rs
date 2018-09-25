@@ -68,11 +68,11 @@
 // currently show this deprecation in the re-exports section.
 #[cfg(feature = "futio")]
 #[deprecated(since="0.4.0", note="use futio module path")]
-pub use futio as client;
+pub use crate::futio as client;
 
 #[cfg(feature = "futio")]
 #[deprecated(since="0.5.0", note="use futio module path")]
-pub use futio as r#async;
+pub use crate::futio as r#async;
 
 use std::env;
 use std::fmt;

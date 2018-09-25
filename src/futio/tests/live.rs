@@ -1,6 +1,6 @@
-use ::logger::LOG_SETUP;
+use crate::logger::LOG_SETUP;
 
-use futio::*;
+use crate::futio::*;
 
 fn get_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, Flare>
