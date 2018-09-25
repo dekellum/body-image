@@ -1,10 +1,12 @@
-use crate::logger::LOG_SETUP;
+use failure::Error as Flare;
+use futures::stream::Stream;
+
+use tokio::runtime::current_thread::Runtime as CtRuntime;
+use tokio::runtime::Runtime as DefaultRuntime;
+
 use crate::{BodySink, BodyImage, Tunables, Tuner};
-
-use crate::futio::*;
-
-use crate::futio::tokio::runtime::current_thread::Runtime as CtRuntime;
-use crate::futio::tokio::runtime::Runtime as DefaultRuntime;
+use crate::futio::{UniBodyImage, UniBodySink};
+use crate::logger::LOG_SETUP;
 
 #[test]
 fn forward_to_sink_empty() {

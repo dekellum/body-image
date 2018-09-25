@@ -25,10 +25,10 @@ use hyper::service::{service_fn, service_fn_ok};
 use log::warn;
 
 use crate::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
-use crate::logger::LOG_SETUP;
 use crate::futio::{AsyncBodyImage, RequestRecord, RequestRecorder,
                    request_dialog, user_agent};
 #[cfg(feature = "mmap")] use crate::futio::{AsyncBodySink, UniBodyImage};
+use crate::logger::LOG_SETUP;
 
 #[test]
 fn large_concurrent_gets() {
