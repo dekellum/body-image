@@ -1,7 +1,9 @@
-use crate::futio::tokio_threadpool;
-use crate::futio::futures::{Async, AsyncSink, Poll, Sink, StartSend};
-use failure::Error as Flare;
 use bytes::Buf;
+use failure::{bail, Error as Flare};
+use futures::{Async, AsyncSink, Poll, Sink, StartSend};
+use log::debug;
+use tokio_threadpool;
+
 use crate::{BodySink, Tunables};
 use crate::futio::UniBodyBuf;
 

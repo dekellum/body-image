@@ -4,16 +4,17 @@ use std::io::{Cursor, Read};
 use std::ops::Deref;
 use std::vec::IntoIter;
 
-use ::http;
-use olio::fs::rc::ReadSlice;
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use failure::Error as Flare;
+use futures::{Async, Poll, Stream};
+use http;
+use hyper;
+use log::debug;
+use olio::fs::rc::ReadSlice;
+use tokio_threadpool;
 
-use crate::futio::hyper;
-use crate::futio::tokio_threadpool;
-use crate::futio::futures::{Async, Poll, Stream};
-use crate::futio::{MemMapBuf, RequestRecord, RequestRecorder};
 use crate::{BodyImage, ExplodedImage, Prolog, Tunables};
+use crate::futio::{MemMapBuf, RequestRecord, RequestRecorder};
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits, using the custom

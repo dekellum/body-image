@@ -2,30 +2,28 @@
 #![deny(dead_code, unused_imports)]
 #![warn(bare_trait_objects)]
 
-             extern crate body_image;
-#[macro_use] extern crate clap;
-#[macro_use] extern crate failure;
-             extern crate http;
-#[macro_use] extern crate log;
-
-#[cfg(feature = "futio")] mod record;
-
-mod logger;
-
 use std::io;
 use std::process;
+
+use clap::{
+    Arg, ArgMatches, App, AppSettings,
+    crate_version, SubCommand
+};
+use failure::{bail, Error as Flare};
+use log::error;
+
 use body_image::{Tunables, RequestRecorded, Recorded};
-use body_image::barc::{BarcFile, write_body, write_headers, MetaRecorded};
-use clap::{Arg, ArgMatches, App, AppSettings, SubCommand};
-use failure::Error as Flare;
+use body_image::barc::{
+    BarcFile,
+    CompressStrategy, GzipCompressStrategy, NoCompressStrategy,
+    write_body, write_headers, MetaRecorded
+};
+#[cfg(feature = "brotli")] use body_image::barc::BrotliCompressStrategy;
+
 use crate::logger::setup_logger;
 
-use body_image::barc::{CompressStrategy,
-                       NoCompressStrategy,
-                       GzipCompressStrategy};
-
-#[cfg(feature = "brotli")]
-use body_image::barc::BrotliCompressStrategy;
+#[cfg(feature = "futio")] mod record;
+mod logger;
 
 fn main() {
     let r = run();

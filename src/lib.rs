@@ -43,21 +43,28 @@
 //! _mmap:_ Adds `BodyImage::mem_map` support for memory mapping
 //! from `FsRead` state.
 #![deny(dead_code, unused_imports)]
-#![warn(bare_trait_objects)]
 
-#[cfg(feature = "brotli")] extern crate brotli;
-                           extern crate bytes;
+use std::env;
+use std::fmt;
+use std::fs::File;
+use std::io;
+use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::mem;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 
-#[cfg_attr(feature = "futio", macro_use)] extern crate failure;
+use bytes::{Bytes, BytesMut, BufMut};
+use failure::Fail;
 
-                           extern crate flate2;
-                           extern crate http;
-                           extern crate httparse;
-#[cfg(test)] #[macro_use]  extern crate lazy_static;
-#[macro_use]               extern crate log;
-                           extern crate olio;
-#[cfg(feature = "mmap")]   extern crate memmap;
-                           extern crate tempfile;
+use http;
+use log::{debug, warn};
+use olio::io::GatheringReader;
+use olio::fs::rc::{ReadPos, ReadSlice};
+
+#[cfg(feature = "mmap")] use std::ops::Deref;
+#[cfg(feature = "mmap")] use memmap::Mmap;
+#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemAdviseError, MemHandle};
 
                            pub mod barc;
 #[cfg(feature = "futio")]  pub mod futio;
@@ -73,24 +80,6 @@ pub use crate::futio as client;
 #[cfg(feature = "futio")]
 #[deprecated(since="0.5.0", note="use futio module path")]
 pub use crate::futio as r#async;
-
-use std::env;
-use std::fmt;
-use std::fs::File;
-use std::io;
-use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::mem;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Duration;
-use bytes::{Bytes, BytesMut, BufMut};
-use failure::Fail;
-use olio::io::GatheringReader;
-use olio::fs::rc::{ReadPos, ReadSlice};
-
-#[cfg(feature = "mmap")] use std::ops::Deref;
-#[cfg(feature = "mmap")] use memmap::Mmap;
-#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemAdviseError, MemHandle};
 
 use tempfile::tempfile_in;
 

@@ -4,6 +4,7 @@ use std::ops::Deref;
 use bytes::Buf;
 use memmap::Mmap;
 use olio::mem::{MemAdvice, MemHandle};
+#[cfg(unix)] use log::debug;
 
 /// New-type for zero-copy `Buf` trait implementation of `MemHandle<Mmap>`
 #[derive(Debug)]

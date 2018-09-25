@@ -1,8 +1,10 @@
-extern crate fern;
-
 use std;
-use log;
+
 use failure::Error as Flare;
+use fern;
+use log;
+
+#[cfg(test)] use lazy_static::lazy_static;
 
 // Use lazy static to ensure we only setup logging once (by first test and
 // thread)

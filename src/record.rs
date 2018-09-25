@@ -1,4 +1,4 @@
-extern crate hyper;
+use hyper;
 
 use failure::Error as Flare;
 use body_image::{TryFrom, Tunables};
