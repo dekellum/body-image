@@ -54,7 +54,7 @@ fn run() -> Result<(), Flare> {
         }
         "cp" => {
             let cs = compress_flags(subm)?;
-            let mut files = subm.values_of("file").unwrap();
+            let files = subm.values_of("file").unwrap();
             let fout = subm.value_of("out-file").unwrap();
             let (start, count) = filter_flags(subm)?;
             for fin in files {

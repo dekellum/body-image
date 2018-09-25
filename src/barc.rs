@@ -1698,7 +1698,7 @@ mod tests {
     #[test]
     fn test_read_sample_larger() {
         let record = {
-            let mut tune = Tuner::new()
+            let tune = Tuner::new()
                 .set_max_body_ram(1024) // < 1270 expected length
                 .finish();
 
@@ -1727,7 +1727,7 @@ mod tests {
     #[test]
     fn test_read_sample_mapped() {
         let mut record = {
-            let mut tune = Tuner::new()
+            let tune = Tuner::new()
                 .set_max_body_ram(1024) // < 1270 expected length
                 .finish();
 
