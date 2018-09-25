@@ -1,9 +1,9 @@
-use futio::tokio_threadpool;
-use futio::futures::{Async, AsyncSink, Poll, Sink, StartSend};
+use crate::futio::tokio_threadpool;
+use crate::futio::futures::{Async, AsyncSink, Poll, Sink, StartSend};
 use failure::Error as Flare;
 use bytes::Buf;
-use {BodySink, Tunables};
-use futio::UniBodyBuf;
+use crate::{BodySink, Tunables};
+use crate::futio::UniBodyBuf;
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `Stream<Item=UniBodyBuf>` to be forwarded (e.g. via

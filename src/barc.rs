@@ -45,8 +45,8 @@ use olio::fs::rc::{ReadPos, ReadSlice};
 #[cfg(feature = "brotli")]
 use brotli;
 
-use ::{BodyError, BodyImage, BodySink, Dialog, Encoding,
-       Prolog, Recorded, RequestRecorded, TryFrom, Tunables};
+use crate::{BodyError, BodyImage, BodySink, Dialog, Encoding,
+            Prolog, Recorded, RequestRecorded, TryFrom, Tunables};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -1372,7 +1372,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use http::header::{AGE, REFERER, VIA};
     use super::*;
-    use ::{TryInto, Tuner};
+    use crate::{TryInto, Tuner};
     use failure::Error as Flare;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {

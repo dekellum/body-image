@@ -7,30 +7,30 @@ use ::bytes::Bytes;
 
 use ::http;
 use ::http::{Request, Response};
-use ::logger::LOG_SETUP;
+use crate::logger::LOG_SETUP;
 
 use failure::Error as Flare;
 
-use futio::futures::{future, Future, Stream};
+use crate::futio::futures::{future, Future, Stream};
 
-use futio::tokio;
-use futio::tokio::net::TcpListener;
-use futio::tokio::runtime::Runtime;
-use futio::tokio::reactor::Handle;
-use futio::tokio::timer::Delay;
+use crate::futio::tokio;
+use crate::futio::tokio::net::TcpListener;
+use crate::futio::tokio::runtime::Runtime;
+use crate::futio::tokio::reactor::Handle;
+use crate::futio::tokio::timer::Delay;
 
-use futio::hyper;
-use futio::hyper::Body;
-use futio::hyper::client::{Client, HttpConnector};
-use futio::hyper::server::conn::Http;
-use futio::hyper::service::{service_fn, service_fn_ok};
+use crate::futio::hyper;
+use crate::futio::hyper::Body;
+use crate::futio::hyper::client::{Client, HttpConnector};
+use crate::futio::hyper::server::conn::Http;
+use crate::futio::hyper::service::{service_fn, service_fn_ok};
 
-use futio::{AsyncBodyImage, RequestRecord, RequestRecorder,
-            request_dialog, user_agent};
+use crate::futio::{AsyncBodyImage, RequestRecord, RequestRecorder,
+                   request_dialog, user_agent};
 
-#[cfg(feature = "mmap")] use async::{AsyncBodySink, UniBodyImage};
+#[cfg(feature = "mmap")] use crate::r#async::{AsyncBodySink, UniBodyImage};
 
-use ::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
+use crate::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 
 #[test]
 fn large_concurrent_gets() {

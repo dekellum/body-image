@@ -18,7 +18,7 @@ use body_image::{Tunables, RequestRecorded, Recorded};
 use body_image::barc::{BarcFile, write_body, write_headers, MetaRecorded};
 use clap::{Arg, ArgMatches, App, AppSettings, SubCommand};
 use failure::Error as Flare;
-use logger::setup_logger;
+use crate::logger::setup_logger;
 
 use body_image::barc::{CompressStrategy,
                        NoCompressStrategy,
