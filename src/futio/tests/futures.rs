@@ -1,10 +1,10 @@
 use ::logger::LOG_SETUP;
 use ::{BodySink, BodyImage, Tunables, Tuner};
 
-use async::*;
+use futio::*;
 
-use async::tokio::runtime::current_thread::Runtime as CtRuntime;
-use async::tokio::runtime::Runtime as DefaultRuntime;
+use futio::tokio::runtime::current_thread::Runtime as CtRuntime;
+use futio::tokio::runtime::Runtime as DefaultRuntime;
 
 #[test]
 fn forward_to_sink_empty() {

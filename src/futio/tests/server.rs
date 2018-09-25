@@ -11,21 +11,21 @@ use ::logger::LOG_SETUP;
 
 use failure::Error as Flare;
 
-use async::futures::{future, Future, Stream};
+use futio::futures::{future, Future, Stream};
 
-use async::tokio;
-use async::tokio::net::TcpListener;
-use async::tokio::runtime::Runtime;
-use async::tokio::reactor::Handle;
-use async::tokio::timer::Delay;
+use futio::tokio;
+use futio::tokio::net::TcpListener;
+use futio::tokio::runtime::Runtime;
+use futio::tokio::reactor::Handle;
+use futio::tokio::timer::Delay;
 
-use async::hyper;
-use async::hyper::Body;
-use async::hyper::client::{Client, HttpConnector};
-use async::hyper::server::conn::Http;
-use async::hyper::service::{service_fn, service_fn_ok};
+use futio::hyper;
+use futio::hyper::Body;
+use futio::hyper::client::{Client, HttpConnector};
+use futio::hyper::server::conn::Http;
+use futio::hyper::service::{service_fn, service_fn_ok};
 
-use async::{AsyncBodyImage, RequestRecord, RequestRecorder,
+use futio::{AsyncBodyImage, RequestRecord, RequestRecorder,
             request_dialog, user_agent};
 
 #[cfg(feature = "mmap")] use async::{AsyncBodySink, UniBodyImage};

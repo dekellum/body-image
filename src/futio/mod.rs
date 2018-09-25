@@ -1,6 +1,6 @@
 //! Asynchronous HTTP integration and utilities.
 //!
-//! This optional module (via default _async_ feature) provides
+//! This optional module (via default _futio_ feature) provides
 //! additional integration with the _futures_, _http_, _hyper_ 0.12.x., and
 //! _tokio_ crates.
 //!

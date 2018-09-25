@@ -22,7 +22,7 @@ use futures::Stream;
 use rand::Rng;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
-use body_image::async::*;
+use body_image::futio::*;
 
 // `AsyncBodyImage` in `Ram`, pre-gathered (single, contiguous buffer) and
 // used for each iteration.
