@@ -1,25 +1,18 @@
-#![warn(bare_trait_objects)]
+#![warn(rust_2018_idioms)]
 
 #![feature(test)]
-extern crate test;
-extern crate body_image;
-extern crate failure;
-extern crate futures;
-extern crate tokio;
-extern crate rand;
+extern crate test; // Still required, see rust-lang/rust#55133
 
 use std::cmp;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use test::Bencher;
-
 use failure::Error as Flare;
-
 use futures::Stream;
-
 use rand::seq::SliceRandom;
+use test::Bencher;
+use tokio;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 use body_image::futio::*;
