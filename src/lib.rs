@@ -105,7 +105,7 @@ pub enum BodyError {
 }
 
 impl fmt::Display for BodyError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             BodyError::BodyTooLong(l) =>
                 write!(
@@ -374,7 +374,7 @@ impl Default for BodySink {
 }
 
 impl fmt::Debug for SinkState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             SinkState::Ram(ref v) => {
                 // Avoids showing all buffers as u8 lists
@@ -567,7 +567,7 @@ impl BodyImage {
     /// Return a new `BodyReader` enum over self. The enum provides a
     /// consistent `Read` reference, or can be destructured for access to
     /// the specific concrete types.
-    pub fn reader(&self) -> BodyReader {
+    pub fn reader(&self) -> BodyReader<'_> {
         match self.state {
             ImageState::Ram(ref v) => {
                 if v.is_empty() {
@@ -756,7 +756,7 @@ impl Default for BodyImage {
 }
 
 impl fmt::Debug for ImageState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ImageState::Ram(ref v) => {
                 // Avoids showing all buffers as u8 lists
@@ -854,7 +854,7 @@ pub enum Encoding {
 }
 
 impl fmt::Display for Encoding {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match *self {
             Encoding::Chunked => "chunked",
             Encoding::Deflate => "deflate",
@@ -1221,8 +1221,8 @@ mod root {
         assert!(is_send::<Tunables>());
         assert!(is_sync::<Tunables>());
 
-        assert!(is_send::<BodyReader>());
-        assert!(is_sync::<BodyReader>());
+        assert!(is_send::<BodyReader<'_>>());
+        assert!(is_sync::<BodyReader<'_>>());
     }
 
     #[cfg(not(feature = "mmap"))]

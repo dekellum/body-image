@@ -191,7 +191,7 @@ pub enum BarcError {
 }
 
 impl fmt::Display for BarcError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             BarcError::Body(ref be) =>
                 write!(f, "With Body; {}", be),
@@ -410,7 +410,7 @@ pub enum DialogConvertError {
 }
 
 impl fmt::Display for DialogConvertError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             DialogConvertError::NoMetaUrl =>
                 write!(f, "No url meta header found"),
@@ -825,7 +825,7 @@ impl BarcFile {
     /// possibly creating it, or erroring) if this is the first time
     /// called. May block on the write lock, as only one `BarcWriter`
     /// instance is allowed.
-    pub fn writer(&self) -> Result<BarcWriter, BarcError> {
+    pub fn writer(&self) -> Result<BarcWriter<'_>, BarcError> {
         let mut guard = self.write_lock.lock().unwrap(); // FIXME:
         // PoisonError is not send, so can't map to BarcError
 
