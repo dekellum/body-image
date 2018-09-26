@@ -64,7 +64,7 @@ fn write_read_large_brotli_0(b: &mut Bencher) {
     })
 }
 
-fn write_read_large(fname: &PathBuf, strategy: &CompressStrategy)
+fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
     -> Result<(), Flare>
 {
     let bfile = BarcFile::new(fname);

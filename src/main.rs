@@ -101,9 +101,9 @@ fn part_flags(matches: &ArgMatches) -> Parts {
 }
 
 // Parse the compress flags into a CompressStrategy
-fn compress_flags(matches: &ArgMatches) -> Result<Box<CompressStrategy>, Flare>
+fn compress_flags(matches: &ArgMatches) -> Result<Box<dyn CompressStrategy>, Flare>
 {
-    let mut cs: Box<CompressStrategy> = Box::new(NoCompressStrategy::default());
+    let mut cs: Box<dyn CompressStrategy> = Box::new(NoCompressStrategy::default());
     if matches.is_present("brotli") {
         #[cfg(feature = "brotli")] {
             cs = Box::new(BrotliCompressStrategy::default());
@@ -228,7 +228,7 @@ fn cp(
     barc_out: &str,
     start: &StartPos,
     count: usize,
-    strategy: &CompressStrategy)
+    strategy: &dyn CompressStrategy)
     -> Result<(), Flare>
 {
     if barc_in == barc_out {

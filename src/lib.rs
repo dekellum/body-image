@@ -127,7 +127,7 @@ impl fmt::Display for BodyError {
 }
 
 impl Fail for BodyError {
-    fn cause(&self) -> Option<&Fail> {
+    fn cause(&self) -> Option<&dyn Fail> {
         match *self {
             BodyError::Io(ref e)     => Some(e),
             _ => None
@@ -618,7 +618,7 @@ impl BodyImage {
     /// length estimate provides a hint to use the file system from the start,
     /// which is more optimal than writing out accumulated `Ram` buffers
     /// later. If the length can't be estimated, use zero (0).
-    pub fn read_from(r: &mut Read, len_estimate: u64, tune: &Tunables)
+    pub fn read_from(r: &mut dyn Read, len_estimate: u64, tune: &Tunables)
         -> Result<BodyImage, BodyError>
     {
         if len_estimate > tune.max_body_ram() {
@@ -675,7 +675,7 @@ impl BodyImage {
 
     /// Write self to `out` and return length. If `FsRead` this is performed
     /// using `std::io::copy` with `ReadPos` as input.
-    pub fn write_to(&self, out: &mut Write) -> Result<u64, BodyError> {
+    pub fn write_to(&self, out: &mut dyn Write) -> Result<u64, BodyError> {
         match self.state {
             ImageState::Ram(ref v) => {
                 for b in v {
@@ -723,7 +723,7 @@ fn image_from_read_slice(rslice: ReadSlice) -> BodyImage {
 
 // Read all bytes from r, consume and write to a `BodySink` in state
 // `FsWrite`, returning a final prepared `BodyImage`.
-fn read_to_body_fs(r: &mut Read, mut body: BodySink, tune: &Tunables)
+fn read_to_body_fs(r: &mut dyn Read, mut body: BodySink, tune: &Tunables)
     -> Result<BodyImage, BodyError>
 {
     assert!(!body.is_ram());
@@ -828,7 +828,7 @@ pub enum BodyReader<'a> {
 impl<'a> BodyReader<'a> {
     /// Return the `Read` reference.
     #[allow(deprecated)]
-    pub fn as_read(&mut self) -> &mut Read {
+    pub fn as_read(&mut self) -> &mut dyn Read {
         match *self {
             BodyReader::Contiguous(ref mut cursor) => cursor,
             BodyReader::Scattered(ref mut gatherer) => gatherer,
