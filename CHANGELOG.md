@@ -11,8 +11,12 @@
   the default *mmap* feature is enabled, since once `BodyImage::mem_map` is
   called, any concurrent write to the file or other file system modifications
   may lead to *Undefined Behavior*. This is a breaking change as compared with
-  0.4.0, though it could also be considered a fix to a regression introduced in
-  0.3.0 (#5).
+  0.4.0. (#5)
+
+* Drop `async::RequestRecordable` type alias for the `RequestRecorder<B>`
+  trait, which was intended to offer backward compatibility (to 0.3.0), but
+  wasn't usable. Type aliases to traits can be *defined* but not really *used*
+  in rust to date.
 
 * Deprecate the `barc::META_*` header constants, replacing with `barc::hname_*`
   helper functions which internally use `HeaderName::from_static`. This is more
@@ -22,8 +26,6 @@
 * Replace use of "deadline" with "timeout", per the deprecation of the former in
   tokio-rs/tokio#558, which was released as tokio 0.1.8 (and tokio-timer 0.2.6)
   patch releases. These versions therefore become our new minimums.
-
-* Re-export the *olio* crate, public dependency.
 
 * Minimum supported rust version is now 1.27.2.
 
