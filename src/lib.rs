@@ -55,7 +55,7 @@
                            extern crate httparse;
 #[cfg(test)] #[macro_use]  extern crate lazy_static;
 #[macro_use]               extern crate log;
-                       pub extern crate olio;
+                           extern crate olio;
 #[cfg(feature = "mmap")]   extern crate memmap;
                            extern crate tempfile;
 
