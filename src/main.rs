@@ -82,7 +82,7 @@ fn run() -> Result<(), Flare> {
 }
 
 // Parse the field selection flags into `Parts`
-fn part_flags(matches: &ArgMatches) -> Parts {
+fn part_flags(matches: &ArgMatches<'_>) -> Parts {
     let mut parts = Parts::default();
     if  matches.is_present("meta") ||
         matches.is_present("req_head") || matches.is_present("req_body") ||
@@ -99,7 +99,7 @@ fn part_flags(matches: &ArgMatches) -> Parts {
 }
 
 // Parse the compress flags into a CompressStrategy
-fn compress_flags(matches: &ArgMatches) -> Result<Box<dyn CompressStrategy>, Flare>
+fn compress_flags(matches: &ArgMatches<'_>) -> Result<Box<dyn CompressStrategy>, Flare>
 {
     let mut cs: Box<dyn CompressStrategy> = Box::new(NoCompressStrategy::default());
     if matches.is_present("brotli") {
@@ -118,7 +118,7 @@ fn compress_flags(matches: &ArgMatches) -> Result<Box<dyn CompressStrategy>, Fla
 }
 
 // Parse filter flags and return (StartPos, count) or error.
-fn filter_flags(matches: &ArgMatches) -> Result<(StartPos, usize), Flare>
+fn filter_flags(matches: &ArgMatches<'_>) -> Result<(StartPos, usize), Flare>
 {
     let files_len = matches.values_of("file").unwrap().len();
     let mut start = StartPos::default();
