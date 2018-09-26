@@ -461,6 +461,8 @@ impl InDialog {
 }
 
 /// Type alias for body-image ≤0.3.0 compatibility
+#[deprecated(since="0.5.0", note="use RequestRecorder generic trait")]
+#[allow(bare_trait_objects)] // FIXME: trait alias when stable? Or remove?
 pub type RequestRecordable = RequestRecorder<hyper::Body>;
 
 /// Extension trait for `http::request::Builder`, to enable recording key
