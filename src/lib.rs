@@ -43,6 +43,7 @@
 //! _mmap:_ Adds `BodyImage::mem_map` support for memory mapping
 //! from `FsRead` state.
 #![deny(dead_code, unused_imports)]
+#![warn(rust_2018_idioms)]
 
 use std::env;
 use std::fmt;
