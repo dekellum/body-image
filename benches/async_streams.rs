@@ -1,25 +1,18 @@
-#![warn(bare_trait_objects)]
+#![warn(rust_2018_idioms)]
 
 #![feature(test)]
-extern crate test;
-extern crate body_image;
-extern crate failure;
-extern crate futures;
-extern crate tokio;
-extern crate rand;
+extern crate test; //FIXME: Necessary but warns!?
 
 use std::cmp;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use test::Bencher;
-
 use failure::Error as Flare;
-
 use futures::Stream;
-
-use rand::Rng;
+use rand::{thread_rng, Rng};
+use self::test::Bencher;
+use tokio;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 use body_image::futio::*;
@@ -230,7 +223,7 @@ fn summarize_stream<S>(stream: S, rt: &mut tokio::runtime::Runtime)
 fn sink_data(mut body: BodySink) -> Result<BodyImage, Flare> {
     let reps = 1024;
     let mut vals: Vec<u8> = (0..reps).map(|v| (v % 256) as u8).collect();
-    rand::thread_rng().shuffle(&mut vals);
+    thread_rng().shuffle(&mut vals);
     assert!(vals.contains(&255));
     for i in vals {
         body.write_all(vec![i; 0x2000])?;

@@ -1,17 +1,15 @@
 //! This was copied from src/barc.rs unit tests with minimal changes and only
 //! serves as a rough compression performance sanity check.
-#![warn(bare_trait_objects)]
+#![warn(rust_2018_idioms)]
 
 #![feature(test)]
-extern crate test;
-extern crate body_image;
-extern crate failure;
+extern crate test; //FIXME: Necessary but warns!?
 
-use test::Bencher;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use failure::Error as Flare;
+use self::test::Bencher;
 
 use body_image::{BodySink, Tunables};
 use body_image::barc::*;
