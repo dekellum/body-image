@@ -1,5 +1,6 @@
 //! This was copied from src/barc.rs unit tests with minimal changes and only
 //! serves as a rough compression performance sanity check.
+#![warn(bare_trait_objects)]
 
 #![feature(test)]
 extern crate test;

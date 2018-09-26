@@ -1,5 +1,6 @@
 //! The `barc` command line tool
 #![deny(dead_code, unused_imports)]
+#![warn(bare_trait_objects)]
 
              extern crate body_image;
 #[macro_use] extern crate clap;

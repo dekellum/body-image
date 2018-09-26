@@ -1,3 +1,5 @@
+#![warn(bare_trait_objects)]
+
 #![feature(test)]
 extern crate test;
 extern crate body_image;
