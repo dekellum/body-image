@@ -442,7 +442,7 @@ impl fmt::Display for DialogConvertError {
 }
 
 impl Fail for DialogConvertError {
-    fn cause(&self) -> Option<&Fail> {
+    fn cause(&self) -> Option<&dyn Fail> {
         match *self {
             DialogConvertError::InvalidUrl(ref iub)           => Some(iub),
             DialogConvertError::InvalidMethod(ref im)         => Some(im),
