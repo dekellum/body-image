@@ -460,9 +460,6 @@ impl InDialog {
     }
 }
 
-/// Type alias for body-image ≤0.3.0 compatibility
-pub type RequestRecordable = RequestRecorder<hyper::Body>;
-
 /// Extension trait for `http::request::Builder`, to enable recording key
 /// portions of the request for the final `Dialog`.
 ///
