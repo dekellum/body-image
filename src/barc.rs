@@ -505,7 +505,8 @@ impl TryFrom<Record> for Dialog {
         let res_decoded = if let Some(v) = rec.meta.get(hname_meta_res_decoded()) {
             if let Ok(dcds) = v.to_str() {
                 let mut encodes = Vec::with_capacity(4);
-                for enc in dcds.split(", ") {
+                for enc in dcds.split(',') {
+                    let enc = enc.trim();
                     encodes.push(match enc {
                         "chunked" => Encoding::Chunked,
                         "deflate" => Encoding::Deflate,
