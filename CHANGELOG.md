@@ -25,9 +25,16 @@
 
 * Replace use of "deadline" with "timeout", per the deprecation of the former in
   tokio-rs/tokio#558, which was released as tokio 0.1.8 (and tokio-timer 0.2.6)
-  patch releases. These versions therefore become our new minimums.
+  patch releases.
 
-* Minimum supported rust version is now 1.27.2.
+* Replace use of `tokio::thread_pool::Builder` with the new
+  `tokio::runtime::Builder` façade methods. The former was deprecated and the
+  latter added in tokio-rs/tokio#645. The was originally released in tokio
+  0.1.9. Subsequently tokio 0.1.10 and 0.1.11 were released as (purely semver)
+  bug fixes of the former, so make 0.1.11 the new minimum version.
+
+* Use `dyn Trait` syntax throughout. Minimum supported rust version is now
+  1.27.2.
 
 ## 0.4.0 (2018-8-15)
 * The _client_ module and feature are renamed _async_, made a default feature
