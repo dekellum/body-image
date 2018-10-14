@@ -15,7 +15,7 @@ pub(crate) fn record(
     barc_path: &str,
     decode: bool,
     accept: Option<&str>,
-    strategy: &CompressStrategy)
+    strategy: &dyn CompressStrategy)
     -> Result<(), Flare>
 {
     let req: RequestRecord<hyper::Body> = http::Request::builder()

@@ -1,5 +1,6 @@
 //! This was copied from src/barc.rs unit tests with minimal changes and only
 //! serves as a rough compression performance sanity check.
+#![warn(bare_trait_objects)]
 
 #![feature(test)]
 extern crate test;
@@ -63,7 +64,7 @@ fn write_read_large_brotli_0(b: &mut Bencher) {
     })
 }
 
-fn write_read_large(fname: &PathBuf, strategy: &CompressStrategy)
+fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
     -> Result<(), Flare>
 {
     let bfile = BarcFile::new(fname);
