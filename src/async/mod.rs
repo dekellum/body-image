@@ -104,12 +104,10 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     -> Result<Dialog, Flare>
     where B: hyper::body::Payload + Send
 {
-    let mut pool = tokio::executor::thread_pool::Builder::new();
-    pool.name_prefix("tpool-")
-        .pool_size(2)
-        .max_blocking(2);
     let mut rt = tokio::runtime::Builder::new()
-        .threadpool_builder(pool)
+        .name_prefix("tpool-")
+        .core_threads(2)
+        .blocking_threads(2)
         .build().unwrap();
     let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
     let client = hyper::Client::builder().build(connector);

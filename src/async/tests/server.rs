@@ -397,12 +397,10 @@ fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
 }
 
 fn new_limited_runtime() -> Runtime {
-    let mut pool = tokio::executor::thread_pool::Builder::new();
-    pool.name_prefix("tpool-")
-        .pool_size(2)
-        .max_blocking(2);
     tokio::runtime::Builder::new()
-        .threadpool_builder(pool)
+        .name_prefix("tpool-")
+        .core_threads(2)
+        .blocking_threads(2)
         .build()
         .expect("runtime build")
 }
