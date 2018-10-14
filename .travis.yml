@@ -4,6 +4,7 @@ script:
   - 'if [ "$WITH_LOCK" != "true" ]; then cargo update; fi'
   - 'cargo test --no-default-features'
   - 'cargo test --no-default-features --features client'
+  - 'cargo build --all-features --all-targets'
   - 'if [ "$MAY_FAIL" != "true" ]; then cargo test; fi'
   - 'if [ "$MAY_FAIL" == "true" ]; then cargo test --all-features; fi'
 
