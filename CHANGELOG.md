@@ -29,7 +29,7 @@
 
 * Replace use of `tokio::thread_pool::Builder` with the new
   `tokio::runtime::Builder` façade methods. The former was deprecated and the
-  latter added in tokio-rs/tokio#645. The was originally released in tokio
+  latter added in tokio-rs/tokio#645. This was originally released in tokio
   0.1.9. Subsequently tokio 0.1.10 and 0.1.11 were released as (purely semver)
   bug fixes of the former, so make 0.1.11 the new minimum version.
 
