@@ -1,7 +1,5 @@
 #![warn(rust_2018_idioms)]
-
 #![feature(test)]
-extern crate test; //FIXME: Necessary but warns!?
 
 use std::cmp;
 use std::fs;
@@ -11,7 +9,7 @@ use std::path::{Path, PathBuf};
 use failure::Error as Flare;
 use futures::Stream;
 use rand::{thread_rng, Rng};
-use self::test::Bencher;
+use test::Bencher;
 use tokio;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
