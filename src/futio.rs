@@ -538,12 +538,3 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body: body } })
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[cfg(feature = "mmap")]        mod futures;
-                                    mod server;
-
-    /// These tests may fail because they depend on public web servers
-    #[cfg(feature = "may_fail")]    mod live;
-}
