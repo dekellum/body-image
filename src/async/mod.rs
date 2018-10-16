@@ -394,7 +394,8 @@ fn check_length(v: &http::header::HeaderValue, max: u64)
 /// methods for `RequestRecord` are found in trait implementation
 /// [`RequestRecorded`](#impl-RequestRecorded).
 ///
-/// _Limitations:_ This can't be `Clone`, because `B = client::hyper::Body`
+/// _Limitations:_ This can't be `Clone`, because `http::Request` currently
+/// isn't `Clone`.  Also note that as used as type `B`, `hyper::Body` also
 /// isn't `Clone`.
 #[derive(Debug)]
 pub struct RequestRecord<B> {
