@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/body-image.svg?maxAge=3600)](https://crates.io/crates/body-image)
 [![Rustdoc](https://docs.rs/body-image/badge.svg)](https://docs.rs/body-image)
 [![Travis CI Build](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
-[![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
+[![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
 [![deps status](https://deps.rs/repo/github/dekellum/body-image/status.svg)](https://deps.rs/repo/github/dekellum/body-image)
 
 A rust crate providing two separately usable but closely related HTTP
