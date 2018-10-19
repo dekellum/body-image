@@ -1,3 +1,5 @@
+## 0.6.0 (TBD)
+
 ## 0.5.0 (2018-10-19)
 * Provide placeholder `body_image::TryFrom` and blanket `TryInto` (still
   awaiting std stabilization), relocate `barc::Record::try_from(Dialog)` to the
