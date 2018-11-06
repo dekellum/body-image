@@ -108,7 +108,8 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         .name_prefix("tpool-")
         .core_threads(2)
         .blocking_threads(2)
-        .build().unwrap();
+        .build()
+        .unwrap();
     let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
     let client = hyper::Client::builder().build(connector);
     rt.block_on(request_dialog(&client, rr, tune))
@@ -187,7 +188,7 @@ fn timeout_to_flare<F>(te: timeout::Error<Flare>, on_elapsed: F) -> Flare
 /// Return a list of supported encodings from the headers Transfer-Encoding
 /// and Content-Encoding.  The `Chunked` encoding will be the first value if
 /// found. At most one compression encoding will be the last value if found.
-pub fn find_encodings(headers: &http::HeaderMap)-> Vec<Encoding> {
+pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
     let encodings = headers
         .get_all(http::header::TRANSFER_ENCODING)
         .iter()
@@ -205,7 +206,7 @@ pub fn find_encodings(headers: &http::HeaderMap)-> Vec<Encoding> {
         if let Ok(v) = ContentEncoding::parse_header(&Raw::from(v.as_bytes())) {
             for av in v.iter() {
                 match *av {
-                    HyEncoding::Identity => {},
+                    HyEncoding::Identity => {}
                     HyEncoding::Chunked => {
                         chunked = true
                     }
@@ -244,11 +245,10 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
     let encodings = headers.get_all(http::header::TRANSFER_ENCODING);
 
     'headers: for v in encodings {
-        if let Ok(v) = TransferEncoding::parse_header(&Raw::from(v.as_bytes()))
-        {
+        if let Ok(v) = TransferEncoding::parse_header(&Raw::from(v.as_bytes())) {
             for av in v.iter() {
                 match *av {
-                    HyEncoding::Identity => {},
+                    HyEncoding::Identity => {}
                     HyEncoding::Chunked => {
                         return true;
                     }
@@ -274,7 +274,7 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
 {
     let encodings = find_encodings(&dialog.res_headers);
 
-    let compression = encodings.last().and_then( |e| {
+    let compression = encodings.last().and_then(|e| {
         if *e != Encoding::Chunked { Some(*e) } else { None }
     });
 
@@ -289,7 +289,6 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
         } else {
             warn!("Unsupported encoding: {:?} not decoded", comp);
         }
-
     }
 
     dialog.res_decoded = encodings;
@@ -503,8 +502,8 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-       -> Result<RequestRecord<hyper::Body>, Flare>
-       where BB: Into<Bytes>
+        -> Result<RequestRecord<hyper::Body>, Flare>
+        where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
         let buf_copy: Bytes = buf.clone();

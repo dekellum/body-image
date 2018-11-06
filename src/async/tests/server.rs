@@ -336,8 +336,8 @@ fn simple_server(size: usize) -> (impl Future<Item=(), Error=()>, String) {
         let bi = fs_body_image(size);
         let tune = Tunables::default();
         Response::builder()
-           .status(200)
-           .body(AsyncBodyImage::new(bi, &tune))
+            .status(200)
+            .body(AsyncBodyImage::new(bi, &tune))
     });
     one_service!(svc)
 }

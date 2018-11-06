@@ -140,7 +140,7 @@ impl Stream for AsyncBodyImage {
                 if avail == 0 {
                     return Ok(Async::Ready(None));
                 }
-                let res = unblock( || {
+                let res = unblock(|| {
                     let bs = cmp::min(bsize, avail) as usize;
                     let mut buf = BytesMut::with_capacity(bs);
                     match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
@@ -164,7 +164,7 @@ impl Stream for AsyncBodyImage {
                 if avail == 0 {
                     return Ok(Async::Ready(None));
                 }
-                let res = unblock( || {
+                let res = unblock(|| {
                     // This performs a copy via *bytes* crate
                     // `copy_from_slice`. There is no apparent way to achieve
                     // a 'static lifetime for `Bytes::from_static`, for

@@ -1335,8 +1335,7 @@ fn read_body_fs(r: &mut dyn Read, len: u64, tune: &Tunables)
 
         if body.len() < len {
             buf.clear();
-        }
-        else {
+        } else {
             assert_eq!(body.len(), len);
             break;
         }

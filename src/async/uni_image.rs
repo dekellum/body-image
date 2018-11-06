@@ -172,7 +172,7 @@ impl Stream for UniBodyImage {
                 if avail == 0 {
                     return Ok(Async::Ready(None));
                 }
-                let res = unblock( || {
+                let res = unblock(|| {
                     let bs = cmp::min(bsize, avail) as usize;
                     let mut buf = BytesMut::with_capacity(bs);
                     match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
@@ -194,7 +194,7 @@ impl Stream for UniBodyImage {
             UniBodyState::MemMap(ref mut ob) => {
                 let d = ob.take();
                 if let Some(mb) = d {
-                    let res = unblock( || {
+                    let res = unblock(|| {
                         mb.advise_sequential()?;
                         let _b = mb.bytes()[0];
                         debug!("prepared MemMap (blocking, len: {})", mb.len());
@@ -249,8 +249,8 @@ impl RequestRecorder<UniBodyImage> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-       -> Result<RequestRecord<UniBodyImage>, Flare>
-       where BB: Into<Bytes>
+        -> Result<RequestRecord<UniBodyImage>, Flare>
+        where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
         let req_body = if buf.is_empty() {

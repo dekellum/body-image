@@ -684,7 +684,7 @@ impl BodyImage {
             }
             #[cfg(feature = "mmap")]
             ImageState::MemMap(ref mh) => {
-                mh.tmp_advise(MemAdvice::Sequential, || out.write_all(mh) )?;
+                mh.tmp_advise(MemAdvice::Sequential, || out.write_all(mh))?;
             }
             ImageState::FsRead(ref f) => {
                 let mut rp = ReadPos::new(f.clone(), self.len);
@@ -1088,7 +1088,7 @@ impl Tuner {
     /// Set the size estimate, as an integer multiple of the encoded buffer
     /// size, for the _deflate_ compression algorithm.
     pub fn set_size_estimate_deflate(&mut self, multiple: u16) -> &mut Tuner {
-        assert!(multiple > 0, "size_estimate_deflate must be >= 1" );
+        assert!(multiple > 0, "size_estimate_deflate must be >= 1");
         self.template.size_estimate_deflate = multiple;
         self
     }
@@ -1096,7 +1096,7 @@ impl Tuner {
     /// Set the size estimate, as an integer multiple of the encoded buffer
     /// size, for the _gzip_ compression algorithm.
     pub fn set_size_estimate_gzip(&mut self, multiple: u16) -> &mut Tuner {
-        assert!(multiple > 0, "size_estimate_gzip must be >= 1" );
+        assert!(multiple > 0, "size_estimate_gzip must be >= 1");
         self.template.size_estimate_gzip = multiple;
         self
     }
@@ -1338,12 +1338,10 @@ mod root {
         if let Err(e) = BodyImage::read_from(&mut src, 0, &tune) {
             if let BodyError::BodyTooLong(l) = e {
                 assert_eq!(l, salutation.len() as u64)
-            }
-            else {
+            } else {
                 panic!("Other error: {}", e);
             }
-        }
-        else {
+        } else {
             panic!("Read from, too long, success!?");
         }
     }

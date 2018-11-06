@@ -1,4 +1,3 @@
-
 use async::hyper;
 use async::tokio_threadpool;
 use async::futures::{Async, AsyncSink, Poll, Sink, StartSend};
