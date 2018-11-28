@@ -19,7 +19,7 @@ use failure::Error as Flare;
 
 use futures::Stream;
 
-use rand::Rng;
+use rand::seq::SliceRandom;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 use body_image::async::*;
@@ -230,7 +230,7 @@ fn summarize_stream<S>(stream: S, rt: &mut tokio::runtime::Runtime)
 fn sink_data(mut body: BodySink) -> Result<BodyImage, Flare> {
     let reps = 1024;
     let mut vals: Vec<u8> = (0..reps).map(|v| (v % 256) as u8).collect();
-    rand::thread_rng().shuffle(&mut vals);
+    vals.shuffle(&mut rand::thread_rng());
     assert!(vals.contains(&255));
     for i in vals {
         body.write_all(vec![i; 0x2000])?;
