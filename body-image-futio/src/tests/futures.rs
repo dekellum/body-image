@@ -4,8 +4,9 @@ use futures::stream::Stream;
 use tokio::runtime::current_thread::Runtime as CtRuntime;
 use tokio::runtime::Runtime as DefaultRuntime;
 
-use crate::{BodySink, BodyImage, Tunables, Tuner};
-use crate::futio::{UniBodyImage, UniBodySink};
+use body_image::{BodySink, BodyImage, Tunables, Tuner};
+
+use crate::{UniBodyImage, UniBodySink};
 use crate::logger::LOG_SETUP;
 
 #[test]

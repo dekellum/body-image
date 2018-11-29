@@ -1,0 +1,40 @@
+[package]
+name          = "body-image"
+version       = "0.6.0"
+edition       = "2018"
+authors       = ["David Kellum <dek-oss@gravitext.com>"]
+license       = "MIT/Apache-2.0"
+description   = "Adaptive RAM/file-backed HTTP bodies."
+documentation = "https://docs.rs/body-image"
+repository    = "https://github.com/dekellum/body-image"
+readme        = "README.md"
+keywords      = [
+    "buffer", "compression",
+    "http", "serialization", "hyper",
+]
+categories    = [
+    "web-programming::http-client",
+    "web-programming::http-server",
+]
+
+[badges]
+travis-ci = { repository = "dekellum/body-image" }
+
+[dependencies]
+bytes      = { version = ">=0.4.6, <2" }
+failure    = { version = ">=0.1.2, <2", default-features = false, features = ["std"] }
+http       = { version = ">=0.1.6, <2" }
+log        = { version = ">=0.4.0, <2" }
+memmap     = { version = ">=0.6.2, <2", optional = true }
+olio       = { version = ">=0.4.0, <2", default-features = false }
+tempfile   = { version = ">=2.2.0, <4" }
+
+[features]
+default = ["mmap"]
+mmap = ["memmap", "olio/mmap"]
+
+[lib]
+doctest = false
+
+[package.metadata.docs.rs]
+features = ["mmap"]

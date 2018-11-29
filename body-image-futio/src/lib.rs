@@ -50,16 +50,21 @@ use futures::future::Either;
 use http;
 use hyper;
 use hyper_tls;
-use hyperx::header::{ContentEncoding, ContentLength,
-                     Encoding as HyEncoding,
-                     Header, TransferEncoding, Raw};
+use hyperx::header::{
+    ContentEncoding, ContentLength, Encoding as HyEncoding,
+    Header, TransferEncoding, Raw
+};
 use log::{debug, warn};
 use tokio;
 use tokio::timer::timeout;
 use tokio::util::FutureExt;
 
-use crate::{BodyImage, BodySink, BodyError, Encoding,
-            Prolog, Dialog, RequestRecorded, Tunables, VERSION};
+use body_image::{
+    BodyImage, BodySink, BodyError, Encoding,
+    Epilog, Prolog, Dialog, Recorded, RequestRecorded, Tunables, VERSION
+};
+
+// FIXME: Local VERSION
 
 mod image;
 mod sink;
@@ -269,7 +274,7 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     -> Result<bool, BodyError>
 {
-    let encodings = find_encodings(&dialog.res_headers);
+    let encodings = find_encodings(dialog.res_headers());
 
     let compression = encodings.last().and_then(|e| {
         if *e != Encoding::Chunked { Some(*e) } else { None }
@@ -277,18 +282,16 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
 
     let mut decoded = false;
     if let Some(comp) = compression {
-        debug!("Body to {:?} decode: {:?}", comp, dialog.res_body);
-        let new_body = decompress(&dialog.res_body, comp, tune)?;
+        debug!("Body to {:?} decode: {:?}", comp, dialog.res_body());
+        let new_body = decompress(dialog.res_body(), comp, tune)?;
         if let Some(b) = new_body {
-            dialog.res_body = b;
+            dialog.set_res_body_decoded(b, encodings);
             decoded = true;
-            debug!("Body update: {:?}", dialog.res_body);
+            debug!("Body update: {:?}", dialog.res_body());
         } else {
             warn!("Unsupported encoding: {:?} not decoded", comp);
         }
     }
-
-    dialog.res_decoded = encodings;
 
     Ok(decoded)
 }
@@ -444,14 +447,16 @@ impl InDialog {
             Vec::with_capacity(0)
         };
 
-        Ok(Dialog {
-            prolog:      self.prolog,
-            version:     self.version,
-            status:      self.status,
-            res_headers: self.res_headers,
-            res_decoded,
-            res_body:    self.res_body.prepare()?,
-        })
+        Ok(Dialog::new(
+            self.prolog,
+            Epilog {
+                version:     self.version,
+                status:      self.status,
+                res_headers: self.res_headers,
+                res_decoded,
+                res_body:    self.res_body.prepare()?,
+            }
+        ))
     }
 }
 
@@ -537,4 +542,16 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
             request,
             prolog: Prolog { method, url, req_headers, req_body: body } })
     }
+}
+
+#[cfg(test)]
+mod logger;
+
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "mmap")]        mod futures;
+                                    mod server;
+
+    /// These tests may fail because they depend on public web servers
+    #[cfg(feature = "may_fail")]    mod live;
 }

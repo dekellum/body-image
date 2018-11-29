@@ -13,17 +13,17 @@ use failure::{bail, Error as Flare};
 use log::error;
 
 use body_image::{Tunables, RequestRecorded, Recorded};
-use body_image::barc::{
+use barc::{
     BarcFile,
     CompressStrategy, GzipCompressStrategy, NoCompressStrategy,
     write_body, write_headers, MetaRecorded
 };
-#[cfg(feature = "brotli")] use body_image::barc::BrotliCompressStrategy;
-
-use crate::logger::setup_logger;
+#[cfg(feature = "brotli")] use barc::BrotliCompressStrategy;
 
 #[cfg(feature = "futio")] mod record;
 mod logger;
+
+use crate::logger::setup_logger;
 
 fn main() {
     let r = run();
@@ -272,7 +272,7 @@ impl Default for VarHelp {
             "Record an HTTP dialog via the network ({})",
             feature);
         let record_after = format!(
-            "This command depends on the non-default \"client\" feature at \
+            "This command depends on the default \"futio\" feature at \
              build time, which was {}.\n\
              \n\
              Currently `record` is limited to GET requests.  The browser-like \

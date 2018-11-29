@@ -46,8 +46,13 @@ use olio::fs::rc::{ReadPos, ReadSlice};
 #[cfg(feature = "brotli")]
 use brotli;
 
-use crate::{BodyError, BodyImage, BodySink, Dialog, Encoding,
-            Prolog, Recorded, RequestRecorded, TryFrom, Tunables};
+use body_image::{
+    BodyError, BodyImage, BodySink, Dialog, Encoding,
+    Epilog, Prolog, Recorded, RequestRecorded, Tunables
+};
+
+mod try_conv;
+pub use crate::try_conv::{TryFrom, TryInto};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -319,22 +324,24 @@ impl TryFrom<Dialog> for Record {
     /// suggest an *http* crate bug or breaking change—as currently stated,
     /// allowed `Uri` bytes are a subset of allowed `HeaderValue` bytes.
     fn try_from(dialog: Dialog) -> Result<Self, Self::Err> {
+
+        let (prolog, epilog) = dialog.explode();
         let mut meta = http::HeaderMap::with_capacity(6);
         let efn = &|e| BarcError::InvalidHeader(Flare::from(e));
 
         meta.append(
             hname_meta_url(),
-            dialog.prolog.url.to_string().parse().map_err(efn)?
+            prolog.url.to_string().parse().map_err(efn)?
         );
         meta.append(
             hname_meta_method(),
-            dialog.prolog.method.to_string().parse().map_err(efn)?
+            prolog.method.to_string().parse().map_err(efn)?
         );
 
         // FIXME: This relies on the debug format of version, e.g. "HTTP/1.1"
         // which might not be stable, but http::Version doesn't offer an enum
         // to match on, only constants.
-        let v = format!("{:?}", dialog.version);
+        let v = format!("{:?}", epilog.version);
         meta.append(
             hname_meta_res_version(),
             v.parse().map_err(efn)?
@@ -342,12 +349,12 @@ impl TryFrom<Dialog> for Record {
 
         meta.append(
             hname_meta_res_status(),
-            dialog.status.to_string().parse().map_err(efn)?
+            epilog.status.to_string().parse().map_err(efn)?
         );
 
-        if !dialog.res_decoded.is_empty() {
+        if !epilog.res_decoded.is_empty() {
             let mut joined = String::with_capacity(20);
-            for e in dialog.res_decoded {
+            for e in epilog.res_decoded {
                 if !joined.is_empty() { joined.push_str(", "); }
                 joined.push_str(&e.to_string());
             }
@@ -356,14 +363,13 @@ impl TryFrom<Dialog> for Record {
                 joined.parse().map_err(efn)?
             );
         }
-
         Ok(Record {
             rec_type: RecordType::Dialog,
             meta,
-            req_headers: dialog.prolog.req_headers,
-            req_body:    dialog.prolog.req_body,
-            res_headers: dialog.res_headers,
-            res_body:    dialog.res_body,
+            req_headers: prolog.req_headers,
+            req_body:    prolog.req_body,
+            res_headers: epilog.res_headers,
+            res_body:    epilog.res_body,
         })
     }
 }
@@ -530,19 +536,21 @@ impl TryFrom<Record> for Dialog {
             Vec::with_capacity(0)
         };
 
-        Ok(Dialog {
-            prolog: Prolog {
+        Ok(Dialog::new(
+            Prolog {
                 method,
                 url,
                 req_headers: rec.req_headers,
-                req_body:    rec.req_body,
+                req_body:    rec.req_body
             },
-            version,
-            status,
-            res_decoded,
-            res_headers: rec.res_headers,
-            res_body:    rec.res_body,
-        })
+            Epilog {
+                version,
+                status,
+                res_decoded,
+                res_headers: rec.res_headers,
+                res_body:    rec.res_body
+            }
+        ))
     }
 }
 
@@ -1373,11 +1381,13 @@ mod tests {
     use std::path::{Path, PathBuf};
     use http::header::{AGE, REFERER, VIA};
     use super::*;
-    use crate::{TryInto, Tuner};
+    use body_image::Tuner;
     use failure::Error as Flare;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
-        let tpath = Path::new("target/testmp");
+        let target = env!("CARGO_MANIFEST_DIR");
+        let path = format!("{}/../target/testmp", target);
+        let tpath = Path::new(&path);
         fs::create_dir_all(tpath)?;
 
         let fname = tpath.join(name);

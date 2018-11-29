@@ -1,78 +1,13 @@
-[package]
-name          = "body-image"
-version       = "0.6.0"
-edition       = "2018"
-authors       = ["David Kellum <dek-oss@gravitext.com>"]
-license       = "MIT/Apache-2.0"
-description   = "Adaptive RAM/file-backed HTTP bodies and BARC serialization."
-documentation = "https://docs.rs/body-image"
-repository    = "https://github.com/dekellum/body-image"
-readme        = "README.md"
-keywords      = [
-    "buffer", "compression",
-    "http", "serialization", "hyper",
-]
-categories    = [
-    "web-programming::http-client",
-    "web-programming::http-server",
-]
-exclude       = [
-    ".gitignore",
-    ".travis.yml",
-    "appveyor.yml",
-    "barc/*",
+[workspace]
+members = [
+    "body-image",
+    "barc",
+    "body-image-futio",
+    "barc-cli",
 ]
 
-[badges]
-travis-ci = { repository = "dekellum/body-image" }
-
-[dependencies]
-brotli     = { version = ">=2.2.1, <3", optional = true }
-bytes      = { version = ">=0.4.6, <2" }
-clap       = { version = ">=2.31.2, <3", optional = true, default-features = false, features = ["wrap_help"] }
-failure    = { version = ">=0.1.2, <2", default-features = false, features = ["std"] }
-fern       = { version = ">=0.5.5, <2", optional = true }
-flate2     = { version = ">=1.0.1, <2" }
-futures    = { version = ">=0.1.20, <0.2", optional = true }
-http       = { version = ">=0.1.6, <2" }
-httparse   = { version = ">=1.2.4, <2" }
-hyper      = { version = ">=0.12.1, <2", optional = true }
-hyper-tls  = { version = ">=0.2.0, <2",  optional = true }
-hyperx     = { version = ">=0.12.0, <2", optional = true }
-log        = { version = ">=0.4.0, <2" }
-memmap     = { version = ">=0.6.2, <2", optional = true }
-olio       = { version = ">=0.4.0, <2", default-features = false }
-tempfile   = { version = ">=2.2.0, <4" }
-tokio      = { version = ">=0.1.11, <0.2", optional = true }
-tokio-threadpool = { version = ">=0.1.4, <0.2", optional = true }
-
-[features]
-default = ["mmap", "brotli", "cli", "futio"]
-futio = ["futures", "hyper", "hyper-tls", "hyperx",
-         "tokio", "tokio-threadpool"]
-cli = ["fern", "clap"]
-mmap = ["memmap", "olio/mmap"]
-may_fail = [] # Tests which may fail
-
-async = ["futio"] # old synonym
-client = ["futio"] # oldest synonym
-
-[lib]
-doctest = false
-
-[[bin]]
-name = "barc"
-path = "src/main.rs"
-test = false
-doctest = false
-bench = false
-doc = false
-required-features = ["cli"]
-
-[package.metadata.docs.rs]
-features = ["mmap", "brotli", "futio"]
-
-[dev-dependencies]
-lazy_static = { version = ">=1.0.1, <2" }
-fern        = { version = ">=0.5.5, <2" }
-rand        = { version = ">=0.6.1, <2" }
+[patch.crates-io]
+"barc" = { path = "barc" }
+"barc-cli" = { path = "barc-cli" }
+"body-image" = { path = "body-image" }
+"body-image-futio" = { path = "body-image-futio" }

@@ -15,7 +15,7 @@ use test::Bencher;
 use tokio;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
-use body_image::futio::*;
+use body_image_futio::*;
 
 // `AsyncBodyImage` in `Ram`, pre-gathered (single, contiguous buffer) and
 // used for each iteration.
@@ -233,7 +233,9 @@ fn sink_data(mut body: BodySink) -> Result<BodyImage, Flare> {
 }
 
 fn test_path() -> Result<PathBuf, Flare> {
-    let tpath = Path::new("target/testmp");
+    let target = env!("CARGO_MANIFEST_DIR");
+    let path = format!("{}/../target/testmp", target);
+    let tpath = Path::new(&path);
     fs::create_dir_all(tpath)?;
     Ok(tpath.to_path_buf())
 }

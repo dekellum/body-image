@@ -4,8 +4,9 @@ use futures::{Async, AsyncSink, Poll, Sink, StartSend};
 use log::debug;
 use tokio_threadpool;
 
-use crate::{BodySink, Tunables};
-use crate::futio::UniBodyBuf;
+use body_image::{BodySink, Tunables};
+
+use crate::UniBodyBuf;
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `Stream<Item=UniBodyBuf>` to be forwarded (e.g. via

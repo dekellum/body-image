@@ -1,47 +1,24 @@
-//! This crate provides a few separately usable but closely related HTTP
-//! ecosystem components.
+//! [`BodyImage`](struct.BodyImage.html), [`BodySink`](struct.BodySink.html)
+//! and supporting types provide a strategy for safely handling potentially
+//! large HTTP request or response bodies without risk of allocation failure,
+//! or the need to impose awkwardly low size limits in the face of high
+//! concurrency. `Tunables` size thresholds can be used to decide when to
+//! accumulate the body in RAM vs the filesystem, including when the length is
+//! unknown in advance.
 //!
-//! In the _root_ module, [`BodyImage`](struct.BodyImage.html),
-//! [`BodySink`](struct.BodySink.html) and supporting types provide a
-//! strategy for safely handling potentially large HTTP request or response
-//! bodies without risk of allocation failure, or the need to impose awkwardly
-//! low size limits in the face of high concurrency. `Tunables` size
-//! thresholds can be used to decide when to accumulate the body in RAM vs the
-//! filesystem, including when the length is unknown in advance.
-//!
-//! See the top level README for additional rationale.
+//! See README for additional rationale.
 //!
 //! A [`Dialog`](struct.Dialog.html) defines a complete HTTP request and
 //! response recording, using `BodyImage` for the request and response bodies
 //! and _http_ crate types for the headers and other components.
-//!
-//! The [_barc_ module](barc/index.html) defines a container file format, reader
-//! and writer for dialog records. This has broad use cases, from convenient
-//! test fixtures for web applications, to caching and web crawling.
 //!
 //! ## Optional Features
 //!
 //! The following features may be enabled or disabled at build time. All are
 //! enabled by default.
 //!
-//! _futio:_ The [futio module](futio/index.html) for input to `BodySink`,
-//! output of `BodyImage`, and recording of HTTP `Dialog`s via _hyper_ 0.12+,
-//! _futures_ and _tokio_. The *futio* module was previously named *client*
-//! (became misleading as *futio* is also usable in a server, e.g. request or
-//! response contexts), and then *async* (became a reserved keyword in rust
-//! 2018 edition). But who else could want the _futio_ name?
-//!
-//! _cli:_ The `barc` command line tool for viewing
-//! (e.g. compressed) records and copying records across BARC files. If the
-//! _futio_ feature is enabled, then a `record` command is also provided for
-//! live BARC recording from the network.
-//!
-//! _brotli:_ Brotli transfer/content decoding in _futio_ module, and Brotli BARC
-//! record compression (in _barc_), via the native-rust _brotli_ crate. (Gzip,
-//! via the _flate2_ crate, is standard.)
-//!
-//! _mmap:_ Adds `BodyImage::mem_map` support for memory mapping
-//! from `FsRead` state.
+//! _mmap:_ Adds `BodyImage::mem_map` support for memory mapping from `FsRead`
+//! state.
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
@@ -66,21 +43,6 @@ use olio::fs::rc::{ReadPos, ReadSlice};
 #[cfg(feature = "mmap")] use std::ops::Deref;
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemAdviseError, MemHandle};
-
-                           pub mod barc;
-#[cfg(feature = "futio")]  pub mod futio;
-
-#[cfg(test)]               pub(crate) mod logger;
-
-// See note on *futio* feature above. For whatever reason, rustdoc doesn't
-// currently show this deprecation in the re-exports section.
-#[cfg(feature = "futio")]
-#[deprecated(since="0.4.0", note="use futio module path")]
-pub use crate::futio as client;
-
-#[cfg(feature = "futio")]
-#[deprecated(since="0.5.0", note="use futio module path")]
-pub use crate::futio as r#async;
 
 use tempfile::tempfile_in;
 
@@ -834,13 +796,24 @@ impl<'a> BodyReader<'a> {
     }
 }
 
-/// Saved extract from an HTTP request.
+/// Extract of an HTTP request.
+///
+/// Alternate spelling of _Prologue_.
 #[derive(Clone, Debug)]
-struct Prolog {
-    method:       http::Method,
-    url:          http::Uri,
-    req_headers:  http::HeaderMap,
-    req_body:     BodyImage,
+pub struct Prolog {
+    pub method:       http::Method,
+    pub url:          http::Uri,
+    pub req_headers:  http::HeaderMap,
+    pub req_body:     BodyImage,
+}
+
+#[derive(Clone, Debug)]
+pub struct Epilog {
+    pub version:      http::Version,
+    pub status:       http::StatusCode,
+    pub res_decoded:  Vec<Encoding>,
+    pub res_headers:  http::HeaderMap,
+    pub res_body:     BodyImage,
 }
 
 /// A subset of supported HTTP Transfer or Content-Encoding values. The
@@ -900,6 +873,28 @@ pub trait Recorded: RequestRecorded {
 }
 
 impl Dialog {
+    pub fn new(prolog: Prolog, epilog: Epilog) -> Dialog {
+        Dialog { prolog,
+                 version: epilog.version,
+                 status: epilog.status,
+                 res_decoded: epilog.res_decoded,
+                 res_headers: epilog.res_headers,
+                 res_body: epilog.res_body }
+    }
+
+    /// Consume self, *exploding* into a (`Prolog`, `Epilog`) tuple (each with
+    /// public fields).
+    pub fn explode(self) -> (Prolog, Epilog) {
+        (self.prolog,
+         Epilog {
+             version: self.version,
+             status: self.status,
+             res_decoded: self.res_decoded,
+             res_headers: self.res_headers,
+             res_body: self.res_body
+         })
+    }
+
     /// The HTTP method (verb), e.g. `GET`, `POST`, etc.
     pub fn method(&self)      -> &http::Method         { &self.prolog.method }
 
@@ -925,6 +920,12 @@ impl Dialog {
     /// A mutable reference to the response body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.
     pub fn res_body_mut(&mut self) -> &mut BodyImage   { &mut self.res_body }
+
+    /// Set a new response body and decoded vector.
+    pub fn set_res_body_decoded(&mut self, body: BodyImage, decoded: Vec<Encoding>) {
+        self.res_body = body;
+        self.res_decoded = decoded;
+    }
 }
 
 impl RequestRecorded for Dialog {
@@ -1152,8 +1153,9 @@ impl Default for Tuner {
     fn default() -> Self { Tuner::new() }
 }
 
+// FIXME: Hide this
 #[cfg(feature = "mmap")]
-pub(crate) trait MemHandleExt {
+pub trait MemHandleExt {
     fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R, S>
         where F: FnOnce() -> Result<R, S>,
               S: From<olio::mem::MemAdviseError>;
@@ -1178,31 +1180,6 @@ where T: Deref<Target=[u8]>
         let res = f();
         self.advise(MemAdvice::Normal)?;
         res
-    }
-}
-
-/// Similar to the `TryFrom` trait proposed but not yet available in `std`.
-pub trait TryFrom<T>: Sized {
-    type Err: 'static;
-
-    fn try_from(t: T) -> Result<Self, Self::Err>;
-}
-
-/// Similar to the `TryInto` trait proposed but not yet available in
-/// `std`. Blanket implemented for all `TryFrom`.
-pub trait TryInto<T>: Sized {
-    type Err: 'static;
-
-    fn try_into(self) -> Result<T, Self::Err>;
-}
-
-impl<T, F> TryInto<F> for T
-where F: TryFrom<T>
-{
-    type Err = F::Err;
-
-    fn try_into(self) -> Result<F, Self::Err> {
-        F::try_from(self)
     }
 }
 

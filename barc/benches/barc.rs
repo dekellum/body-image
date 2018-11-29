@@ -12,7 +12,7 @@ use failure::Error as Flare;
 use test::Bencher;
 
 use body_image::{BodySink, Tunables};
-use body_image::barc::*;
+use barc::*;
 
 #[bench]
 fn write_read_large_plain(b: &mut Bencher) {
@@ -107,7 +107,9 @@ fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
 }
 
 fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
-    let tpath = Path::new("target/testmp");
+    let target = env!("CARGO_MANIFEST_DIR");
+    let path = format!("{}/../target/testmp", target);
+    let tpath = Path::new(&path);
     fs::create_dir_all(tpath)?;
 
     let fname = tpath.join(name);

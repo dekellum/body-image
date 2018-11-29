@@ -1,0 +1,52 @@
+[package]
+name          = "barc-cli"
+version       = "0.6.0"
+edition       = "2018"
+authors       = ["David Kellum <dek-oss@gravitext.com>"]
+license       = "MIT/Apache-2.0"
+description   = "Basic Archive for HTTP dialog serialization, command line."
+documentation = "https://docs.rs/body-image"
+repository    = "https://github.com/dekellum/body-image"
+readme        = "README.md"
+keywords      = [
+    "buffer", "compression",
+    "http", "serialization", "hyper",
+]
+categories    = [
+    "web-programming::http-client",
+    "web-programming::http-server",
+]
+exclude       = [
+    ".gitignore",
+    ".travis.yml",
+    "appveyor.yml",
+    "barc/*",
+]
+
+[badges]
+travis-ci = { repository = "dekellum/body-image" }
+
+[dependencies]
+barc       = { version = ">=0.6.0, <1", default-features = false }
+body-image = { version = ">=0.6.0, <1", default-features = false }
+body-image-futio = { version = ">=0.6.0, <1", optional = true, default-features = false }
+clap       = { version = ">=2.31.2, <3",default-features = false, features = ["wrap_help"] }
+failure    = { version = ">=0.1.2, <2", default-features = false, features = ["std"] }
+fern       = { version = ">=0.5.5, <2" }
+http       = { version = ">=0.1.6, <2" }
+hyper      = { version = ">=0.12.1, <2", optional = true }
+log        = { version = ">=0.4.0, <2" }
+
+[features]
+default = ["mmap", "brotli", "futio"]
+futio   = ["hyper", "body-image-futio"]
+mmap    = ["barc/mmap", "body-image/mmap", "body-image-futio/mmap"]
+brotli  = ["barc/brotli", "body-image-futio/brotli"]
+
+[[bin]]
+name = "barc"
+path = "src/main.rs"
+doctest = false
+bench = false
+doc = false
+test = false

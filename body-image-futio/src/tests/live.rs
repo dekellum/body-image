@@ -1,8 +1,8 @@
 use failure::Error as Flare;
 
-use crate::Tunables;
-use crate::futio::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
-                   RequestRecord, RequestRecorder, user_agent};
+use body_image::Tunables;
+use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
+            Recorded, RequestRecord, RequestRecorder, user_agent};
 use crate::logger::LOG_SETUP;
 
 fn get_request(url: &str)
@@ -27,8 +27,8 @@ fn test_small_http() {
     let dl = fetch(req, &tune).unwrap();
     println!("Response {:#?}", dl);
 
-    assert!(dl.res_body.is_ram());
-    assert!(dl.res_body.len() > 0);
+    assert!(dl.res_body().is_ram());
+    assert!(dl.res_body().len() > 0);
 }
 
 #[test]
@@ -41,8 +41,8 @@ fn test_small_https() {
     let dl = dl.clone();
     println!("Response {:#?}", dl);
 
-    assert!(dl.res_body.is_ram());
-    assert!(dl.res_body.len() > 0);
+    assert!(dl.res_body().is_ram());
+    assert!(dl.res_body().len() > 0);
 }
 
 #[test]
@@ -54,9 +54,9 @@ fn test_not_found() {
     let dl = fetch(req, &tune).unwrap();
     println!("Response {:#?}", dl);
 
-    assert_eq!(dl.status.as_u16(), 404);
+    assert_eq!(dl.res_status().as_u16(), 404);
 
-    assert!(dl.res_body.is_ram());
-    assert!(dl.res_body.len() > 0);
-    assert!(dl.res_body.len() < 1000);
+    assert!(dl.res_body().is_ram());
+    assert!(dl.res_body().len() > 0);
+    assert!(dl.res_body().len() < 1000);
 }

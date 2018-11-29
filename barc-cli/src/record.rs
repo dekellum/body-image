@@ -1,13 +1,13 @@
+use failure::Error as Flare;
+use http;
 use hyper;
 
-use failure::Error as Flare;
-use body_image::{TryFrom, Tunables};
-use body_image::barc::{BarcFile, CompressStrategy, Record};
-use body_image::client::{
+use barc::{BarcFile, CompressStrategy, Record, TryFrom};
+use body_image::Tunables;
+use body_image_futio::{
     ACCEPT_ENCODINGS, BROWSE_ACCEPT, decode_res_body, fetch,
     RequestRecord, RequestRecorder, user_agent
 };
-use http;
 
 /// The `record` command implementation.
 pub(crate) fn record(
