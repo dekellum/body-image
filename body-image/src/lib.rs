@@ -824,9 +824,9 @@ pub struct Prolog {
 pub struct Epilog {
     pub version:      http::Version,
     pub status:       http::StatusCode,
-    pub res_decoded:  Vec<Encoding>,
     pub res_headers:  http::HeaderMap,
     pub res_body:     BodyImage,
+    pub res_decoded:  Vec<Encoding>,
 }
 
 /// A subset of supported HTTP Transfer or Content-Encoding values. The
@@ -852,17 +852,17 @@ impl fmt::Display for Encoding {
 
 /// An HTTP request and response recording.
 ///
-/// Note that several important getter methods for `Dialog` are found in trait
+/// This composed type has private fields but offers getters, mutable getters
+/// and setter methods. Several import getter methods are are found in trait
 /// implementations [`RequestRecorded`](#impl-RequestRecorded) and
 /// [`Recorded`](#impl-Recorded).
+///
+/// It may be constructed via the `Prolog` and `Epilog` public structs and the
+/// [`explode`](#method.explode) method used to extract the same.
 #[derive(Clone, Debug)]
 pub struct Dialog {
-    prolog:       Prolog,
-    version:      http::Version,
-    status:       http::StatusCode,
-    res_decoded:  Vec<Encoding>,
-    res_headers:  http::HeaderMap,
-    res_body:     BodyImage,
+    pro: Prolog,
+    epi: Epilog,
 }
 
 /// Access by reference for HTTP request recording types.
@@ -886,69 +886,58 @@ pub trait Recorded: RequestRecorded {
 }
 
 impl Dialog {
-    pub fn new(prolog: Prolog, epilog: Epilog) -> Dialog {
-        Dialog { prolog,
-                 version: epilog.version,
-                 status: epilog.status,
-                 res_decoded: epilog.res_decoded,
-                 res_headers: epilog.res_headers,
-                 res_body: epilog.res_body }
-    }
-
-    /// Consume self, *exploding* into a (`Prolog`, `Epilog`) tuple (each with
-    /// public fields).
-    pub fn explode(self) -> (Prolog, Epilog) {
-        (self.prolog,
-         Epilog {
-             version: self.version,
-             status: self.status,
-             res_decoded: self.res_decoded,
-             res_headers: self.res_headers,
-             res_body: self.res_body
-         })
+    /// Construct from a `Prolog` and `Epilog`.
+    pub fn new(pro: Prolog, epi: Epilog) -> Dialog {
+        Dialog { pro, epi }
     }
 
     /// The HTTP method (verb), e.g. `GET`, `POST`, etc.
-    pub fn method(&self)      -> &http::Method         { &self.prolog.method }
+    pub fn method(&self)      -> &http::Method         { &self.pro.method }
 
     /// The complete URL as used in the request.
-    pub fn url(&self)         -> &http::Uri            { &self.prolog.url }
+    pub fn url(&self)         -> &http::Uri            { &self.pro.url }
 
     /// A mutable reference to the request body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.
     pub fn req_body_mut(&mut self) -> &mut BodyImage {
-        &mut self.prolog.req_body
+        &mut self.pro.req_body
     }
 
     /// The response status code.
-    pub fn res_status(&self)  -> http::StatusCode      { self.status }
+    pub fn res_status(&self)  -> http::StatusCode      { self.epi.status }
 
     /// The response HTTP version.
-    pub fn res_version(&self) -> http::Version         { self.version }
+    pub fn res_version(&self) -> http::Version         { self.epi.version }
 
     /// A list of encodings that were removed (decoded) to provide this
     /// representation of the response body (`res_body`). May be empty.
-    pub fn res_decoded(&self) -> &Vec<Encoding>        { &self.res_decoded }
+    pub fn res_decoded(&self) -> &Vec<Encoding>        { &self.epi.res_decoded }
 
     /// A mutable reference to the response body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.
-    pub fn res_body_mut(&mut self) -> &mut BodyImage   { &mut self.res_body }
+    pub fn res_body_mut(&mut self) -> &mut BodyImage   { &mut self.epi.res_body }
 
     /// Set a new response body and decoded vector.
     pub fn set_res_body_decoded(&mut self, body: BodyImage, decoded: Vec<Encoding>) {
-        self.res_body = body;
-        self.res_decoded = decoded;
+        self.epi.res_body = body;
+        self.epi.res_decoded = decoded;
+    }
+
+    /// Consume self, *exploding* into a (`Prolog`, `Epilog`) tuple (each
+    /// with public fields).
+    pub fn explode(self) -> (Prolog, Epilog) {
+        (self.pro, self.epi)
     }
 }
 
 impl RequestRecorded for Dialog {
-    fn req_headers(&self) -> &http::HeaderMap      { &self.prolog.req_headers }
-    fn req_body(&self)    -> &BodyImage            { &self.prolog.req_body }
+    fn req_headers(&self) -> &http::HeaderMap      { &self.pro.req_headers }
+    fn req_body(&self)    -> &BodyImage            { &self.pro.req_body }
 }
 
 impl Recorded for Dialog {
-    fn res_headers(&self) -> &http::HeaderMap      { &self.res_headers }
-    fn res_body(&self)    -> &BodyImage            { &self.res_body }
+    fn res_headers(&self) -> &http::HeaderMap      { &self.epi.res_headers }
+    fn res_body(&self)    -> &BodyImage            { &self.epi.res_body }
 }
 
 /// A collection of size limits and performance tuning constants. Setters are

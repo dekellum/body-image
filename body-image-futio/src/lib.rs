@@ -453,8 +453,8 @@ impl InDialog {
                 version:     self.version,
                 status:      self.status,
                 res_headers: self.res_headers,
-                res_decoded,
                 res_body:    self.res_body.prepare()?,
+                res_decoded,
             }
         ))
     }
