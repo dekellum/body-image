@@ -20,7 +20,7 @@ use crate::{RequestRecord, RequestRecorder};
 
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
-#[cfg(feature = "mmap")] use body_image::MemHandleExt;
+#[cfg(feature = "mmap")] use body_image::_mem_handle_ext::MemHandleExt;
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits.

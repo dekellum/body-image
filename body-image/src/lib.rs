@@ -58,12 +58,12 @@ use http;
 use log::{debug, warn};
 use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
-
-#[cfg(feature = "mmap")] use std::ops::Deref;
-#[cfg(feature = "mmap")] use memmap::Mmap;
-#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemAdviseError, MemHandle};
-
 use tempfile::tempfile_in;
+
+#[cfg(feature = "mmap")] use memmap::Mmap;
+#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
+#[cfg(feature = "mmap")] #[doc(hidden)] pub mod _mem_handle_ext;
+#[cfg(feature = "mmap")] use crate::_mem_handle_ext::MemHandleExt;
 
 /// The crate version string.
 pub static VERSION: &str               = env!("CARGO_PKG_VERSION");
@@ -112,13 +112,6 @@ impl Fail for BodyError {
 impl From<io::Error> for BodyError {
     fn from(err: io::Error) -> BodyError {
         BodyError::Io(err)
-    }
-}
-
-#[cfg(feature = "mmap")]
-impl From<MemAdviseError> for BodyError {
-    fn from(err: MemAdviseError) -> BodyError {
-        BodyError::Io(err.into())
     }
 }
 
@@ -1171,36 +1164,6 @@ impl Tuner {
 
 impl Default for Tuner {
     fn default() -> Self { Tuner::new() }
-}
-
-// FIXME: Hide this
-#[cfg(feature = "mmap")]
-pub trait MemHandleExt {
-    fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R, S>
-        where F: FnOnce() -> Result<R, S>,
-              S: From<olio::mem::MemAdviseError>;
-}
-
-#[cfg(feature = "mmap")]
-impl<T> MemHandleExt for MemHandle<T>
-where T: Deref<Target=[u8]>
-{
-    fn tmp_advise<F, R, S>(&self, advice: MemAdvice, f: F) -> Result<R, S>
-        where F: FnOnce() -> Result<R, S>,
-              S: From<olio::mem::MemAdviseError>
-    {
-        let new_advice = self.advise(advice)?;
-
-        #[cfg(unix)]
-        {
-            debug!("MemHandle tmp_advise {:?}, obtained {:?}",
-                   advice, new_advice);
-        }
-
-        let res = f();
-        self.advise(MemAdvice::Normal)?;
-        res
-    }
 }
 
 #[cfg(test)]
