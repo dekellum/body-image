@@ -1167,7 +1167,7 @@ impl Default for Tuner {
 }
 
 #[cfg(test)]
-mod root {
+mod body_tests {
     use super::*;
 
     fn is_send<T: Send>() -> bool { true }
@@ -1193,7 +1193,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_empty_read() {
+    fn test_empty_read() {
         let body = BodyImage::empty();
         let mut body_reader = body.reader();
         let br = body_reader.as_read();
@@ -1203,7 +1203,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_contiguous_read() {
+    fn test_contiguous_read() {
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello world").unwrap();
         let body = body.prepare().unwrap();
@@ -1215,7 +1215,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_scattered_read() {
+    fn test_scattered_read() {
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello").unwrap();
         body.write_all(" ").unwrap();
@@ -1229,7 +1229,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_scattered_read_clone() {
+    fn test_scattered_read_clone() {
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello").unwrap();
         body.write_all(" ").unwrap();
@@ -1252,7 +1252,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_scattered_gather() {
+    fn test_scattered_gather() {
         let mut body = BodySink::with_ram_buffers(2);
         body.save(&b"hello"[..]).unwrap();
         body.save(&b" "[..]).unwrap();
@@ -1268,7 +1268,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_read_from() {
+    fn test_read_from() {
         let tune = Tunables::new();
         let salutation = b"hello world";
         let mut src = Cursor::new(salutation);
@@ -1281,7 +1281,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_read_from_too_long() {
+    fn test_read_from_too_long() {
         let tune = Tuner::new()
             .set_max_body_ram(6)
             .set_max_body(6)
@@ -1300,7 +1300,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_fs_read() {
+    fn test_fs_read() {
         let tune = Tunables::new();
         let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
         body.write_all("hello").unwrap();
@@ -1315,7 +1315,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_fs_back_read() {
+    fn test_fs_back_read() {
         let tune = Tunables::new();
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello").unwrap();
@@ -1331,7 +1331,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_w_back_w_read() {
+    fn test_w_back_w_read() {
         let tune = Tunables::new();
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello").unwrap();
@@ -1347,7 +1347,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_fs_back_fail() {
+    fn test_fs_back_fail() {
         let tune = Tuner::new().set_temp_dir("./no-existe/").finish();
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello").unwrap();
@@ -1363,7 +1363,7 @@ mod root {
 
     #[cfg(feature = "mmap")]
     #[test]
-    fn test_body_fs_map_read() {
+    fn test_fs_map_read() {
         let tune = Tunables::new();
         let mut body = BodySink::with_fs(tune.temp_dir()).unwrap();
         body.write_all("hello").unwrap();
@@ -1379,7 +1379,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_fs_back_read_clone() {
+    fn test_fs_back_read_clone() {
         let tune = Tunables::new();
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello").unwrap();
@@ -1420,7 +1420,7 @@ mod root {
 
     #[cfg(feature = "mmap")]
     #[test]
-    fn test_body_fs_map_clone_shared() {
+    fn test_fs_map_clone_shared() {
         let tune = Tunables::new();
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello").unwrap();
@@ -1454,7 +1454,7 @@ mod root {
     }
 
     #[test]
-    fn test_body_fs_empty() {
+    fn test_fs_empty() {
         let tune = Tunables::new();
         let body = BodySink::with_fs(tune.temp_dir()).unwrap();
         let body = body.prepare().unwrap();
@@ -1463,7 +1463,7 @@ mod root {
 
     #[cfg(feature = "mmap")]
     #[test]
-    fn test_body_fs_map_empty() {
+    fn test_fs_map_empty() {
         let tune = Tunables::new();
         let body = BodySink::with_fs(tune.temp_dir()).unwrap();
         let mut body = body.prepare().unwrap();

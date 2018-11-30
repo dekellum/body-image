@@ -1376,7 +1376,7 @@ fn slice_body(rp: &mut ReadPos, len: u64) -> Result<BodyImage, BarcError> {
 }
 
 #[cfg(test)]
-mod tests {
+mod barc_tests {
     use std::fs;
     use std::path::{Path, PathBuf};
     use http::header::{AGE, REFERER, VIA};

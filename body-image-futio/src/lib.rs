@@ -548,7 +548,7 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
 mod logger;
 
 #[cfg(test)]
-mod tests {
+mod futio_tests {
     #[cfg(feature = "mmap")]        mod futures;
                                     mod server;
 
