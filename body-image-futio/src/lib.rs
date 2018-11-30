@@ -61,10 +61,11 @@ use tokio::util::FutureExt;
 
 use body_image::{
     BodyImage, BodySink, BodyError, Encoding,
-    Epilog, Prolog, Dialog, Recorded, RequestRecorded, Tunables, VERSION
+    Epilog, Prolog, Dialog, Recorded, RequestRecorded, Tunables,
 };
 
-// FIXME: Local VERSION
+/// The crate version string.
+pub static VERSION: &str               = env!("CARGO_PKG_VERSION");
 
 mod image;
 mod sink;
