@@ -1,8 +1,8 @@
-//! Asynchronous HTTP integration and utilities.
+//! Asynchronous HTTP integration for _body-image_.
 //!
-//! This optional module (via default _futio_ feature) provides
-//! additional integration with the _futures_, _http_, _hyper_ 0.12.x., and
-//! _tokio_ crates.
+//! The _body-image-futio_ crate integrates the _body-image_ crate with
+//! _futures_, _http_, _hyper_ 0.12.x., and _tokio_ crates for both client and
+//! server use.
 //!
 //! * Trait [`RequestRecorder`](trait.RequestRecorder.html) extends
 //!   `http::request::Builder` for recording a

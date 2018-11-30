@@ -1,12 +1,12 @@
 //! **B**ody **Arc**hive container file format, reader and writer.
 //!
-//! BARC is a minimal container file format for the storage or one to many
-//! HTTP request/response dialog records. A fixed length ASCII-limited record
-//! head specifies lengths of a subsequent series of request and response
-//! header blocks and bodies which are stored as raw (unencoded) bytes. When
-//! not using the internal compression feature, the format is easily human
-//! readable.  With compression, the `barc` CLI tool can be used to view
-//! records.
+//! BARC is a container file format for the storage or one to many HTTP
+//! request/response dialog records. A fixed length, ASCII-only record head
+//! specifies lengths of a subsequent series of request and response header
+//! blocks and bodies which are stored as raw (unencoded) bytes. When not
+//! using the internal compression feature, the format is easily human
+//! readable.  With compression, the `barc` CLI tool (*barc-cli* crate) can be
+//! used to view records.
 //!
 //! See some sample files in source sample/*.barc.
 //!

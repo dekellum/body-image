@@ -5,7 +5,8 @@
 [![Travis CI Build](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
 [![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
 
-FIXME: summary
+The _body-image-futio_ crate integrates the _body-image_ crate with _futures_,
+_http_, _hyper_ 0.12.x., and _tokio_ crates for both client and server use.
 
 ## License
 

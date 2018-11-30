@@ -1,11 +1,11 @@
 # barc-cli
 
 [![Crates.io](https://img.shields.io/crates/v/barc-cli.svg?maxAge=3600)](https://crates.io/crates/barc-cli)
-[![Rustdoc](https://docs.rs/barc-cli/badge.svg)](https://docs.rs/barc-cli)
 [![Travis CI Build](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
 [![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
 
-FIXME: Command line tool for BARC files.
+A command line tool for printing, recording, de-/compressing and copying BARC
+records (format defined by the *barc* library crate).
 
 ## License
 

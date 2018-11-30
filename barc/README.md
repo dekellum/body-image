@@ -5,11 +5,11 @@
 [![Travis CI Build](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
 [![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
 
-The BARC container file format, reader and writer supports high
-fidelity serialization of complete HTTP request/response dialogs with
-additional meta-data and has broad use cases as test fixtures or for
-caching and web crawling.  A `barc` command line tool is also
-available.
+The **B**ody **Arc**hive (BARC) container file format, reader and
+writer. Supports high fidelity serialization of complete HTTP
+request/response dialogs with additional meta-data and has broad use
+cases as test fixtures or for caching or web crawling.  A `barc`
+command line tool is also available, via the *barc-cli* crate.
 
 See the rustdoc for more details.
 

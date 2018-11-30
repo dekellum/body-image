@@ -1,16 +1,20 @@
+//! Provides a uniform access strategy to HTTP bodies in RAM, or buffered to a
+//! temporary file, and optionally memory mapped.
+//!
 //! [`BodyImage`](struct.BodyImage.html), [`BodySink`](struct.BodySink.html)
 //! and supporting types provide a strategy for safely handling potentially
 //! large HTTP request or response bodies without risk of allocation failure,
 //! or the need to impose awkwardly low size limits in the face of high
-//! concurrency. `Tunables` size thresholds can be used to decide when to
-//! accumulate the body in RAM vs the filesystem, including when the length is
-//! unknown in advance.
-//!
-//! See README for additional rationale.
+//! concurrency. [`Tunables`](struct.Tunables.html) size thresholds can be
+//! used to decide when to accumulate the body in RAM vs. the filesystem,
+//! including when the length is unknown in advance.
 //!
 //! A [`Dialog`](struct.Dialog.html) defines a complete HTTP request and
 //! response recording, using `BodyImage` for the request and response bodies
 //! and _http_ crate types for the headers and other components.
+//!
+//! See the top-level (project workspace) [README][ws-readme] for additional
+//! rationale.
 //!
 //! ## Optional Features
 //!
@@ -19,6 +23,21 @@
 //!
 //! _mmap:_ Adds `BodyImage::mem_map` support for memory mapping from `FsRead`
 //! state.
+//!
+//! ## Related Crates
+//!
+//! _[barc]:_ **B**ody **Arc**hive container file reader and writer, for
+//! serializing `Dialog` records. See also _[barc-cli]_.
+//!
+//! _[body-image-futio]:_ Asynchronous HTTP integration with _futures_, _http_,
+//! _hyper_ 0.12.x., and _tokio_ for `BodyImage`/`BodySink`, for both client
+//! and server use.
+//!
+//! [ws-readme]: https://github.com/dekellum/body-image
+//! [barc]: https://docs.rs/crate/barc
+//! [barc-cli]: https://docs.rs/crate/barc-cli
+//! [body-image-futio]: https://docs.rs/crate/body-image-futio
+
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
@@ -807,6 +826,7 @@ pub struct Prolog {
     pub req_body:     BodyImage,
 }
 
+/// Extract of an HTTP response.
 #[derive(Clone, Debug)]
 pub struct Epilog {
     pub version:      http::Version,

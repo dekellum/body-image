@@ -6,24 +6,33 @@
 [![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
 [![deps status](https://deps.rs/repo/github/dekellum/body-image/status.svg)](https://deps.rs/repo/github/dekellum/body-image)
 
-A rust crate providing two separately usable but closely related HTTP
-ecosystem components:
+A rust language project providing separately usable but closely related rust
+crates:
 
-* `BodyImage` and supporting types (_root_ module) provide uniform access to
-   HTTP body payloads which may be scattered across multiple allocations in
-   RAM, or buffered to a temporary file, and optionally memory mapped. This
-   effectively enables trading some file I/O cost in return for supporting
-   significantly larger bodies without risk of exhausting RAM. An optional
-   _async_ module adds asynchronous support via _futures_, _tokio_ and _hyper_
-   integration.
+The namesake _[body-image]_ crate provides a uniform access strategy for HTTP body
+payloads which may be scattered across multiple allocations in RAM, or buffered
+to a temporary file, and optionally memory mapped. This effectively enables
+trading some file I/O cost in return for supporting significantly larger bodies
+without risk of exhausting RAM.
 
-* The BARC container file format, reader and writer is implemented in the
-  _barc_ sub-module.  This supports high fidelity serialization of complete
-  HTTP request/response dialogs with additional meta-data and has broad use
-  cases as test fixtures or for caching and web crawling.  A `barc` command
-  line tool is also available.
+The _[body-image-futio]_ crate integrates the _body-image_ crate with _futures_,
+_http_, _hyper_ 0.12.x., and _tokio_ for both client and server use.
 
-See the rustdoc for more details.
+The _[barc]_ crate provides the **B**ody **Arc**hive (BARC) container file
+format, reader and writer. This supports high fidelity and human readable
+serialization of complete HTTP request/response dialogs with additional
+meta-data and has broad use cases as test fixtures or for caching or web
+crawling.
+
+The _[barc-cli]_ crate provides a command line tool for printing, recording,
+de-/compressing, and copying BARC records.
+
+See the above rustdoc links for more details.
+
+[body-image]: https://docs.rs/crate/body-image
+[barc]: https://docs.rs/crate/barc
+[barc-cli]: https://docs.rs/crate/barc-cli
+[body-image-futio]: https://docs.rs/crate/body-image-futio
 
 ## Rationale
 
