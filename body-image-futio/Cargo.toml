@@ -42,9 +42,6 @@ may_fail = [] # Tests which may fail
 doctest = false
 bench = false
 
-[package.metadata.docs.rs]
-features = ["mmap", "brotli"]
-
 [dev-dependencies]
 lazy_static = { version = ">=1.0.1, <2" }
 fern        = { version = ">=0.5.5, <2" }

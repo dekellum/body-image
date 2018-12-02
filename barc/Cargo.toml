@@ -36,6 +36,3 @@ mmap = ["memmap", "olio/mmap", "body-image/mmap"]
 [lib]
 doctest = false
 bench = false
-
-[package.metadata.docs.rs]
-features = ["mmap", "brotli"]

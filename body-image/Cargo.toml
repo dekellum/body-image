@@ -29,6 +29,3 @@ mmap = ["memmap", "olio/mmap"]
 
 [lib]
 doctest = false
-
-[package.metadata.docs.rs]
-features = ["mmap"]
