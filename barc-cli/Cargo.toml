@@ -1,6 +1,6 @@
 [package]
 name          = "barc-cli"
-version       = "0.6.0"
+version       = "1.0.0"
 edition       = "2018"
 authors       = ["David Kellum <dek-oss@gravitext.com>"]
 license       = "MIT/Apache-2.0"
@@ -12,18 +12,18 @@ keywords      = ["http", "compression", "serialization"]
 categories    = ["web-programming", "command-line-utilities"]
 
 [badges]
-travis-ci = { repository = "dekellum/body-image" }
+travis-ci = { repository="dekellum/body-image" }
 
 [dependencies]
-barc       = { version = ">=0.6.0, <1", default-features = false }
-body-image = { version = ">=0.6.0, <1", default-features = false }
-body-image-futio = { version = ">=0.6.0, <1", optional = true, default-features = false }
-clap       = { version = ">=2.31.2, <3",default-features = false, features = ["wrap_help"] }
-failure    = { version = ">=0.1.2, <2", default-features = false, features = ["std"] }
-fern       = { version = ">=0.5.5, <2" }
-http       = { version = ">=0.1.6, <2" }
-hyper      = { version = ">=0.12.1, <2", optional = true }
-log        = { version = ">=0.4.0, <2" }
+barc       = { version=">=1.0.0, <2", default-features=false }
+body-image = { version=">=1.0.0, <2", default-features=false }
+body-image-futio = { version=">=1.0.0, <2", optional=true, default-features=false }
+clap       = { version=">=2.31.2, <3",default-features=false, features=["wrap_help"] }
+failure    = { version=">=0.1.2, <2", default-features=false, features=["std"] }
+fern       = { version=">=0.5.5, <2" }
+http       = { version=">=0.1.6, <2" }
+hyper      = { version=">=0.12.1, <2", optional=true }
+log        = { version=">=0.4.0, <2" }
 
 [features]
 default = ["mmap", "brotli", "futio"]
