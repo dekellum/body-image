@@ -32,14 +32,6 @@ release history is extracted below:
   1.27.2.
 
 ### body-image 0.4.0 (2018-8-15)
-* All internal `Mmap` (*mmap* feature) reads have been optimized using the
-  concurrent-aware `olio::mem::MemHandle::advise` for `Sequential` access where
-  appropriate. As of _olio_ 0.4.0, this is limited to \*nix platforms via
-  `libc::posix_madvise`.  This feature comes with compatibility breakage:
-  * `BodyImage` and therefore `Dialog` are no-longer `Sync`. They remain
-    `Send` with inexpensive `Clone`, so any required changes should be
-    minimal.
-
 * Remove dependency on the *failure_derive* crate, and disable the _derive_
   feature of the *failure* crate dependency, by removing all existing use of
   auto-derive `Fail`.  `BarcError` now has manual implementations of `Display`
@@ -51,20 +43,12 @@ release history is extracted below:
 * Minimal rustc version upgraded to (and CI tested at) 1.26.2 for use
   of `impl Trait` feature.
 
-* Remove methods that were deprecated in 0.2.0: `*::try_clone`,
-  `BodyImage::prepare`. (#3)
-
 ### body-image 0.2.0 (2018-5-8)
-
-* Memory mapping is now an entirely optional, explicitly called,
-  default feature:
-  * The `BarcReader` previously mapped large (per
-    `Tunables::max_body_ram`), uncompressed bodies. Now it uses
-    `ReadSlice` for concurrent, direct positioned read access in this
-    case.
-
-* Add `BodyImage::from_file` (and `from_read_slice`) conversion
-  constructors.
+* Memory mapping is now an entirely optional, explicitly called, default
+  feature:
+  * The `BarcReader` previously mapped large (per `Tunables::max_body_ram`),
+    uncompressed bodies. Now it uses `ReadSlice` for concurrent, direct
+    positioned read access in this case.
 
 ### body-image 0.1.0 (2018-4-17)
 * Initial release
