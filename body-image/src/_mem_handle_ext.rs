@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use log::debug;
+#[cfg(unix)] use log::debug;
 use olio::mem::{MemAdvice, MemAdviseError, MemHandle};
 
 use crate::BodyError;
