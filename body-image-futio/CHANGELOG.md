@@ -6,47 +6,23 @@
   less stable than prior 0.x releases, which will continue to be maintained as
   needed._
 
-* Split out crates *barc*, *barc-cli* and *body-image-futio* (formally the
-  *async* module/feature), keeping only the root module types in this crate.
+* Separate into its own *body-image-futio* crate (see prior history in the
+  *body-image* crate). As of the 2018 edition *async* is a reserved keyword.
 
-* Add new `Epilog` public-field struct, `Dialog::new(Prolog, Epilog)` and
-  `Dialog::explode(self)` returning `(Prolog, Epilog)` as a roundtrip.  This
-  preserves private fields of `Dialog` while offering easy to construct/consume
-  public structs.
+* Update (dev dep) to rand 0.6.1, fix deprecation in benchmark.
 
-* Add `Dialog::set_res_body_decoded`, for setting a new response body and
-  updated decoded `Encoding`s list.
+* Use this crate's VERSION for default `user_agent`.
 
-## Monolithic Releases
+## History in *body-image*
 
-Previously the *body-image* crate contained modules *async*, *barc*, and the
-BARC cli binary.  The history below is preserved in complete form, as
-originally released:
+Previously *body-image-futio* was released as the *async* module and feature of
+the *body-image* crate.  Relevent release history is extracted below:
 
-### 0.5.0 (2018-10-19)
-* Provide placeholder `body_image::TryFrom` and blanket `TryInto` (still
-  awaiting std stabilization), relocate `barc::Record::try_from(Dialog)` to the
-  trait, and add new `TryFrom<barc::Record> for Dialog` for the opposite
-  conversion. The relocation is a minor breaking change in that current users
-  need to either import `body_image::TryFrom` or start using `try_into`. The
-  new `barc::Record` → `Dialog` conversion enables using BARC files as test
-  fixtures for `Dialog` processing code.
-
-* Mark `BodyImage::from_file` and `BodyImage::from_read_slice` as *unsafe* when
-  the default *mmap* feature is enabled, since once `BodyImage::mem_map` is
-  called, any concurrent write to the file or other file system modifications
-  may lead to *Undefined Behavior*. This is a breaking change as compared with
-  0.4.0. (#5)
-
+## body-image 0.5.0 (2018-10-19)
 * Drop `async::RequestRecordable` type alias for the `RequestRecorder<B>`
   trait, which was intended to offer backward compatibility (to 0.3.0), but
   wasn't usable. Type aliases to traits can be *defined* but not really *used*
   in rust to date.
-
-* Deprecate the `barc::META_*` header constants, replacing with `barc::hname_*`
-  helper functions which internally use `HeaderName::from_static`. This is more
-  ergonomic and found to be somewhat faster. The *http* crate version minimum
-  is now 0.1.6.
 
 * Replace use of "deadline" with "timeout", per the deprecation of the former in
   tokio-rs/tokio#558, which was released as tokio 0.1.8 (and tokio-timer 0.2.6)
@@ -61,34 +37,20 @@ originally released:
 * Use `dyn Trait` syntax throughout. Minimum supported rust version is now
   1.27.2.
 
-### 0.4.0 (2018-8-15)
+## body-image 0.4.0 (2018-8-15)
 * The _client_ module and feature are renamed _async_, made a default feature
   and significantly expanded. See the _async_ module subsection below for
   further details. A deprecated _client_ re-export and feature alias remain
   available.
 
-* New `BodyImage::explode` returning an `ExplodedImage` enum for raw access to
-  individual states.
-
 * All internal `Mmap` (*mmap* feature) reads have been optimized using the
   concurrent-aware `olio::mem::MemHandle::advise` for `Sequential` access where
   appropriate. As of _olio_ 0.4.0, this is limited to \*nix platforms via
-  `libc::posix_madvise`.  This feature comes with compatibility breakage:
-  * `BodyImage` and therefore `Dialog` are no-longer `Sync`. They remain
-    `Send` with inexpensive `Clone`, so any required changes should be
-    minimal.
-
-* Deprecate the `BodyReader::File(ReadPos)` variant, instead using
-  `BodyReader::FileSlice(ReadSlice)` for this case. This variant is an
-  additional complexity with no performance (see _olio_ crate benchmarks)
-  or other usage advantage.
+  `libc::posix_madvise`.
 
 * Remove dependency on the *failure_derive* crate, and disable the _derive_
-  feature of the *failure* crate dependency, by removing all existing use of
-  auto-derive `Fail`.  `BodyError` now has manual implementations of `Display`
-  and `Fail`.
+  feature of the *failure* crate dependency.
 
-#### _async_ module
 * New `AsyncBodyImage` (symmetric with `AsyncBodySink`) implements
  `futures::Stream` and `hyper::body::Payload` traits. The `Payload` trait
  makes this usable with hyper as the `B` body type of `http::Request<B>`
@@ -154,7 +116,7 @@ originally released:
    test stream_22_mmap_copy     ... bench:   5,861,194 ns/iter (+/- 1,454,946)
    ```
 
-### 0.3.0 (2018-6-26)
+## body-image 0.3.0 (2018-6-26)
 * Updates to _client_ module for better composability with _tokio_
   applications and fully asynchronous response body support (#2):
   * Upgrade to _hyper_ 0.12.x and _tokio_ (reform, 0.1.x).
@@ -171,13 +133,10 @@ originally released:
 * Minimal rustc version upgraded to (and CI tested at) 1.26.2 for use
   of `impl Trait` feature.
 
-* Remove methods that were deprecated in 0.2.0: `*::try_clone`,
-  `BodyImage::prepare`. (#3)
-
 * Add thread name/id logging to cli and client integration tests
   (optionally via env TEST_LOG number).
 
-### 0.2.0 (2018-5-8)
+## body-image 0.2.0 (2018-5-8)
 * Concurrent `FsRead` readers and infallible `BodyImage::clone`
   support (#1):
   * `BodyReader` uses `ReadPos`, from new _olio_ crate, for the
@@ -187,18 +146,7 @@ originally released:
   * `BodyImage::prepare` is now no-op, deprecated.
 
 * Memory mapping is now an entirely optional, explicitly called,
-  default feature:
-  * Previously `try_clone` automatically _upgraded_ clones to `MemMap`,
-    and `write_to` created a temporary mapping, both to avoid
-    concurrent mutation of `FsRead`. Now `ReadPos` makes this
-    unnecessary.
-  * The `BarcReader` previously mapped large (per
-    `Tunables::max_body_ram`), uncompressed bodies. Now it uses
-    `ReadSlice` for concurrent, direct positioned read access in this
-    case.
+  default feature.
 
-* Add `BodyImage::from_file` (and `from_read_slice`) conversion
-  constructors.
-
-### 0.1.0 (2018-4-17)
+## body-image 0.1.0 (2018-4-17)
 * Initial release
