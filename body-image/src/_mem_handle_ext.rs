@@ -19,12 +19,12 @@ where T: Deref<Target=[u8]>
         where F: FnOnce() -> Result<R, S>,
               S: From<MemAdviseError>
     {
-        let new_advice = self.advise(advice)?;
+        let _new_advice = self.advise(advice)?;
 
         #[cfg(unix)]
         {
             debug!("MemHandle tmp_advise {:?}, obtained {:?}",
-                   advice, new_advice);
+                   advice, _new_advice);
         }
 
         let res = f();
