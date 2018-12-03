@@ -19,8 +19,8 @@ bytes      = { version=">=0.4.6, <2" }
 failure    = { version=">=0.1.2, <2", default-features=false, features=["std"] }
 http       = { version=">=0.1.6, <2" }
 log        = { version=">=0.4.0, <2" }
-memmap     = { version=">=0.6.2, <2", optional=true }
-olio       = { version=">=0.4.0, <2", default-features=false }
+memmap     = { version=">=0.7.0, <2", optional=true }
+olio       = { version=">=0.5.0, <2", default-features=false }
 tempfile   = { version=">=2.2.0, <4" }
 
 [features]
