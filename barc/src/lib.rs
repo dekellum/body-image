@@ -688,9 +688,9 @@ impl CompressStrategy for GzipCompressStrategy {
         // FIXME: This only considers req/res body lengths
         let est_len = rec.req_body().len() + rec.res_body().len();
         if est_len >= self.min_len {
-            Ok(EncodeWrapper::Gzip(
+            Ok(EncodeWrapper::Gzip(Box::new(
                 GzEncoder::new(file, GzCompression::new(self.compression_level))
-            ))
+            )))
         } else {
             Ok(EncodeWrapper::Plain(file))
         }
@@ -757,7 +757,7 @@ impl CompressStrategy for BrotliCompressStrategy {
 /// underlying BARC `File` reference.
 pub enum EncodeWrapper<'a> {
     Plain(&'a File),
-    Gzip(GzEncoder<&'a File>),
+    Gzip(Box<GzEncoder<&'a File>>),
     #[cfg(feature = "brotli")]
     Brotli(Box<brotli::CompressorWriter<&'a File>>)
 }
