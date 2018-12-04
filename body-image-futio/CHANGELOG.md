@@ -1,13 +1,15 @@
 ## 1.0.0 (TBD)
 
 * Update to the rust 2018 edition, including the changes to pass all 2018 idiom
-  lints (anchored paths, anonymous/elided lifetimes).  _This makes this start
-  of the 1.x release series dependent on rust 1.31 (currently beta) and thus
-  less stable than prior 0.x releases, which will continue to be maintained as
+  lints (anchored paths, anonymous/elided lifetimes).  _This start of the 1.x
+  release series is dependent on rust 1.31 (currently beta) and thus less
+  stable than prior 0.x releases, which will continue to be maintained as
   needed._
 
-* Separate into its own *body-image-futio* crate (see prior history in the
-  *body-image* crate). As of the 2018 edition *async* is a reserved keyword.
+* Separate into its own *body-image-futio* crate (see prior history below). As
+  of the 2018 edition *async* is a reserved keyword, so substitute *futio* for
+  crate name and remaining optional feature and dependency of the *barc-cli*
+  crate.
 
 * Update (dev dep) to rand 0.6.1, fix deprecation in benchmark.
 
@@ -137,16 +139,7 @@ the *body-image* crate.  Relevent release history is extracted below:
   (optionally via env TEST_LOG number).
 
 ## body-image 0.2.0 (2018-5-8)
-* Concurrent `FsRead` readers and infallible `BodyImage::clone`
-  support (#1):
-  * `BodyReader` uses `ReadPos`, from new _olio_ crate, for the
-    `FsRead` state.
-  * `BodyImage`, `Dialog` and `Record` now implement infallible
-    `Clone::clone`. The `try_clone` methods are deprecated.
-  * `BodyImage::prepare` is now no-op, deprecated.
-
-* Memory mapping is now an entirely optional, explicitly called,
-  default feature.
+* Minor change to use `Dialog::clone` (infallible clone support, #1)
 
 ## body-image 0.1.0 (2018-4-17)
 * Initial release
