@@ -779,12 +779,6 @@ pub enum BodyReader<'a> {
     /// buffers.
     Scattered(GatheringReader<'a, Bytes>),
 
-    /// `ReadPos` providing instance independent, unbuffered `Read` and `Seek`
-    /// for BodyImage `FsRead` state. Consider wrapping this in
-    /// `std::io::BufReader` if performing many small reads.
-    #[deprecated(since="0.4.0", note="FileSlice is returned instead")]
-    File(ReadPos),
-
     /// `ReadSlice` providing instance independent, unbuffered `Read` and
     /// `Seek` for BodyImage `FsRead` state, limited to a range within an
     /// underlying file. Consider wrapping this in `std::io::BufReader` if
@@ -794,16 +788,11 @@ pub enum BodyReader<'a> {
 
 impl<'a> BodyReader<'a> {
     /// Return the `Read` reference.
-    #[allow(deprecated)]
     pub fn as_read(&mut self) -> &mut dyn Read {
         match *self {
             BodyReader::Contiguous(ref mut cursor) => cursor,
             BodyReader::Scattered(ref mut gatherer) => gatherer,
             BodyReader::FileSlice(ref mut rslice) => rslice,
-            BodyReader::File(_) => {
-                unreachable!("BodyReader::File deprecated, \
-                              replaced with FileSlice")
-            }
         }
     }
 }

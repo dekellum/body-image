@@ -16,6 +16,8 @@
 * Add `Dialog::set_res_body_decoded`, for setting a new response body and
   updated the decoded `Encoding`s list.
 
+* Remove `BodyReader::File` variant which was previously deprecated in 0.4.0.
+
 ## Monolithic Releases
 
 Previously the *body-image* crate contained modules *async*, *barc*, and the
