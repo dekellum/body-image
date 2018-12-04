@@ -28,7 +28,7 @@ hyper-tls  = { version=">=0.2.0, <2" }
 hyperx     = { version=">=0.12.0, <2" }
 log        = { version=">=0.4.0, <2" }
 memmap     = { version=">=0.7.0, <2", optional=true }
-olio       = { version=">=0.5.0, <2", default-features=false }
+olio       = { version=">=1.0.0, <2", default-features=false }
 tokio      = { version=">=0.1.11, <0.2" }
 tokio-threadpool = { version=">=0.1.4, <0.2"}
 

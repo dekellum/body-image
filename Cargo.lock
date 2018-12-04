@@ -50,7 +50,7 @@ dependencies = [
  "httparse 1.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "olio 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "olio 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -92,7 +92,7 @@ dependencies = [
  "http 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "olio 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "olio 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -115,7 +115,7 @@ dependencies = [
  "lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "olio 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "olio 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-threadpool 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -605,7 +605,7 @@ dependencies = [
 
 [[package]]
 name = "olio"
-version = "0.5.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "libc 0.2.44 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1215,7 +1215,7 @@ dependencies = [
 "checksum net2 0.2.33 (registry+https://github.com/rust-lang/crates.io-index)" = "42550d9fb7b6684a6d404d9fa7250c2eb2646df731d1c06afc06dcee9e1bcf88"
 "checksum nodrop 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)" = "2f9667ddcc6cc8a43afc9b7917599d7216aa09c463919ea32c59ed6cac8bc945"
 "checksum num_cpus 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c51a3322e4bca9d212ad9a158a02abc6934d005490c054a2778df73a70aa0a30"
-"checksum olio 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "386d9f2fb05225841f84f56288c10fe4d2ed5bf7b647628377ee7e67a6035148"
+"checksum olio 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4b99f7ede9bf5e305a151f9f68d2bd5f6b72acc73397b1131c95c5fb86fd16f5"
 "checksum openssl 0.10.15 (registry+https://github.com/rust-lang/crates.io-index)" = "5e1309181cdcbdb51bc3b6bedb33dfac2a83b3d585033d3f6d9e22e8c1928613"
 "checksum openssl-probe 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"
 "checksum openssl-sys 0.9.39 (registry+https://github.com/rust-lang/crates.io-index)" = "278c1ad40a89aa1e741a1eed089a2f60b18fab8089c3139b542140fc7d674106"
