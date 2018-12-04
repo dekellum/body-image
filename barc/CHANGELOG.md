@@ -12,6 +12,8 @@
 * As of *flate2* 1.0.6, `GzEncoder` now exceeds 200 bytes is size, so `Box` it in
   `EncodeWrapper` for better stack usage and to avoid a clippy lint.
 
+* Remove `barc::META_*` header constants that were deprecated in 0.5.0.
+
 ## History in *body-image*
 
 Previously *barc* was released as a module of the *body-image* crate. Relevent
