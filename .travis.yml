@@ -16,14 +16,14 @@ cache:
 before_cache:
   - rm -rf /home/travis/.cargo/registry
 
-rust: beta
+rust: 1.31.0
 env: # important!
 matrix:
   include:
-    - rust: beta
+    - rust: 1.31.0
       os: osx
       env: WITH_LOCK=true
-    - rust: beta
+    - rust: 1.31.0
       env: WITH_LOCK=true
     - rust: nightly
       env: WITH_LOCK=true
