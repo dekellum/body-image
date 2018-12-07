@@ -199,8 +199,7 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
                .get_all(http::header::CONTENT_ENCODING)
                .iter());
 
-    let mut chunked = false;
-    let mut compress = None;
+    let mut res = Vec::with_capacity(2);
 
     'headers: for v in encodings {
         // Hyper's Content-Encoding includes Brotli (br) _and_
@@ -211,18 +210,18 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
                 match *av {
                     HyEncoding::Identity => {}
                     HyEncoding::Chunked => {
-                        chunked = true
+                        res.push(Encoding::Chunked);
                     }
                     HyEncoding::Deflate => {
-                        compress = Some(Encoding::Deflate);
+                        res.push(Encoding::Deflate);
                         break 'headers;
                     }
                     HyEncoding::Gzip => {
-                        compress = Some(Encoding::Gzip);
+                        res.push(Encoding::Gzip);
                         break 'headers;
                     }
                     HyEncoding::Brotli => {
-                        compress = Some(Encoding::Brotli);
+                        res.push(Encoding::Brotli);
                         break 'headers;
                     }
                     _ => {
@@ -233,14 +232,7 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
             }
         }
     }
-    let mut encodings = Vec::with_capacity(2);
-    if chunked {
-        encodings.push(Encoding::Chunked);
-    }
-    if let Some(e) = compress {
-        encodings.push(e);
-    }
-    encodings
+    res
 }
 
 /// Return true if the chunked Transfer-Encoding can be found in the headers.
