@@ -26,7 +26,7 @@ httparse   = { version=">=1.2.4, <2" }
 hyper      = { version=">=0.12.1, <2" }
 hyper-tls  = { version=">=0.2.0, <2" }
 hyperx     = { version=">=0.12.0, <2" }
-log        = { version=">=0.4.0, <2" }
+log        = { version=">=0.4.4, <2" }
 memmap     = { version=">=0.7.0, <2", optional=true }
 olio       = { version=">=1.0.0, <2", default-features=false }
 tokio      = { version=">=0.1.11, <0.2" }
@@ -43,6 +43,6 @@ doctest = false
 bench = false
 
 [dev-dependencies]
-lazy_static = { version=">=1.0.1, <2" }
+lazy_static = { version=">=1.0.2, <2" }
 fern        = { version=">=0.5.5, <2" }
 rand        = { version=">=0.6.1, <2" }

@@ -23,7 +23,7 @@ failure    = { version=">=0.1.2, <2", default-features=false, features=["std"] }
 fern       = { version=">=0.5.5, <2" }
 http       = { version=">=0.1.6, <2" }
 hyper      = { version=">=0.12.1, <2", optional=true }
-log        = { version=">=0.4.0, <2" }
+log        = { version=">=0.4.4, <2" }
 
 [features]
 default = ["mmap", "brotli", "futio"]
