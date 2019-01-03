@@ -17,7 +17,7 @@ name = "backtrace"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "backtrace-sys 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "backtrace-sys 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "cfg-if 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-demangle 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -26,7 +26,7 @@ dependencies = [
 
 [[package]]
 name = "backtrace-sys"
-version = "0.1.17"
+version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cc 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -84,6 +84,7 @@ name = "body-image"
 version = "1.0.0"
 dependencies = [
  "backtrace 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "backtrace-sys 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "http 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -980,7 +981,7 @@ dependencies = [
 "checksum alloc-no-stdlib 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "71877e174a5d78c969228d628c4f7f3b545d13452bd3d9393fa07aacfb7c6894"
 "checksum arrayvec 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d1154a1f6c2d8ca95194edbee2380f23f2a51ba321a1217ea00e78166636b2a0"
 "checksum backtrace 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)" = "dbdd17cd962b570302f5297aea8648d5923e22e555c2ed2d8b2e34eca646bf6d"
-"checksum backtrace-sys 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)" = "0a44ce0e3758d8eb359302c71415dac06b4cfdc3ae50b2a53776d097b168770b"
+"checksum backtrace-sys 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)" = "b46a4e68c24954dfc8a0e515b069f695481d2997b840356db013ff9e52cdb8fe"
 "checksum base64 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "229d032f1a99302697f10b27167ae6d03d49d032e6a8e2550e8d3fc13356d2b4"
 "checksum bitflags 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f5cde24d1b2e2216a726368b2363a273739c91f4e3eb4e0dd12d672d396ad989"
 "checksum brotli 2.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "37124388ff8786bdb066eba984cfe1d117c2509c7dd2aa5a03ab819df0010a2e"
