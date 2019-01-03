@@ -32,6 +32,11 @@ olio       = { version=">=1.0.0, <2", default-features=false }
 tokio      = { version=">=0.1.11, <0.2" }
 tokio-threadpool = { version=">=0.1.4, <0.2"}
 
+# FIXME: These are really transitive dependencies, specified here to
+# get minimal versions working.
+unicase       = { version=">=2.1.0, <3" }
+miniz-sys     = { version=">=0.1.11, <2" }
+
 [features]
 default = ["mmap", "brotli"]
 mmap = ["memmap", "olio/mmap", "body-image/mmap"]

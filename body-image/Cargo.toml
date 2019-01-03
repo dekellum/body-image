@@ -23,6 +23,13 @@ memmap     = { version=">=0.7.0, <2", optional=true }
 olio       = { version=">=1.0.0, <2", default-features=false }
 tempfile   = { version=">=2.2.0, <4" }
 
+# FIXME: These are really transitive dependencies, specified here to
+# get minimal versions working.
+rand       = { version=">=0.3.14, <2" }
+rand_isaac = { version=">=0.1.1,  <2" }
+time       = { version=">=0.1.34, <1" }
+backtrace  = { version=">=0.3.8, <2" }
+
 [features]
 default = ["mmap"]
 mmap = ["memmap", "olio/mmap"]
