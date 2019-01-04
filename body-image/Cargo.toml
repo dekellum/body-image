@@ -1,6 +1,6 @@
 [package]
 name          = "body-image"
-version       = "1.0.0"
+version       = "1.0.1"
 edition       = "2018"
 authors       = ["David Kellum <dek-oss@gravitext.com>"]
 license       = "MIT/Apache-2.0"
@@ -18,7 +18,7 @@ travis-ci = { repository="dekellum/body-image" }
 bytes      = { version=">=0.4.6, <0.5" }
 failure    = { version=">=0.1.2, <0.2", default-features=false, features=["std"] }
 http       = { version=">=0.1.6, <0.2" }
-log        = { version=">=0.4.0, <0.5" }
+log        = { version=">=0.4.4, <0.5" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }
 olio       = { version=">=1.0.0, <2", default-features=false }
 tempfile   = { version=">=2.2.0, <4" }

@@ -799,7 +799,7 @@ impl<'a> BodyReader<'a> {
 
 /// Extract of an HTTP request.
 ///
-/// Alternate spelling of _Prologue_.
+/// Alternate spelling of _prologue_.
 #[derive(Clone, Debug)]
 pub struct Prolog {
     pub method:       http::Method,

@@ -52,7 +52,7 @@ use hyper;
 use hyper_tls;
 use hyperx::header::{
     ContentEncoding, ContentLength, Encoding as HyEncoding,
-    Header, TransferEncoding, Raw
+    Header, TransferEncoding
 };
 use log::{debug, warn};
 use tokio;
@@ -199,30 +199,29 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
                .get_all(http::header::CONTENT_ENCODING)
                .iter());
 
-    let mut chunked = false;
-    let mut compress = None;
+    let mut res = Vec::with_capacity(2);
 
     'headers: for v in encodings {
         // Hyper's Content-Encoding includes Brotli (br) _and_
         // Chunked, is thus a super-set of Transfer-Encoding, so parse
         // all of these headers that way.
-        if let Ok(v) = ContentEncoding::parse_header(&Raw::from(v.as_bytes())) {
+        if let Ok(v) = ContentEncoding::parse_header(&v) {
             for av in v.iter() {
                 match *av {
                     HyEncoding::Identity => {}
                     HyEncoding::Chunked => {
-                        chunked = true
+                        res.push(Encoding::Chunked);
                     }
                     HyEncoding::Deflate => {
-                        compress = Some(Encoding::Deflate);
+                        res.push(Encoding::Deflate);
                         break 'headers;
                     }
                     HyEncoding::Gzip => {
-                        compress = Some(Encoding::Gzip);
+                        res.push(Encoding::Gzip);
                         break 'headers;
                     }
                     HyEncoding::Brotli => {
-                        compress = Some(Encoding::Brotli);
+                        res.push(Encoding::Brotli);
                         break 'headers;
                     }
                     _ => {
@@ -233,14 +232,7 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
             }
         }
     }
-    let mut encodings = Vec::with_capacity(2);
-    if chunked {
-        encodings.push(Encoding::Chunked);
-    }
-    if let Some(e) = compress {
-        encodings.push(e);
-    }
-    encodings
+    res
 }
 
 /// Return true if the chunked Transfer-Encoding can be found in the headers.
@@ -248,7 +240,7 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
     let encodings = headers.get_all(http::header::TRANSFER_ENCODING);
 
     'headers: for v in encodings {
-        if let Ok(v) = TransferEncoding::parse_header(&Raw::from(v.as_bytes())) {
+        if let Ok(v) = TransferEncoding::parse_header(&v) {
             for av in v.iter() {
                 match *av {
                     HyEncoding::Identity => {}
@@ -383,7 +375,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
 fn check_length(v: &http::header::HeaderValue, max: u64)
     -> Result<u64, Flare>
 {
-    let l = *ContentLength::parse_header(&Raw::from(v.as_bytes()))?;
+    let l = *ContentLength::parse_header(&v)?;
     if l > max {
         bail!("Response Content-Length too long: {}", l);
     }

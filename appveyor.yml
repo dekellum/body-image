@@ -2,7 +2,7 @@ os: Visual Studio 2015
 
 environment:
   matrix:
-    - channel: beta
+    - channel: 1.31.0
       target: x86_64-pc-windows-msvc
     - channel: nightly
       target: x86_64-pc-windows-msvc
