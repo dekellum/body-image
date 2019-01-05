@@ -1,4 +1,11 @@
+## 1.0.2 (2019-1-4)
+
+* Fix missed upgrade to hyperx 0.14 in prior release.
+
 ## 1.0.1 (2019-1-4)
+
+(_yanked_)
+
 * Upgrade to hyperx 0.14.0 and use new support for faster direct `HeaderValue`
   parsing.
 
