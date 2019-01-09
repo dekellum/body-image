@@ -11,10 +11,11 @@ use failure::Error as Flare;
 use futures::{future, Future, Stream};
 
 use tokio;
-use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio::reactor::Handle;
 use tokio::timer::Delay;
+
+use tokio_tcp::TcpListener;
 
 use hyper;
 use hyper::Body;
