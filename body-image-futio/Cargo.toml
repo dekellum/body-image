@@ -30,7 +30,7 @@ log        = { version=">=0.4.4, <2" }
 memmap     = { version=">=0.7.0, <2", optional=true }
 olio       = { version=">=1.0.0, <2", default-features=false }
 tokio      = { version=">=0.1.14, <0.2", default-features=false, features=["rt-full"] }
-tokio-threadpool = { version=">=0.1.4, <0.2"}
+tokio-threadpool = { version=">=0.1.10, <0.2"}
 
 [features]
 default = ["mmap", "brotli"]
