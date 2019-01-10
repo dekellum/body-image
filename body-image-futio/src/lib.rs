@@ -68,19 +68,19 @@ use body_image::{
 };
 
 mod image;
-pub use self::image::AsyncBodyImage;
+pub use image::AsyncBodyImage;
 
 mod sink;
-pub use self::sink::AsyncBodySink;
+pub use sink::AsyncBodySink;
 
 #[cfg(feature = "mmap")] mod mem_map_buf;
-#[cfg(feature = "mmap")] use self::mem_map_buf::MemMapBuf;
+#[cfg(feature = "mmap")] use mem_map_buf::MemMapBuf;
 
 #[cfg(feature = "mmap")] mod uni_image;
-#[cfg(feature = "mmap")] pub use self::uni_image::{UniBodyImage, UniBodyBuf};
+#[cfg(feature = "mmap")] pub use uni_image::{UniBodyImage, UniBodyBuf};
 
 #[cfg(feature = "mmap")] mod uni_sink;
-#[cfg(feature = "mmap")] pub use self::uni_sink::UniBodySink;
+#[cfg(feature = "mmap")] pub use uni_sink::UniBodySink;
 
 /// The crate version string.
 pub static VERSION: &str = env!("CARGO_PKG_VERSION");
