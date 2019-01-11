@@ -28,7 +28,7 @@ type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 #[cfg(feature = "futio")] mod record;
 mod logger;
 
-use crate::logger::setup_logger;
+use logger::setup_logger;
 
 // Internal errors for the CLI
 #[derive(Debug)]
