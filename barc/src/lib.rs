@@ -65,7 +65,7 @@ use crate::compress::DecodeWrapper;
 pub use crate::compress::BrotliCompressStrategy;
 
 mod try_conv;
-pub use crate::try_conv::{TryFrom, TryInto};
+pub use try_conv::{TryFrom, TryInto};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
