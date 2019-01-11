@@ -33,6 +33,9 @@
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
 
+#![deny(dead_code, unused_imports)]
+#![warn(rust_2018_idioms)]
+
 use std::mem;
 
 #[cfg(feature = "brotli")] use brotli;
