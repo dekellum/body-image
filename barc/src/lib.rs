@@ -23,6 +23,9 @@
 //!
 //! * Optional per-record gzip or Brotli compression (headers and bodies)
 
+#![deny(dead_code, unused_imports)]
+#![warn(rust_2018_idioms)]
+
 use std::cmp;
 use std::fs::{File, OpenOptions};
 use std::fmt;
