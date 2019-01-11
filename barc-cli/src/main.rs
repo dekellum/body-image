@@ -23,7 +23,7 @@ use barc::{
 #[cfg(feature = "futio")] mod record;
 mod logger;
 
-use crate::logger::setup_logger;
+use logger::setup_logger;
 
 fn main() {
     let r = run();
