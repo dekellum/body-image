@@ -234,8 +234,8 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-       -> Result<RequestRecord<AsyncBodyImage>, Flare>
-       where BB: Into<Bytes>
+        -> Result<RequestRecord<AsyncBodyImage>, Flare>
+        where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
         let req_body = if buf.is_empty() {
