@@ -33,6 +33,9 @@
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
 
+#![deny(dead_code, unused_imports)]
+#![warn(rust_2018_idioms)]
+
 use std::mem;
 
 #[cfg(feature = "brotli")] use brotli;
@@ -64,14 +67,11 @@ use body_image::{
     Epilog, Prolog, Dialog, Recorded, RequestRecorded, Tunables,
 };
 
-/// The crate version string.
-pub static VERSION: &str               = env!("CARGO_PKG_VERSION");
-
 mod image;
-mod sink;
-
-pub use self::sink::AsyncBodySink;
 pub use self::image::AsyncBodyImage;
+
+mod sink;
+pub use self::sink::AsyncBodySink;
 
 #[cfg(feature = "mmap")] mod mem_map_buf;
 #[cfg(feature = "mmap")] use self::mem_map_buf::MemMapBuf;
@@ -82,15 +82,18 @@ pub use self::image::AsyncBodyImage;
 #[cfg(feature = "mmap")] mod uni_sink;
 #[cfg(feature = "mmap")] pub use self::uni_sink::UniBodySink;
 
+/// The crate version string.
+pub static VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Appropriate value for the HTTP accept-encoding request header, including
 /// (br)otli when the brotli feature is configured.
 #[cfg(feature = "brotli")]
-pub static ACCEPT_ENCODINGS: &str          = "br, gzip, deflate";
+pub static ACCEPT_ENCODINGS: &str = "br, gzip, deflate";
 
 /// Appropriate value for the HTTP accept-encoding request header, including
 /// (br)otli when the brotli feature is configured.
 #[cfg(not(feature = "brotli"))]
-pub static ACCEPT_ENCODINGS: &str          = "gzip, deflate";
+pub static ACCEPT_ENCODINGS: &str = "gzip, deflate";
 
 /// A browser-like HTTP accept request header value, with preference for
 /// hypertext.

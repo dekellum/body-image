@@ -23,6 +23,9 @@
 //!
 //! * Optional per-record gzip or Brotli compression (headers and bodies)
 
+#![deny(dead_code, unused_imports)]
+#![warn(rust_2018_idioms)]
+
 use std::cmp;
 use std::fs::{File, OpenOptions};
 use std::fmt;
@@ -838,9 +841,10 @@ impl<'a> BarcWriter<'a> {
     /// Write a new record, returning the record's offset from the
     /// start of the BARC file. The writer position is then advanced
     /// to the end of the file, for the next `write`.
-    pub fn write(&mut self,
-                 rec: &dyn MetaRecorded,
-                 strategy: &dyn CompressStrategy)
+    pub fn write(
+        &mut self,
+        rec: &dyn MetaRecorded,
+        strategy: &dyn CompressStrategy)
         -> Result<u64, BarcError>
     {
         // BarcFile::writer() guarantees Some(File)
@@ -881,9 +885,10 @@ impl<'a> BarcWriter<'a> {
 
 // Write the record, returning a preliminary `RecordHead` with
 // observed (not compressed) lengths.
-fn write_record(file: &mut File,
-                rec: &dyn MetaRecorded,
-                strategy: &dyn CompressStrategy)
+fn write_record(
+    file: &mut File,
+    rec: &dyn MetaRecorded,
+    strategy: &dyn CompressStrategy)
     -> Result<RecordHead, BarcError>
 {
     let mut wrapper = strategy.wrap_encoder(rec, file)?;
@@ -946,9 +951,10 @@ fn write_record_head(out: &mut dyn Write, head: &RecordHead)
 /// Write header block to out, with optional CR+LF end padding, and return the
 /// length written. This is primarily an implementation detail of `BarcWriter`,
 /// but is made public for its general diagnostic utility.
-pub fn write_headers(out: &mut dyn Write,
-                     with_crlf: bool,
-                     headers: &http::HeaderMap)
+pub fn write_headers(
+    out: &mut dyn Write,
+    with_crlf: bool,
+    headers: &http::HeaderMap)
     -> Result<usize, BarcError>
 {
     let mut size = 0;
@@ -1393,8 +1399,7 @@ mod barc_tests {
         write_read_small(&fname, &strategy).unwrap();
     }
 
-    fn write_read_small(fname: &PathBuf,
-                        strategy: &dyn CompressStrategy)
+    fn write_read_small(fname: &PathBuf, strategy: &dyn CompressStrategy)
         -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);
@@ -1461,8 +1466,7 @@ mod barc_tests {
         write_read_empty_record(&fname, &strategy).unwrap();
     }
 
-    fn write_read_empty_record(fname: &PathBuf,
-                               strategy: &dyn CompressStrategy)
+    fn write_read_empty_record(fname: &PathBuf, strategy: &dyn CompressStrategy)
         -> Result<(), Flare>
     {
         let bfile = BarcFile::new(fname);

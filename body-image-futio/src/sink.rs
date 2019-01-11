@@ -1,9 +1,11 @@
+use failure::{bail, Error as Flare};
+use log::{debug};
+
+use body_image::{BodySink, Tunables};
+
 use hyper;
 use tokio_threadpool;
 use futures::{Async, AsyncSink, Poll, Sink, StartSend};
-use failure::{bail, Error as Flare};
-use crate::{BodySink, Tunables};
-use log::{debug};
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `hyper::Body` (`hyper::Chunk` item) stream to be forwarded
