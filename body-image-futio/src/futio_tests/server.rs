@@ -331,7 +331,7 @@ fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
 }
 
 fn simple_server(size: usize) -> (impl Future<Item=(), Error=()>, String) {
-    let svc = service_fn( move |_req| {
+    let svc = service_fn(move |_req| {
         let bi = fs_body_image(size);
         let tune = Tunables::default();
         Response::builder()

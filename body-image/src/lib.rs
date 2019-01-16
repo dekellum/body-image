@@ -1089,7 +1089,7 @@ impl Tuner {
     /// Set the size estimate, as an integer multiple of the encoded buffer
     /// size, for the _Brotli_ compression algorithm.
     pub fn set_size_estimate_brotli(&mut self, multiple: u16) -> &mut Tuner {
-        assert!(multiple > 0, "size_estimate_brotli must be >= 1" );
+        assert!(multiple > 0, "size_estimate_brotli must be >= 1");
         self.template.size_estimate_brotli = multiple;
         self
     }

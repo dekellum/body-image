@@ -861,7 +861,7 @@ impl<'a> BarcWriter<'a> {
         // Use new file offset to indicate total length
         let end = file.seek(SeekFrom::Current(0))?;
         let orig_len = head.len;
-        assert!( end >= (start + (V2_HEAD_SIZE as u64)));
+        assert!(end >= (start + (V2_HEAD_SIZE as u64)));
         head.len = end - start - (V2_HEAD_SIZE as u64);
         if head.compress == Compression::Plain {
             assert_eq!(orig_len, head.len);
