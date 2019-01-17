@@ -1,3 +1,6 @@
+# https://github.com/rust-lang/cargo/issues/5654
+cargo-features = ["publish-lockfile"]
+
 [package]
 name          = "barc-cli"
 version       = "1.0.1"
@@ -10,6 +13,7 @@ repository    = "https://github.com/dekellum/body-image"
 readme        = "README.md"
 keywords      = ["http", "compression", "serialization"]
 categories    = ["web-programming", "command-line-utilities"]
+publish-lockfile = true
 
 [badges]
 travis-ci = { repository="dekellum/body-image" }
