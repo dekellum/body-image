@@ -1,7 +1,7 @@
 use failure::Error as Flare;
 
 use body_image::Tunables;
-use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
+use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch, request_dialog,
             Recorded, RequestRecord, RequestRecorder, user_agent};
 use crate::logger::LOG_SETUP;
 
@@ -39,6 +39,28 @@ fn test_small_https() {
 
     let dl = fetch(req, &tune).unwrap();
     let dl = dl.clone();
+    println!("Response {:#?}", dl);
+
+    assert!(dl.res_body().is_ram());
+    assert!(dl.res_body().len() > 0);
+}
+
+#[test]
+fn test_http_2() {
+    assert!(*LOG_SETUP);
+    let tune = Tunables::new();
+    let req = get_request("https://abc.xyz/").unwrap();
+
+    let mut rt = tokio::runtime::Builder::new()
+        .name_prefix("tpool-")
+        .core_threads(2)
+        .blocking_threads(2)
+        .build()
+        .unwrap();
+    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/).unwrap();
+    let client = hyper::Client::builder().http2_only(true).build(connector);
+    let dl = rt.block_on(request_dialog(&client, req, &tune)).unwrap();
+
     println!("Response {:#?}", dl);
 
     assert!(dl.res_body().is_ram());
