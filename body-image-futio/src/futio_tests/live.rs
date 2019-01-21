@@ -57,7 +57,17 @@ fn test_http_2() {
         .blocking_threads(2)
         .build()
         .unwrap();
-    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/).unwrap();
+
+    use hyper::client::connect::HttpConnector;
+    use hyper_openssl::HttpsConnector;
+    use openssl::ssl::{SslMethod, SslConnector};
+
+    let mut ssl = SslConnector::builder(SslMethod::tls()).unwrap();
+    ssl.set_alpn_protos(b"\x02h2").unwrap();
+    let mut httpc = HttpConnector::new(2);
+    httpc.enforce_http(false);
+    let connector = HttpsConnector::with_connector(httpc, ssl).unwrap();
+
     let client = hyper::Client::builder().http2_only(true).build(connector);
     let dl = rt.block_on(request_dialog(&client, req, &tune)).unwrap();
 
@@ -65,6 +75,7 @@ fn test_http_2() {
 
     assert!(dl.res_body().is_ram());
     assert!(dl.res_body().len() > 0);
+    assert_eq!(dl.res_version(), http::Version::HTTP_2);
 }
 
 #[test]
