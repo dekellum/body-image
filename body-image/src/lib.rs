@@ -805,6 +805,7 @@ pub enum BodyReader<'a> {
 }
 
 impl<'a> Read for BodyReader<'a> {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         match *self {
             BodyReader::Contiguous(ref mut cursor) => cursor.read(buf),
