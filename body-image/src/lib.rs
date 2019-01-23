@@ -804,6 +804,16 @@ pub enum BodyReader<'a> {
     FileSlice(ReadSlice),
 }
 
+impl<'a> Read for BodyReader<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
+        match *self {
+            BodyReader::Contiguous(ref mut cursor) => cursor.read(buf),
+            BodyReader::Scattered(ref mut gatherer) => gatherer.read(buf),
+            BodyReader::FileSlice(ref mut rslice) => rslice.read(buf),
+        }
+    }
+}
+
 impl<'a> BodyReader<'a> {
     /// Return the `Read` reference.
     pub fn as_read(&mut self) -> &mut dyn Read {
