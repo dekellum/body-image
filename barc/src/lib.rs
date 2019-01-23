@@ -750,16 +750,6 @@ impl<'a> EncodeWrapper<'a> {
         }
     }
 
-    /// Return a `Write` reference for self.
-    pub fn as_write(&mut self) -> &mut dyn Write {
-        match *self {
-            EncodeWrapper::Plain(ref mut f) => f,
-            EncodeWrapper::Gzip(ref mut gze) => gze,
-            #[cfg(feature = "brotli")]
-            EncodeWrapper::Brotli(ref mut bcw) => bcw,
-        }
-    }
-
     /// Consume the wrapper, finishing any encoding and flushing the
     /// completed write.
     pub fn finish(self) -> Result<(), BarcError> {
@@ -776,6 +766,25 @@ impl<'a> EncodeWrapper<'a> {
             }
         }
         Ok(())
+    }
+}
+
+impl<'a> Write for EncodeWrapper<'a> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        match *self {
+            EncodeWrapper::Plain(ref mut w) => w.write(buf),
+            EncodeWrapper::Gzip(ref mut gze) => gze.write(buf),
+            #[cfg(feature = "brotli")]
+            EncodeWrapper::Brotli(ref mut bcw) => bcw.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> Result<(), io::Error> {
+        match *self {
+            EncodeWrapper::Plain(ref mut f) => f.flush(),
+            EncodeWrapper::Gzip(ref mut gze) => gze.flush(),
+            EncodeWrapper::Brotli(ref mut bcw) => bcw.flush(),
+        }
     }
 }
 
@@ -848,7 +857,7 @@ impl<'a> BarcWriter<'a> {
         -> Result<u64, BarcError>
     {
         // BarcFile::writer() guarantees Some(File)
-        let file = &mut *self.guard.as_mut().unwrap();
+        let file: &mut File = self.guard.as_mut().unwrap();
 
         // Write initial head as reserved place holder
         let start = file.seek(SeekFrom::End(0))?;
@@ -886,17 +895,16 @@ impl<'a> BarcWriter<'a> {
 // Write the record, returning a preliminary `RecordHead` with
 // observed (not compressed) lengths.
 fn write_record(
-    file: &mut File,
+    file: &File,
     rec: &dyn MetaRecorded,
     strategy: &dyn CompressStrategy)
     -> Result<RecordHead, BarcError>
 {
-    let mut wrapper = strategy.wrap_encoder(rec, file)?;
-    let compress = wrapper.mode();
+    let mut encoder = strategy.wrap_encoder(rec, file)?;
+    let fout = &mut encoder;
+    let compress = fout.mode();
     let with_crlf = compress == Compression::Plain;
     let head = {
-        let fout = wrapper.as_write();
-
         let meta = write_headers(fout, with_crlf, rec.meta())?;
 
         let req_h = write_headers(fout, with_crlf, rec.req_headers())?;
@@ -923,13 +931,14 @@ fn write_record(
             res_h }
     };
 
-    wrapper.finish()?;
+    encoder.finish()?;
     Ok(head)
 }
 
 // Write record head to out, asserting the various length constraints.
-fn write_record_head(out: &mut dyn Write, head: &RecordHead)
+fn write_record_head<W>(out: &mut W, head: &RecordHead)
     -> Result<(), BarcError>
+    where W: Write + ?Sized
 {
     // Check input ranges
     assert!(head.len   <= V2_MAX_RECORD,   "len exceeded");
@@ -951,11 +960,20 @@ fn write_record_head(out: &mut dyn Write, head: &RecordHead)
 /// Write header block to out, with optional CR+LF end padding, and return the
 /// length written. This is primarily an implementation detail of `BarcWriter`,
 /// but is made public for its general diagnostic utility.
-pub fn write_headers(
-    out: &mut dyn Write,
+///
+/// The `Write` is passed by reference for backward compatibility with its
+/// original non-generic form as `&mut dyn Write`. [C-RW-VALUE] prefers
+/// pass by value, but this would now be a breaking change.
+/// [`std::io::copy`] is presumably in the same position.
+///
+/// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+/// [`std::io::copy`]: https://doc.rust-lang.org/std/io/fn.copy.html
+pub fn write_headers<W>(
+    out: &mut W,
     with_crlf: bool,
     headers: &http::HeaderMap)
     -> Result<usize, BarcError>
+    where W: Write + ?Sized
 {
     let mut size = 0;
     for (key, value) in headers.iter() {
@@ -974,8 +992,15 @@ pub fn write_headers(
 /// Write body to out, with optional CR+LF end padding, and return the length
 /// written.  This is primarily an implementation detail of `BarcWriter`, but
 /// is made public for its general diagnostic utility.
-pub fn write_body(out: &mut dyn Write, with_crlf: bool, body: &BodyImage)
+///
+/// The `Write` is passed by reference for backward compatibility with its
+/// original non-generic form as `&mut dyn Write`. [C-RW-VALUE] prefers
+/// pass by value, but this would now be a breaking change.
+///
+/// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+pub fn write_body<W>(out: &mut W, with_crlf: bool, body: &BodyImage)
     -> Result<u64, BarcError>
+    where W: Write + ?Sized
 {
     let mut size = body.write_to(out)?;
     if with_crlf && size > 0 {
@@ -985,7 +1010,9 @@ pub fn write_body(out: &mut dyn Write, with_crlf: bool, body: &BodyImage)
 }
 
 // Like `write_all`, but return the length of the provided byte slice.
-fn write_all_len(out: &mut dyn Write, bs: &[u8]) -> Result<usize, BarcError> {
+fn write_all_len<W>(out: &mut W, bs: &[u8]) -> Result<usize, BarcError>
+    where W: Write + ?Sized
+{
     out.write_all(bs)?;
     Ok(bs.len())
 }
