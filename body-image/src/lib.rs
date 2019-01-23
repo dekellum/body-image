@@ -585,8 +585,9 @@ impl BodyImage {
     /// length estimate provides a hint to use the file system from the start,
     /// which is more optimal than writing out accumulated `Ram` buffers
     /// later. If the length can't be estimated, use zero (0).
-    pub fn read_from(r: &mut dyn Read, len_estimate: u64, tune: &Tunables)
+    pub fn read_from<R>(mut r: R, len_estimate: u64, tune: &Tunables)
         -> Result<BodyImage, BodyError>
+        where R: Read
     {
         if len_estimate > tune.max_body_ram() {
             let b = BodySink::with_fs(tune.temp_dir())?;
@@ -690,8 +691,9 @@ fn image_from_read_slice(rslice: ReadSlice) -> BodyImage {
 
 // Read all bytes from r, consume and write to a `BodySink` in state
 // `FsWrite`, returning a final prepared `BodyImage`.
-fn read_to_body_fs(r: &mut dyn Read, mut body: BodySink, tune: &Tunables)
+fn read_to_body_fs<R>(mut r: R, mut body: BodySink, tune: &Tunables)
     -> Result<BodyImage, BodyError>
+    where R: Read
 {
     assert!(!body.is_ram());
 
