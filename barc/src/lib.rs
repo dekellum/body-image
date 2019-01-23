@@ -1647,8 +1647,7 @@ mod barc_tests {
         assert_eq!(record.res_headers.len(), 11);
 
         assert!(record.res_body.is_ram());
-        let mut body_reader = record.res_body.reader();
-        let br = body_reader.as_read();
+        let mut br = record.res_body.reader();
         let mut buf = Vec::with_capacity(2048);
         br.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.len(), 1270);
@@ -1712,8 +1711,7 @@ mod barc_tests {
         println!("{:#?}", record);
 
         assert!(!record.res_body.is_ram());
-        let mut body_reader = record.res_body.reader();
-        let br = body_reader.as_read();
+        let mut br = record.res_body.reader();
         let mut buf = Vec::with_capacity(2048);
         br.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.len(), 1270);
@@ -1742,8 +1740,7 @@ mod barc_tests {
         println!("{:#?}", record);
 
         assert!(!record.res_body.is_ram());
-        let mut body_reader = record.res_body.reader();
-        let br = body_reader.as_read();
+        let mut br = record.res_body.reader();
         let mut buf = Vec::with_capacity(2048);
         br.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.len(), 1270);
