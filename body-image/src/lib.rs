@@ -643,7 +643,9 @@ impl BodyImage {
 
     /// Write self to `out` and return length. If `FsRead` this is performed
     /// using `std::io::copy` with `ReadPos` as input.
-    pub fn write_to(&self, out: &mut dyn Write) -> Result<u64, BodyError> {
+    pub fn write_to<W>(&self, mut out: W) -> Result<u64, BodyError>
+        where W: Write
+    {
         match self.state {
             ImageState::Ram(ref v) => {
                 for b in v {
@@ -656,11 +658,11 @@ impl BodyImage {
             }
             ImageState::FsRead(ref f) => {
                 let mut rp = ReadPos::new(f.clone(), self.len);
-                io::copy(&mut rp, out)?;
+                io::copy(&mut rp, &mut out)?;
             }
             ImageState::FsReadSlice(ref rslice) => {
                 let mut rs = rslice.clone();
-                io::copy(&mut rs, out)?;
+                io::copy(&mut rs, &mut out)?;
             }
         }
         Ok(self.len)
