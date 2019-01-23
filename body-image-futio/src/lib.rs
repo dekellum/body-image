@@ -299,22 +299,22 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
 pub fn decompress(body: &BodyImage, compression: Encoding, tune: &Tunables)
     -> Result<Option<BodyImage>, BodyError>
 {
-    let mut reader = body.reader();
+    let reader = body.reader();
     match compression {
         Encoding::Gzip => {
-            let mut decoder = GzDecoder::new(reader.as_read());
+            let mut decoder = GzDecoder::new(reader);
             let len_est = body.len() * u64::from(tune.size_estimate_gzip());
             Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
         }
         Encoding::Deflate => {
-            let mut decoder = DeflateDecoder::new(reader.as_read());
+            let mut decoder = DeflateDecoder::new(reader);
             let len_est = body.len() * u64::from(tune.size_estimate_deflate());
             Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
         }
         #[cfg(feature = "brotli")]
         Encoding::Brotli => {
             let mut decoder = brotli::Decompressor::new(
-                reader.as_read(),
+                reader,
                 tune.buffer_size_ram());
             let len_est = body.len() * u64::from(tune.size_estimate_brotli());
             Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
