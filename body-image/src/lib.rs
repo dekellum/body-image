@@ -817,6 +817,7 @@ impl<'a> Read for BodyReader<'a> {
 
 impl<'a> BodyReader<'a> {
     /// Return the `Read` reference.
+    #[deprecated(since="1.1.0", note="BodyReader now implements Read directly")]
     pub fn as_read(&mut self) -> &mut dyn Read {
         match *self {
             BodyReader::Contiguous(ref mut cursor) => cursor,
