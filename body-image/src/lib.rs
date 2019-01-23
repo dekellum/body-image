@@ -1201,8 +1201,7 @@ mod body_tests {
     #[test]
     fn test_empty_read() {
         let body = BodyImage::empty();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = Vec::new();
         br.read_to_end(&mut obuf).unwrap();
         assert!(obuf.is_empty());
@@ -1213,8 +1212,7 @@ mod body_tests {
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello world").unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1227,8 +1225,7 @@ mod body_tests {
         body.write_all(" ").unwrap();
         body.write_all("world").unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1244,14 +1241,12 @@ mod body_tests {
         let body_clone = body.clone();
         body.gather();
 
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
 
-        let mut body_reader = body_clone.reader();
-        let br = body_reader.as_read();
+        let mut br = body_clone.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1279,8 +1274,7 @@ mod body_tests {
         let salutation = b"hello world";
         let mut src = Cursor::new(salutation);
         let body = BodyImage::read_from(&mut src, 0, &tune).unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = Vec::new();
         br.read_to_end(&mut obuf).unwrap();
         assert_eq!(salutation, &obuf[..]);
@@ -1313,8 +1307,7 @@ mod body_tests {
         body.write_all(" ").unwrap();
         body.write_all("world").unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1329,8 +1322,7 @@ mod body_tests {
         body.write_all("world").unwrap();
         body.write_back(tune.temp_dir()).unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1345,8 +1337,7 @@ mod body_tests {
         body.write_all(" ").unwrap();
         body.write_all("world").unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1377,8 +1368,7 @@ mod body_tests {
         body.write_all("world").unwrap();
         let mut body = body.prepare().unwrap();
         body.mem_map().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1395,8 +1385,7 @@ mod body_tests {
         let body = body.prepare().unwrap();
 
         {
-            let mut body_reader = body.reader();
-            let br = body_reader.as_read();
+            let mut br = body.reader();
             let mut obuf = String::new();
             br.read_to_string(&mut obuf).unwrap();
             assert_eq!("hello world", &obuf[..]);
@@ -1405,20 +1394,17 @@ mod body_tests {
         let body_clone_1 = body.clone();
         let body_clone_2 = body_clone_1.clone();
 
-        let mut body_reader = body_clone_1.reader();
-        let br = body_reader.as_read();
+        let mut br = body_clone_1.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
 
-        let mut body_reader = body.reader(); // read original (prepared) body
-        let br = body_reader.as_read();
+        let mut br = body.reader(); // read original (prepared) body
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
 
-        let mut body_reader = body_clone_2.reader();
-        let br = body_reader.as_read();
+        let mut br = body_clone_2.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
