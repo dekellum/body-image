@@ -604,7 +604,7 @@ impl Compression {
 pub trait CompressStrategy {
     /// Return an `EncodeWrapper` for `File` by evaluating the
     /// `MetaRecorded` for compression worthiness.
-    fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>;
 }
 
@@ -619,7 +619,7 @@ impl Default for NoCompressStrategy {
 impl CompressStrategy for NoCompressStrategy {
     /// Return an `EncodeWrapper` for `File`. This implementation
     /// always returns a `Plain` wrapper.
-    fn wrap_encoder<'a>(&self, _rec: &'a dyn MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, _rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         Ok(EncodeWrapper::Plain(file))
@@ -659,7 +659,7 @@ impl Default for GzipCompressStrategy {
 }
 
 impl CompressStrategy for GzipCompressStrategy {
-    fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
@@ -711,7 +711,7 @@ impl Default for BrotliCompressStrategy {
 
 #[cfg(feature = "brotli")]
 impl CompressStrategy for BrotliCompressStrategy {
-    fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
