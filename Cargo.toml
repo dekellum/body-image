@@ -11,3 +11,9 @@ members = [
 "barc-cli" = { path = "barc-cli" }
 "body-image" = { path = "body-image" }
 "body-image-futio" = { path = "body-image-futio" }
+
+[profile.release]
+lto = "thin"
+
+[profile.bench]
+lto = "thin"
