@@ -1118,13 +1118,15 @@ impl DecodeWrapper {
             _ => Err(BarcError::DecoderUnsupported(comp))
         }
     }
+}
 
-    /// Return a `Read` reference for self.
-    fn as_read(&mut self) -> &mut dyn Read {
+impl Read for DecodeWrapper {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         match *self {
-            DecodeWrapper::Gzip(ref mut gze) => gze,
+            DecodeWrapper::Gzip(ref mut gze) => gze.read(buf),
             #[cfg(feature = "brotli")]
-            DecodeWrapper::Brotli(ref mut bcw) => bcw,
+            DecodeWrapper::Brotli(ref mut bcw) => bcw.read(buf),
         }
     }
 }
@@ -1139,8 +1141,7 @@ fn read_compressed(rslice: ReadSlice, rhead: &RecordHead, tune: &Tunables)
         rhead.compress,
         rslice,
         tune.buffer_size_ram())?;
-
-    let fin = wrapper.as_read();
+    let fin = &mut wrapper;
 
     let rec_type = rhead.rec_type;
 
@@ -1165,12 +1166,13 @@ fn read_compressed(rslice: ReadSlice, rhead: &RecordHead, tune: &Tunables)
 }
 
 // Return RecordHead or None if EOF
-fn read_record_head(r: &mut dyn Read)
+fn read_record_head<R>(rin: &mut R)
     -> Result<Option<RecordHead>, BarcError>
+    where R: Read + ?Sized
 {
     let mut buf = [0u8; V2_HEAD_SIZE];
 
-    let size = read_record_head_buf(r, &mut buf)?;
+    let size = read_record_head_buf(rin, &mut buf)?;
     if size == 0 {
         return Ok(None);
     }
@@ -1194,12 +1196,13 @@ fn read_record_head(r: &mut dyn Read)
 // Like `Read::read_exact` but we need to distinguish 0 bytes read
 // (EOF) from partial bytes read (a format error), so it also returns
 // the number of bytes read.
-fn read_record_head_buf(r: &mut dyn Read, mut buf: &mut [u8])
+fn read_record_head_buf<R>(rin: &mut R, mut buf: &mut [u8])
     -> Result<usize, BarcError>
+    where R: Read + ?Sized
 {
     let mut size = 0;
     loop {
-        match r.read(buf) {
+        match rin.read(buf) {
             Ok(0) => break,
             Ok(n) => {
                 size += n;
@@ -1240,8 +1243,9 @@ fn parse_hex<T>(buf: &[u8]) -> Result<T, BarcError>
 }
 
 // Reader header block of len bytes to HeaderMap.
-fn read_headers(r: &mut dyn Read, with_crlf: bool, len: usize)
+fn read_headers<R>(rin: &mut R, with_crlf: bool, len: usize)
     -> Result<http::HeaderMap, BarcError>
+    where R: Read + ?Sized
 {
     if len == 0 {
         return Ok(http::HeaderMap::with_capacity(0));
@@ -1252,7 +1256,7 @@ fn read_headers(r: &mut dyn Read, with_crlf: bool, len: usize)
     let tlen = if with_crlf { len } else { len + 2 };
     let mut buf = BytesMut::with_capacity(tlen);
     unsafe {
-        r.read_exact(&mut buf.bytes_mut()[..len])?;
+        rin.read_exact(&mut buf.bytes_mut()[..len])?;
         buf.advance_mut(len);
     }
 
@@ -1296,8 +1300,9 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, BarcError> {
 }
 
 // Read into `BodyImage` of state `Ram` as a single buffer.
-fn read_body_ram(r: &mut dyn Read, with_crlf: bool, len: usize)
+fn read_body_ram<R>(rin: &mut R, with_crlf: bool, len: usize)
     -> Result<BodyImage, BarcError>
+    where R: Read + ?Sized
 {
     if len == 0 {
         return Ok(BodyImage::empty());
@@ -1307,7 +1312,7 @@ fn read_body_ram(r: &mut dyn Read, with_crlf: bool, len: usize)
 
     let mut buf = BytesMut::with_capacity(len);
     unsafe {
-        r.read_exact(&mut buf.bytes_mut()[..len])?;
+        rin.read_exact(&mut buf.bytes_mut()[..len])?;
         let l = if with_crlf { len - 2 } else { len };
         buf.advance_mut(l);
     }
@@ -1317,8 +1322,9 @@ fn read_body_ram(r: &mut dyn Read, with_crlf: bool, len: usize)
 
 // Read into `BodyImage` state `FsRead`. Assumes no CRLF terminator
 // (only used for compressed records).
-fn read_body_fs(r: &mut dyn Read, len: u64, tune: &Tunables)
+fn read_body_fs<R>(rin: &mut R, len: u64, tune: &Tunables)
     -> Result<BodyImage, BarcError>
+    where R: Read + ?Sized
 {
     if len == 0 {
         return Ok(BodyImage::empty());
@@ -1331,7 +1337,7 @@ fn read_body_fs(r: &mut dyn Read, len: u64, tune: &Tunables)
             let b = unsafe { buf.bytes_mut() };
             let limit = cmp::min(b.len() as u64, len - body.len()) as usize;
             assert!(limit > 0);
-            match r.read(&mut b[..limit]) {
+            match rin.read(&mut b[..limit]) {
                 Ok(l) => l,
                 Err(e) => {
                     if e.kind() == ErrorKind::Interrupted {
