@@ -14,6 +14,8 @@ members = [
 
 [profile.release]
 lto = "thin"
+incremental = false
 
 [profile.bench]
 lto = "thin"
+incremental = false
