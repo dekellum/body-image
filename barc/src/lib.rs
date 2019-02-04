@@ -754,7 +754,7 @@ pub fn is_compressible_type(ctype: Option<&http::header::HeaderValue>) -> bool {
 }
 
 fn is_compressible_type_str(ctype_str: &str) -> bool {
-    match ctype_str.parse::<mime::Mime>() {
+    match ctype_str.trim().parse::<mime::Mime>() {
         Ok(mtype) => match (mtype.type_(), mtype.subtype()) {
             (mime::TEXT, _) => true,
             (mime::APPLICATION, mime::HTML) => true,
@@ -1439,17 +1439,32 @@ mod barc_tests {
 
     #[test]
     fn test_compressible_types() {
+        assert!(*LOG_SETUP);
         assert!(is_compressible_type_str("text/html"));
-        assert!(is_compressible_type_str("text/html; charset=utf8"));
-        assert!(is_compressible_type_str("image/svg"));
+        assert!(is_compressible_type_str("Text/html; charset=utf8"));
+        assert!(is_compressible_type_str("image/sVg"));
         assert!(is_compressible_type_str("application/rss"));
-        assert!(is_compressible_type_str("font/TTF"));
+        assert!(is_compressible_type_str("font/TTF")); //case insensitive
+
+        /// httparse originating HeaderValue's should not have
+        /// leading/trailing whitespace, but we trim just in case
+        assert!(is_compressible_type_str("  text/html"));
     }
 
     #[test]
     fn test_not_compressible_types() {
+        assert!(*LOG_SETUP);
         assert!(!is_compressible_type_str("image/png"));
-        assert!(!is_compressible_type_str("  text/html"));
+
+        // Mime isn't as lenient as we might like
+        assert!(!is_compressible_type_str("text/ html"));
+
+        // Mime parse failures, logged as warnings, but no panics.
+        assert!(!is_compressible_type_str(" "));
+        assert!(!is_compressible_type_str(""));
+        assert!(!is_compressible_type_str(";"));
+        assert!(!is_compressible_type_str("/"));
+        assert!(!is_compressible_type_str("/;"));
     }
 
     #[test]
