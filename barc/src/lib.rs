@@ -1412,6 +1412,9 @@ fn slice_body(rp: &mut ReadPos, len: u64) -> Result<BodyImage, BarcError> {
 }
 
 #[cfg(test)]
+mod logger;
+
+#[cfg(test)]
 mod barc_tests {
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -1419,6 +1422,7 @@ mod barc_tests {
     use super::*;
     use body_image::Tuner;
     use failure::Error as Flare;
+    use crate::logger::LOG_SETUP;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
         let target = env!("CARGO_MANIFEST_DIR");
@@ -1457,6 +1461,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_small_gzip() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("small_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_min_len(0);
         write_read_small(&fname, &strategy).unwrap();
@@ -1466,6 +1471,7 @@ mod barc_tests {
     #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_small_brotli() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("small_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default().set_min_len(0);
         write_read_small(&fname, &strategy).unwrap();
@@ -1529,6 +1535,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_empty_record() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("empty_record.barc").unwrap();
         let strategy = NoCompressStrategy::default();
         write_read_empty_record(&fname, &strategy).unwrap();;
@@ -1536,6 +1543,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_empty_record_gzip() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("empty_record_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_min_len(0);
         write_read_empty_record(&fname, &strategy).unwrap();
@@ -1545,6 +1553,7 @@ mod barc_tests {
     #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_empty_record_brotli() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("empty_record_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default().set_min_len(0);
         write_read_empty_record(&fname, &strategy).unwrap();
@@ -1579,6 +1588,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_large() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("large.barc").unwrap();
         let strategy = NoCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();;
@@ -1586,6 +1596,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_large_gzip() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("large_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();
@@ -1594,6 +1605,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_large_gzip_0() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("large_gzip_0.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_compression_level(0);
         write_read_large(&fname, &strategy).unwrap();
@@ -1603,6 +1615,7 @@ mod barc_tests {
     #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_large_brotli() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("large_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();
@@ -1677,6 +1690,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_parallel() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("parallel.barc").unwrap();
         let bfile = BarcFile::new(&fname);
         // Temp writer to ensure file is created

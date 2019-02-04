@@ -30,6 +30,10 @@ mime       = { version=">=0.3.13, <2" }
 olio       = { version=">=1.0.0, <2", default-features=false }
 tempfile   = { version=">=2.2.0, <4" }
 
+[dev-dependencies]
+lazy_static = { version=">=1.0.2, <2" }
+fern        = { version=">=0.5.5, <2" }
+
 [features]
 default = ["mmap", "brotli"]
 mmap = ["memmap", "olio/mmap", "body-image/mmap"]
