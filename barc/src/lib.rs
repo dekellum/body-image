@@ -604,7 +604,7 @@ impl Compression {
 pub trait CompressStrategy {
     /// Return an `EncodeWrapper` for `File` by evaluating the
     /// `MetaRecorded` for compression worthiness.
-    fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>;
 }
 
@@ -619,7 +619,7 @@ impl Default for NoCompressStrategy {
 impl CompressStrategy for NoCompressStrategy {
     /// Return an `EncodeWrapper` for `File`. This implementation
     /// always returns a `Plain` wrapper.
-    fn wrap_encoder<'a>(&self, _rec: &'a dyn MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, _rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         Ok(EncodeWrapper::Plain(file))
@@ -659,7 +659,7 @@ impl Default for GzipCompressStrategy {
 }
 
 impl CompressStrategy for GzipCompressStrategy {
-    fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
@@ -711,7 +711,7 @@ impl Default for BrotliCompressStrategy {
 
 #[cfg(feature = "brotli")]
 impl CompressStrategy for BrotliCompressStrategy {
-    fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
+    fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         // FIXME: This only considers req/res body lengths
@@ -750,16 +750,6 @@ impl<'a> EncodeWrapper<'a> {
         }
     }
 
-    /// Return a `Write` reference for self.
-    pub fn as_write(&mut self) -> &mut dyn Write {
-        match *self {
-            EncodeWrapper::Plain(ref mut f) => f,
-            EncodeWrapper::Gzip(ref mut gze) => gze,
-            #[cfg(feature = "brotli")]
-            EncodeWrapper::Brotli(ref mut bcw) => bcw,
-        }
-    }
-
     /// Consume the wrapper, finishing any encoding and flushing the
     /// completed write.
     pub fn finish(self) -> Result<(), BarcError> {
@@ -776,6 +766,25 @@ impl<'a> EncodeWrapper<'a> {
             }
         }
         Ok(())
+    }
+}
+
+impl<'a> Write for EncodeWrapper<'a> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        match *self {
+            EncodeWrapper::Plain(ref mut w) => w.write(buf),
+            EncodeWrapper::Gzip(ref mut gze) => gze.write(buf),
+            #[cfg(feature = "brotli")]
+            EncodeWrapper::Brotli(ref mut bcw) => bcw.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> Result<(), io::Error> {
+        match *self {
+            EncodeWrapper::Plain(ref mut f) => f.flush(),
+            EncodeWrapper::Gzip(ref mut gze) => gze.flush(),
+            EncodeWrapper::Brotli(ref mut bcw) => bcw.flush(),
+        }
     }
 }
 
@@ -848,7 +857,7 @@ impl<'a> BarcWriter<'a> {
         -> Result<u64, BarcError>
     {
         // BarcFile::writer() guarantees Some(File)
-        let file = &mut *self.guard.as_mut().unwrap();
+        let file: &mut File = self.guard.as_mut().unwrap();
 
         // Write initial head as reserved place holder
         let start = file.seek(SeekFrom::End(0))?;
@@ -886,17 +895,16 @@ impl<'a> BarcWriter<'a> {
 // Write the record, returning a preliminary `RecordHead` with
 // observed (not compressed) lengths.
 fn write_record(
-    file: &mut File,
+    file: &File,
     rec: &dyn MetaRecorded,
     strategy: &dyn CompressStrategy)
     -> Result<RecordHead, BarcError>
 {
-    let mut wrapper = strategy.wrap_encoder(rec, file)?;
-    let compress = wrapper.mode();
+    let mut encoder = strategy.wrap_encoder(rec, file)?;
+    let fout = &mut encoder;
+    let compress = fout.mode();
     let with_crlf = compress == Compression::Plain;
     let head = {
-        let fout = wrapper.as_write();
-
         let meta = write_headers(fout, with_crlf, rec.meta())?;
 
         let req_h = write_headers(fout, with_crlf, rec.req_headers())?;
@@ -923,13 +931,14 @@ fn write_record(
             res_h }
     };
 
-    wrapper.finish()?;
+    encoder.finish()?;
     Ok(head)
 }
 
 // Write record head to out, asserting the various length constraints.
-fn write_record_head(out: &mut dyn Write, head: &RecordHead)
+fn write_record_head<W>(out: &mut W, head: &RecordHead)
     -> Result<(), BarcError>
+    where W: Write + ?Sized
 {
     // Check input ranges
     assert!(head.len   <= V2_MAX_RECORD,   "len exceeded");
@@ -951,11 +960,20 @@ fn write_record_head(out: &mut dyn Write, head: &RecordHead)
 /// Write header block to out, with optional CR+LF end padding, and return the
 /// length written. This is primarily an implementation detail of `BarcWriter`,
 /// but is made public for its general diagnostic utility.
-pub fn write_headers(
-    out: &mut dyn Write,
+///
+/// The `Write` is passed by reference for backward compatibility with its
+/// original non-generic form as `&mut dyn Write`. [C-RW-VALUE] prefers
+/// pass by value, but this would now be a breaking change.
+/// [`std::io::copy`] is presumably in the same position.
+///
+/// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+/// [`std::io::copy`]: https://doc.rust-lang.org/std/io/fn.copy.html
+pub fn write_headers<W>(
+    out: &mut W,
     with_crlf: bool,
     headers: &http::HeaderMap)
     -> Result<usize, BarcError>
+    where W: Write + ?Sized
 {
     let mut size = 0;
     for (key, value) in headers.iter() {
@@ -974,8 +992,15 @@ pub fn write_headers(
 /// Write body to out, with optional CR+LF end padding, and return the length
 /// written.  This is primarily an implementation detail of `BarcWriter`, but
 /// is made public for its general diagnostic utility.
-pub fn write_body(out: &mut dyn Write, with_crlf: bool, body: &BodyImage)
+///
+/// The `Write` is passed by reference for backward compatibility with its
+/// original non-generic form as `&mut dyn Write`. [C-RW-VALUE] prefers
+/// pass by value, but this would now be a breaking change.
+///
+/// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+pub fn write_body<W>(out: &mut W, with_crlf: bool, body: &BodyImage)
     -> Result<u64, BarcError>
+    where W: Write + ?Sized
 {
     let mut size = body.write_to(out)?;
     if with_crlf && size > 0 {
@@ -985,7 +1010,9 @@ pub fn write_body(out: &mut dyn Write, with_crlf: bool, body: &BodyImage)
 }
 
 // Like `write_all`, but return the length of the provided byte slice.
-fn write_all_len(out: &mut dyn Write, bs: &[u8]) -> Result<usize, BarcError> {
+fn write_all_len<W>(out: &mut W, bs: &[u8]) -> Result<usize, BarcError>
+    where W: Write + ?Sized
+{
     out.write_all(bs)?;
     Ok(bs.len())
 }
@@ -1091,13 +1118,15 @@ impl DecodeWrapper {
             _ => Err(BarcError::DecoderUnsupported(comp))
         }
     }
+}
 
-    /// Return a `Read` reference for self.
-    fn as_read(&mut self) -> &mut dyn Read {
+impl Read for DecodeWrapper {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         match *self {
-            DecodeWrapper::Gzip(ref mut gze) => gze,
+            DecodeWrapper::Gzip(ref mut gze) => gze.read(buf),
             #[cfg(feature = "brotli")]
-            DecodeWrapper::Brotli(ref mut bcw) => bcw,
+            DecodeWrapper::Brotli(ref mut bcw) => bcw.read(buf),
         }
     }
 }
@@ -1112,8 +1141,7 @@ fn read_compressed(rslice: ReadSlice, rhead: &RecordHead, tune: &Tunables)
         rhead.compress,
         rslice,
         tune.buffer_size_ram())?;
-
-    let fin = wrapper.as_read();
+    let fin = &mut wrapper;
 
     let rec_type = rhead.rec_type;
 
@@ -1138,12 +1166,13 @@ fn read_compressed(rslice: ReadSlice, rhead: &RecordHead, tune: &Tunables)
 }
 
 // Return RecordHead or None if EOF
-fn read_record_head(r: &mut dyn Read)
+fn read_record_head<R>(rin: &mut R)
     -> Result<Option<RecordHead>, BarcError>
+    where R: Read + ?Sized
 {
     let mut buf = [0u8; V2_HEAD_SIZE];
 
-    let size = read_record_head_buf(r, &mut buf)?;
+    let size = read_record_head_buf(rin, &mut buf)?;
     if size == 0 {
         return Ok(None);
     }
@@ -1167,12 +1196,13 @@ fn read_record_head(r: &mut dyn Read)
 // Like `Read::read_exact` but we need to distinguish 0 bytes read
 // (EOF) from partial bytes read (a format error), so it also returns
 // the number of bytes read.
-fn read_record_head_buf(r: &mut dyn Read, mut buf: &mut [u8])
+fn read_record_head_buf<R>(rin: &mut R, mut buf: &mut [u8])
     -> Result<usize, BarcError>
+    where R: Read + ?Sized
 {
     let mut size = 0;
     loop {
-        match r.read(buf) {
+        match rin.read(buf) {
             Ok(0) => break,
             Ok(n) => {
                 size += n;
@@ -1213,8 +1243,9 @@ fn parse_hex<T>(buf: &[u8]) -> Result<T, BarcError>
 }
 
 // Reader header block of len bytes to HeaderMap.
-fn read_headers(r: &mut dyn Read, with_crlf: bool, len: usize)
+fn read_headers<R>(rin: &mut R, with_crlf: bool, len: usize)
     -> Result<http::HeaderMap, BarcError>
+    where R: Read + ?Sized
 {
     if len == 0 {
         return Ok(http::HeaderMap::with_capacity(0));
@@ -1225,7 +1256,7 @@ fn read_headers(r: &mut dyn Read, with_crlf: bool, len: usize)
     let tlen = if with_crlf { len } else { len + 2 };
     let mut buf = BytesMut::with_capacity(tlen);
     unsafe {
-        r.read_exact(&mut buf.bytes_mut()[..len])?;
+        rin.read_exact(&mut buf.bytes_mut()[..len])?;
         buf.advance_mut(len);
     }
 
@@ -1269,8 +1300,9 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, BarcError> {
 }
 
 // Read into `BodyImage` of state `Ram` as a single buffer.
-fn read_body_ram(r: &mut dyn Read, with_crlf: bool, len: usize)
+fn read_body_ram<R>(rin: &mut R, with_crlf: bool, len: usize)
     -> Result<BodyImage, BarcError>
+    where R: Read + ?Sized
 {
     if len == 0 {
         return Ok(BodyImage::empty());
@@ -1280,7 +1312,7 @@ fn read_body_ram(r: &mut dyn Read, with_crlf: bool, len: usize)
 
     let mut buf = BytesMut::with_capacity(len);
     unsafe {
-        r.read_exact(&mut buf.bytes_mut()[..len])?;
+        rin.read_exact(&mut buf.bytes_mut()[..len])?;
         let l = if with_crlf { len - 2 } else { len };
         buf.advance_mut(l);
     }
@@ -1290,8 +1322,9 @@ fn read_body_ram(r: &mut dyn Read, with_crlf: bool, len: usize)
 
 // Read into `BodyImage` state `FsRead`. Assumes no CRLF terminator
 // (only used for compressed records).
-fn read_body_fs(r: &mut dyn Read, len: u64, tune: &Tunables)
+fn read_body_fs<R>(rin: &mut R, len: u64, tune: &Tunables)
     -> Result<BodyImage, BarcError>
+    where R: Read + ?Sized
 {
     if len == 0 {
         return Ok(BodyImage::empty());
@@ -1304,7 +1337,7 @@ fn read_body_fs(r: &mut dyn Read, len: u64, tune: &Tunables)
             let b = unsafe { buf.bytes_mut() };
             let limit = cmp::min(b.len() as u64, len - body.len()) as usize;
             assert!(limit > 0);
-            match r.read(&mut b[..limit]) {
+            match rin.read(&mut b[..limit]) {
                 Ok(l) => l,
                 Err(e) => {
                     if e.kind() == ErrorKind::Interrupted {
@@ -1647,8 +1680,7 @@ mod barc_tests {
         assert_eq!(record.res_headers.len(), 11);
 
         assert!(record.res_body.is_ram());
-        let mut body_reader = record.res_body.reader();
-        let br = body_reader.as_read();
+        let mut br = record.res_body.reader();
         let mut buf = Vec::with_capacity(2048);
         br.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.len(), 1270);
@@ -1712,8 +1744,7 @@ mod barc_tests {
         println!("{:#?}", record);
 
         assert!(!record.res_body.is_ram());
-        let mut body_reader = record.res_body.reader();
-        let br = body_reader.as_read();
+        let mut br = record.res_body.reader();
         let mut buf = Vec::with_capacity(2048);
         br.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.len(), 1270);
@@ -1742,8 +1773,7 @@ mod barc_tests {
         println!("{:#?}", record);
 
         assert!(!record.res_body.is_ram());
-        let mut body_reader = record.res_body.reader();
-        let br = body_reader.as_read();
+        let mut br = record.res_body.reader();
         let mut buf = Vec::with_capacity(2048);
         br.read_to_end(&mut buf).unwrap();
         assert_eq!(buf.len(), 1270);
