@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "barc"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "body-image 1.1.0",
  "brotli 3.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -82,7 +82,7 @@ dependencies = [
 name = "barc-cli"
 version = "1.0.1"
 dependencies = [
- "barc 1.0.1",
+ "barc 1.1.0",
  "body-image 1.1.0",
  "body-image-futio 1.0.3",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",

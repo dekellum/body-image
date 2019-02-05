@@ -1,6 +1,6 @@
 [package]
 name          = "barc"
-version       = "1.0.1"
+version       = "1.1.0"
 edition       = "2018"
 authors       = ["David Kellum <dek-oss@gravitext.com>"]
 license       = "MIT/Apache-2.0"
@@ -17,7 +17,7 @@ exclude       = ["barc.stash/*"]
 travis-ci = { repository = "dekellum/body-image" }
 
 [dependencies]
-body-image = { version=">=1.0.0, <2", default-features=false }
+body-image = { version=">=1.1.0, <2", default-features=false }
 brotli     = { version=">=2.2.1, <4", optional=true }
 bytes      = { version=">=0.4.6, <2" }
 failure    = { version=">=0.1.2, <2", default-features=false, features=["std"] }
