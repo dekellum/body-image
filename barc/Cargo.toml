@@ -26,8 +26,13 @@ http       = { version=">=0.1.6, <2" }
 httparse   = { version=">=1.2.4, <2" }
 log        = { version=">=0.4.4, <2" }
 memmap     = { version=">=0.7.0, <2", optional=true }
+mime       = { version=">=0.3.13, <2" }
 olio       = { version=">=1.0.0, <2", default-features=false }
 tempfile   = { version=">=2.2.0, <4" }
+
+[dev-dependencies]
+lazy_static = { version=">=1.0.2, <2" }
+fern        = { version=">=0.5.5, <2" }
 
 [features]
 default = ["mmap", "brotli"]

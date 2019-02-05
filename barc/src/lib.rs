@@ -43,7 +43,7 @@ use flate2::read::GzDecoder;
 use http;
 use httparse;
 use http::header::{HeaderName, HeaderValue};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use olio::fs::rc::{ReadPos, ReadSlice};
 
 #[cfg(feature = "brotli")]
@@ -626,8 +626,8 @@ impl CompressStrategy for NoCompressStrategy {
     }
 }
 
-/// Strategy for gzip compression. Will not compress if a minimum
-/// length estimate is not reached.
+/// Strategy for gzip compression. Will only compress if the minimum length
+/// estimate for a compressible content-type is found.
 #[derive(Clone, Copy, Debug)]
 pub struct GzipCompressStrategy {
     min_len: u64,
@@ -662,9 +662,7 @@ impl CompressStrategy for GzipCompressStrategy {
     fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
-        // FIXME: This only considers req/res body lengths
-        let est_len = rec.req_body().len() + rec.res_body().len();
-        if est_len >= self.min_len {
+        if is_compressible(rec, self.min_len) {
             Ok(EncodeWrapper::Gzip(Box::new(
                 GzEncoder::new(file, GzCompression::new(self.compression_level))
             )))
@@ -674,8 +672,8 @@ impl CompressStrategy for GzipCompressStrategy {
     }
 }
 
-/// Strategy for Brotli compression. Will not compress if a minimum
-/// length estimate is not reached.
+/// Strategy for Brotli compression. Will only compress if the minimum length
+/// estimate for a compressible content-type is found.
 #[cfg(feature = "brotli")]
 #[derive(Clone, Copy, Debug)]
 pub struct BrotliCompressStrategy {
@@ -714,9 +712,7 @@ impl CompressStrategy for BrotliCompressStrategy {
     fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
-        // FIXME: This only considers req/res body lengths
-        let est_len = rec.req_body().len() + rec.res_body().len();
-        if est_len >= self.min_len {
+        if is_compressible(rec, self.min_len) {
             Ok(EncodeWrapper::Brotli(Box::new(
                 brotli::CompressorWriter::new(
                     file,
@@ -726,6 +722,66 @@ impl CompressStrategy for BrotliCompressStrategy {
             )))
         } else {
             Ok(EncodeWrapper::Plain(file))
+        }
+    }
+}
+
+/// Return true if the provided record is compressible because either the
+/// request or response content is of a compressible content-type and of
+/// sufficient length.
+pub fn is_compressible(rec: &dyn MetaRecorded, min_len: u64) -> bool {
+    let ct = http::header::CONTENT_TYPE;
+    ((rec.res_body().len() >= min_len &&
+      is_compressible_type(rec.res_headers().get(&ct))) ||
+     (rec.req_body().len() >= min_len &&
+      is_compressible_type(rec.req_headers().get(&ct))))
+}
+
+/// Return true if the given content-type header value is expected to be
+/// compressible, e.g. "text/html", "image/svg", etc.
+pub fn is_compressible_type(ctype: Option<&http::header::HeaderValue>) -> bool {
+    if let Some(ctype_v) = ctype {
+        if let Ok(ctype_str) = ctype_v.to_str() {
+            is_compressible_type_str(ctype_str)
+        } else {
+            warn!("not compressible: content-type header not utf-8");
+            false
+        }
+    } else {
+        info!("not compressible: no content-type header");
+        false
+    }
+}
+
+fn is_compressible_type_str(ctype_str: &str) -> bool {
+    match ctype_str.trim().parse::<mime::Mime>() {
+        Ok(mtype) => match (mtype.type_(), mtype.subtype()) {
+            (mime::TEXT, _) => true,
+            (mime::APPLICATION, mime::HTML) => true,
+            (mime::APPLICATION, mime::JAVASCRIPT) => true,
+            (mime::APPLICATION, mime::JSON) => true,
+            (mime::APPLICATION, mime::XML) => true,
+            (mime::APPLICATION, st)
+                if st == "atom"
+                || st == "rss"
+                || st == "x-font-opentype"
+                || st == "x-font-truetype"
+                || st == "x-font-ttf"
+                || st == "xhtml"
+                || st == "xml"
+                => true,
+            (mime::IMAGE, mime::SVG) => true,
+            (mime::FONT, st)
+                if st == "opentype"
+                || st == "otf"
+                || st == "ttf"
+                => true,
+            _ => false
+        }
+        Err(e) => {
+            warn!("not compressible: unable to parse content-type: {}: {:?}",
+                  e, ctype_str);
+            false
         }
     }
 }
@@ -1389,6 +1445,9 @@ fn slice_body(rp: &mut ReadPos, len: u64) -> Result<BodyImage, BarcError> {
 }
 
 #[cfg(test)]
+mod logger;
+
+#[cfg(test)]
 mod barc_tests {
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -1396,6 +1455,7 @@ mod barc_tests {
     use super::*;
     use body_image::Tuner;
     use failure::Error as Flare;
+    use crate::logger::LOG_SETUP;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
         let target = env!("CARGO_MANIFEST_DIR");
@@ -1411,6 +1471,36 @@ mod barc_tests {
     }
 
     #[test]
+    fn test_compressible_types() {
+        assert!(*LOG_SETUP);
+        assert!(is_compressible_type_str("text/html"));
+        assert!(is_compressible_type_str("Text/html; charset=utf8"));
+        assert!(is_compressible_type_str("image/sVg"));
+        assert!(is_compressible_type_str("application/rss"));
+        assert!(is_compressible_type_str("font/TTF")); //case insensitive
+
+        /// httparse originating HeaderValue's should not have
+        /// leading/trailing whitespace, but we trim just in case
+        assert!(is_compressible_type_str("  text/html"));
+    }
+
+    #[test]
+    fn test_not_compressible_types() {
+        assert!(*LOG_SETUP);
+        assert!(!is_compressible_type_str("image/png"));
+
+        // Mime isn't as lenient as we might like
+        assert!(!is_compressible_type_str("text/ html"));
+
+        // Mime parse failures, logged as warnings, but no panics.
+        assert!(!is_compressible_type_str(" "));
+        assert!(!is_compressible_type_str(""));
+        assert!(!is_compressible_type_str(";"));
+        assert!(!is_compressible_type_str("/"));
+        assert!(!is_compressible_type_str("/;"));
+    }
+
+    #[test]
     fn test_write_read_small() {
         let fname = barc_test_file("small.barc").unwrap();
         let strategy = NoCompressStrategy::default();
@@ -1419,17 +1509,21 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_small_gzip() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("small_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_min_len(0);
         write_read_small(&fname, &strategy).unwrap();
+        assert_compression(&fname, Compression::Gzip);
     }
 
     #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_small_brotli() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("small_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default().set_min_len(0);
         write_read_small(&fname, &strategy).unwrap();
+        assert_compression(&fname, Compression::Brotli);
     }
 
     fn write_read_small(fname: &PathBuf, strategy: &dyn CompressStrategy)
@@ -1446,10 +1540,20 @@ mod barc_tests {
 
         let mut req_headers = http::HeaderMap::new();
         req_headers.insert(REFERER, "http:://other.com".parse()?);
+        req_headers.insert(
+            http::header::CONTENT_TYPE,
+            "text/plain".parse().unwrap()
+        );
+
         let req_body = BodyImage::from_slice(req_body_str);
 
         let mut res_headers = http::HeaderMap::new();
         res_headers.insert(VIA, "test".parse()?);
+        res_headers.insert(
+            http::header::CONTENT_TYPE,
+            "text/plain".parse().unwrap()
+        );
+
         let res_body = BodyImage::from_slice(res_body_str);
 
         let mut writer = bfile.writer()?;
@@ -1467,9 +1571,9 @@ mod barc_tests {
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 1);
-        assert_eq!(record.req_headers.len(), 1);
+        assert_eq!(record.req_headers.len(), 2);
         assert_eq!(record.req_body.len(), req_body_str.len() as u64);
-        assert_eq!(record.res_headers.len(), 1);
+        assert_eq!(record.res_headers.len(), 2);
         assert_eq!(record.res_body.len(), res_body_str.len() as u64);
 
         let record = reader.read(&tune)?;
@@ -1479,6 +1583,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_empty_record() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("empty_record.barc").unwrap();
         let strategy = NoCompressStrategy::default();
         write_read_empty_record(&fname, &strategy).unwrap();;
@@ -1486,17 +1591,21 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_empty_record_gzip() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("empty_record_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_min_len(0);
         write_read_empty_record(&fname, &strategy).unwrap();
+        assert_compression(&fname, Compression::Plain);
     }
 
     #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_empty_record_brotli() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("empty_record_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default().set_min_len(0);
         write_read_empty_record(&fname, &strategy).unwrap();
+        assert_compression(&fname, Compression::Plain);
     }
 
     fn write_read_empty_record(fname: &PathBuf, strategy: &dyn CompressStrategy)
@@ -1521,13 +1630,13 @@ mod barc_tests {
         assert_eq!(record.res_headers.len(), 0);
         assert_eq!(record.res_body.len(), 0);
 
-        let record = reader.read(&tune)?;
-        assert!(record.is_none());
+        assert!(reader.read(&tune)?.is_none());
         Ok(())
     }
 
     #[test]
     fn test_write_read_large() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("large.barc").unwrap();
         let strategy = NoCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();;
@@ -1535,24 +1644,36 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_large_gzip() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("large_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();
+        assert_compression(&fname, Compression::Gzip);
     }
 
     #[test]
     fn test_write_read_large_gzip_0() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("large_gzip_0.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_compression_level(0);
         write_read_large(&fname, &strategy).unwrap();
+        assert_compression(&fname, Compression::Gzip);
     }
 
     #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_large_brotli() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("large_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();
+        assert_compression(&fname, Compression::Brotli);
+    }
+
+    fn assert_compression(fname: &PathBuf, comp: Compression) {
+        let mut file = File::open(fname).unwrap();
+        let rhead = read_record_head(&mut file).unwrap().unwrap();
+        assert_eq!(rhead.compress, comp);
     }
 
     fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
@@ -1588,7 +1709,12 @@ mod barc_tests {
         }
         let res_body = res_body.prepare()?;
 
-        writer.write(&Record { req_body, res_body, ..Record::default()},
+        let mut headers = http::HeaderMap::default();
+        headers.insert(http::header::CONTENT_TYPE, "text/plain".parse().unwrap());
+
+        writer.write(&Record { req_body, req_headers: headers.clone(),
+                               res_body, res_headers: headers,
+                               ..Record::default()},
                      strategy)?;
 
         let tune = Tunables::new();
@@ -1599,20 +1725,20 @@ mod barc_tests {
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 0);
-        assert_eq!(record.req_headers.len(), 0);
+        assert_eq!(record.req_headers.len(), 1);
         assert_eq!(record.req_body.len(),
                    (lorem_ipsum.len() * req_reps) as u64);
-        assert_eq!(record.res_headers.len(), 0);
+        assert_eq!(record.res_headers.len(), 1);
         assert_eq!(record.res_body.len(),
                    (lorem_ipsum.len() * res_reps) as u64);
 
-        let record = reader.read(&tune)?;
-        assert!(record.is_none());
+        assert!(reader.read(&tune)?.is_none());
         Ok(())
     }
 
     #[test]
     fn test_write_read_parallel() {
+        assert!(*LOG_SETUP);
         let fname = barc_test_file("parallel.barc").unwrap();
         let bfile = BarcFile::new(&fname);
         // Temp writer to ensure file is created
