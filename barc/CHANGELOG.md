@@ -1,4 +1,20 @@
 ## 1.1.0 (TBD)
+* `GzipCompressStrategy` and `BrotliCompressStrategy` (_brotli_ feature) will
+  now only compress if a minimum length body with a compressible Content-Type
+  (of the request or response) is found.  Also add public functions
+  `is_compressible` and `is_compressible_type` for reuse.
+
+* `CompressStrategy::wrap_encoder` only needs a `MetaRecorded` reference for
+  that call. Make the lifetime more lenient.
+
+* Make the read and write implementation generic over `Read` and `Write` types,
+  instead of using `dyn Trait` objects, throughout. These changes are mostly
+  internal, but include public utility methods `write_headers` and
+  `write_body`. Reference types are used to maintain compatibility.
+
+* Upgrade to body-image 1.1.0 (using `BodyReader` directly as `Read` in tests)
+
+* Add logger implementation as dev-dependency for tests
 
 ## 1.0.1 (2019-1-4)
 * Upgrade log dep to reflect 2018 minimal versions.
