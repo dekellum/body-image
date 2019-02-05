@@ -1,4 +1,10 @@
 ## 1.1.0 (TBD)
+* `BodyImage::write_to` and `BodyImage::read_from` are now generic over `Write`
+  and `Read` types, respectively, instead of using `dyn Trait`
+  objects. References types used to keep this a compatible change.
+
+* `BodyReader` now directly implements `Read`. The `BodyReader::as_read` method
+  (returning `&mut dyn Read`) is now deprecated.
 
 ## 1.0.1 (2019-1-4)
 * Upgrade log dep to reflect 2018 minimal versions.
