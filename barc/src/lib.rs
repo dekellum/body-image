@@ -626,8 +626,9 @@ impl CompressStrategy for NoCompressStrategy {
     }
 }
 
-/// Strategy for gzip compression. Will only compress if the minimum length
-/// estimate for a compressible content-type is found.
+/// Strategy for gzip compression. Will only compress if a minimum length body
+/// with a compressible content-type header (of the request or response) is
+/// found.
 #[derive(Clone, Copy, Debug)]
 pub struct GzipCompressStrategy {
     min_len: u64,
@@ -672,8 +673,9 @@ impl CompressStrategy for GzipCompressStrategy {
     }
 }
 
-/// Strategy for Brotli compression. Will only compress if the minimum length
-/// estimate for a compressible content-type is found.
+/// Strategy for Brotli compression. Will only compress if a minimum length
+/// body with a compressible content-type header (of the request or response)
+/// is found.
 #[cfg(feature = "brotli")]
 #[derive(Clone, Copy, Debug)]
 pub struct BrotliCompressStrategy {
