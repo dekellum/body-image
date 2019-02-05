@@ -732,11 +732,11 @@ impl CompressStrategy for BrotliCompressStrategy {
 /// request or response content is of a compressible content-type and of
 /// sufficient length.
 pub fn is_compressible(rec: &dyn MetaRecorded, min_len: u64) -> bool {
-    let ct = http::header::CONTENT_TYPE;
+    static CT: http::header::HeaderName = http::header::CONTENT_TYPE;
     ((rec.res_body().len() >= min_len &&
-      is_compressible_type(rec.res_headers().get(&ct))) ||
+      is_compressible_type(rec.res_headers().get(&CT))) ||
      (rec.req_body().len() >= min_len &&
-      is_compressible_type(rec.req_headers().get(&ct))))
+      is_compressible_type(rec.req_headers().get(&CT))))
 }
 
 /// Return true if the given content-type header value is expected to be
