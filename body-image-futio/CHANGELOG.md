@@ -1,4 +1,6 @@
 ## 1.1.0 (TBD)
+* Upgrade to body-image 1.1.0, for use of `BodyReader` as direct
+  `Read` implementation.
 
 ## 1.0.3 (2019-1-11)
 * Upgrade to tokio 0.1.14 and require only the tokio feature flags (and
