@@ -27,6 +27,7 @@
 #![warn(rust_2018_idioms)]
 
 use std::cmp;
+use std::error::Error as StdError;
 use std::fs::{File, OpenOptions};
 use std::fmt;
 use std::io;
@@ -36,7 +37,6 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::path::Path;
 
 use bytes::{BytesMut, BufMut};
-use failure::{err_msg, Fail, Error as Flare};
 use flate2::Compression as GzCompression;
 use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
@@ -53,6 +53,14 @@ use body_image::{
     BodyError, BodyImage, BodySink, Dialog, Encoding,
     Epilog, Prolog, Recorded, RequestRecorded, Tunables
 };
+
+/// Conveniently compact type alias for dyn Trait `std::error::Error` errors,
+/// generally used in test code, to represent many possible errors, or where
+/// writing the concrete type would expose an implementation detail (e.g. of
+/// an otherwise private dependency). It is possible to query and downcast the
+/// type via methods of
+/// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
+pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
 mod try_conv;
 pub use crate::try_conv::{TryFrom, TryInto};
@@ -165,7 +173,7 @@ pub enum BarcError {
     ReadInvalidRecHeadHex(u8),
 
     /// Error parsing header name, value or block (with cause)
-    InvalidHeader(Flare),
+    InvalidHeader(Flaw),
 
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
@@ -191,22 +199,19 @@ impl fmt::Display for BarcError {
                 write!(f, "Invalid record head suffix"),
             BarcError::ReadInvalidRecHeadHex(b) =>
                 write!(f, "Invalid record head hex digit [{}]", b),
-            BarcError::InvalidHeader(ref flare) =>
-                write!(f, "Invalid header; {}", flare),
+            BarcError::InvalidHeader(ref flaw) =>
+                write!(f, "Invalid header; {}", flaw),
             BarcError::_FutureProof => unreachable!()
         }
     }
 }
 
-// Fail is implemented manually because we currently can't specify
-// InvalidHeader's Flare type as #[cause], see:
-// https://github.com/rust-lang-nursery/failure/issues/176
-impl Fail for BarcError {
-    fn cause(&self) -> Option<&dyn Fail> {
+impl StdError for BarcError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
             BarcError::Body(ref be)               => Some(be),
             BarcError::Io(ref e)                  => Some(e),
-            BarcError::InvalidHeader(ref flr)     => Some(flr.as_fail()),
+            BarcError::InvalidHeader(ref flaw)    => Some(flaw.as_ref()),
             _ => None
         }
     }
@@ -304,7 +309,7 @@ impl TryFrom<Dialog> for Record {
 
         let (prolog, epilog) = dialog.explode();
         let mut meta = http::HeaderMap::with_capacity(6);
-        let efn = &|e| BarcError::InvalidHeader(Flare::from(e));
+        let efn = &|e| BarcError::InvalidHeader(Flaw::from(e));
 
         meta.append(
             hname_meta_url(),
@@ -425,8 +430,8 @@ impl fmt::Display for DialogConvertError {
     }
 }
 
-impl Fail for DialogConvertError {
-    fn cause(&self) -> Option<&dyn Fail> {
+impl StdError for DialogConvertError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
             DialogConvertError::InvalidUrl(ref iub)           => Some(iub),
             DialogConvertError::InvalidMethod(ref im)         => Some(im),
@@ -1341,19 +1346,19 @@ fn parse_headers(buf: &[u8]) -> Result<http::HeaderMap, BarcError> {
             assert_eq!(size, buf.len());
             for h in heads {
                 let name = h.name.parse::<HeaderName>()
-                    .map_err(|e| BarcError::InvalidHeader(Flare::from(e)))?;
+                    .map_err(|e| BarcError::InvalidHeader(e.into()))?;
                 let value = HeaderValue::from_bytes(h.value)
-                    .map_err(|e| BarcError::InvalidHeader(Flare::from(e)))?;
+                    .map_err(|e| BarcError::InvalidHeader(e.into()))?;
                 hmap.append(name, value);
             }
             Ok(hmap)
         }
         Ok(httparse::Status::Partial) => {
             Err(BarcError::InvalidHeader(
-                err_msg("Header block not CRLF terminated")
+                Box::new(httparse::Error::TooManyHeaders)
             ))
         }
-        Err(e) => Err(BarcError::InvalidHeader(Flare::from(e)))
+        Err(e) => Err(BarcError::InvalidHeader(e.into()))
     }
 }
 
@@ -1456,10 +1461,9 @@ mod barc_tests {
     use http::header::{AGE, REFERER, VIA};
     use super::*;
     use body_image::Tuner;
-    use failure::Error as Flare;
     use crate::logger::LOG_SETUP;
 
-    fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
+    fn barc_test_file(name: &str) -> Result<PathBuf, Flaw> {
         let target = env!("CARGO_MANIFEST_DIR");
         let path = format!("{}/../target/testmp", target);
         let tpath = Path::new(&path);
@@ -1529,7 +1533,7 @@ mod barc_tests {
     }
 
     fn write_read_small(fname: &PathBuf, strategy: &dyn CompressStrategy)
-        -> Result<(), Flare>
+        -> Result<(), Flaw>
     {
         let bfile = BarcFile::new(fname);
 
@@ -1611,7 +1615,7 @@ mod barc_tests {
     }
 
     fn write_read_empty_record(fname: &PathBuf, strategy: &dyn CompressStrategy)
-        -> Result<(), Flare>
+        -> Result<(), Flaw>
     {
         let bfile = BarcFile::new(fname);
 
@@ -1679,7 +1683,7 @@ mod barc_tests {
     }
 
     fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
-        -> Result<(), Flare>
+        -> Result<(), Flaw>
     {
         let bfile = BarcFile::new(fname);
 
