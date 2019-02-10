@@ -41,6 +41,7 @@
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
+use std::error::Error as StdError;
 use std::env;
 use std::fmt;
 use std::fs::File;
@@ -52,7 +53,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, BufMut};
-use failure::Fail;
 
 use http;
 use log::{debug, warn};
@@ -100,10 +100,10 @@ impl fmt::Display for BodyError {
     }
 }
 
-impl Fail for BodyError {
-    fn cause(&self) -> Option<&dyn Fail> {
+impl StdError for BodyError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
-            BodyError::Io(ref e)     => Some(e),
+            BodyError::Io(ref e) => Some(e),
             _ => None
         }
     }
