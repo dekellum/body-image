@@ -908,6 +908,11 @@ impl Dialog {
     /// representation of the response body (`res_body`). May be empty.
     pub fn res_decoded(&self) -> &Vec<Encoding>        { &self.epi.res_decoded }
 
+    /// Set a new response decoded list.
+    pub fn set_res_decoded(&mut self, decoded: Vec<Encoding>) {
+        self.epi.res_decoded = decoded;
+    }
+
     /// A mutable reference to the response body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.
     pub fn res_body_mut(&mut self) -> &mut BodyImage   { &mut self.epi.res_body }

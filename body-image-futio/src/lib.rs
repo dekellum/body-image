@@ -37,12 +37,14 @@
 #![warn(rust_2018_idioms)]
 
 use std::mem;
+use std::fmt;
 
 #[cfg(feature = "brotli")] use brotli;
 
 use bytes::Bytes;
 use failure::{
     bail,
+    Fail,
     // Convenient alias and "a sudden brief burst of bright flame or light."
     Error as Flare,
     format_err
@@ -268,14 +270,56 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
     false
 }
 
+/// Error enumeration for decode/decompress operations.  This may be extended
+/// in the future so exhaustive matching is gently discouraged with an unused
+/// variant.
+#[derive(Debug)]
+pub enum DecodeBodyError {
+    /// Error via `BodySink`, `BodyImage` or related `Io`.
+    Body(BodyError),
+    /// Failed to decode an unsupported `Encoding` such as `Compress`, or
+    /// `Brotli`, when the _brotli_ feature is not enabled.
+    UnsupportedEncoding(Encoding),
+    /// Unused variant to both enable non-exhaustive matching and warn against
+    /// exhaustive matching.
+    _FutureProof
+}
+
+impl fmt::Display for DecodeBodyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            DecodeBodyError::Body(ref be) =>
+                write!(f, "With Body; {}", be),
+            DecodeBodyError::UnsupportedEncoding(e) =>
+                write!(f, "Unsupported encoding: {}", e),
+            DecodeBodyError::_FutureProof => unreachable!()
+        }
+    }
+}
+
+impl Fail for DecodeBodyError {
+    fn cause(&self) -> Option<&dyn Fail> {
+        match *self {
+            DecodeBodyError::Body(ref be) => Some(be),
+            _ => None
+        }
+    }
+}
+
+impl From<BodyError> for DecodeBodyError {
+    fn from(err: BodyError) -> DecodeBodyError {
+        DecodeBodyError::Body(err)
+    }
+}
+
 /// Decode the response body of the provided `Dialog` compressed with any
 /// supported `Encoding`, updated the dialog accordingly.  The provided
 /// `Tunables` controls decompression buffer sizes and if the final
 /// `BodyImage` will be in `Ram` or `FsRead`. Returns `Ok(true)` if the
-/// response body was decoded, `Ok(false)` if no or unsupported encoding,
-/// or an error on failure.
+/// response body was decoded, or `Ok(false)` if no encoding was found, or an
+/// error on failure, including from an unsupported `Encoding`.
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
-    -> Result<bool, BodyError>
+    -> Result<bool, DecodeBodyError>
 {
     let encodings = find_encodings(dialog.res_headers());
 
@@ -283,40 +327,41 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
         if *e != Encoding::Chunked { Some(*e) } else { None }
     });
 
-    let mut decoded = false;
-    if let Some(comp) = compression {
+    let new_body = if let Some(comp) = compression {
         debug!("Body to {:?} decode: {:?}", comp, dialog.res_body());
-        let new_body = decompress(dialog.res_body(), comp, tune)?;
-        if let Some(b) = new_body {
-            dialog.set_res_body_decoded(b, encodings);
-            decoded = true;
-            debug!("Body update: {:?}", dialog.res_body());
-        } else {
-            warn!("Unsupported encoding: {:?} not decoded", comp);
-        }
-    }
+        Some(decompress(dialog.res_body(), comp, tune)?)
+    } else {
+        None
+    };
 
-    Ok(decoded)
+    if let Some(b) = new_body {
+        dialog.set_res_body_decoded(b, encodings);
+        debug!("Body update: {:?}", dialog.res_body());
+        Ok(true)
+    } else {
+        dialog.set_res_decoded(encodings);
+        Ok(false)
+    }
 }
 
 /// Decompress the provided body of any supported compression `Encoding`,
 /// using `Tunables` for buffering and the final returned `BodyImage`. If the
 /// encoding is not supported (e.g. `Chunked` or `Brotli`, without the feature
-/// enabled), returns `None`.
+/// enabled), returns `Err(DecodeBodyError::UnsupportedEncoding)`.
 pub fn decompress(body: &BodyImage, compression: Encoding, tune: &Tunables)
-    -> Result<Option<BodyImage>, BodyError>
+    -> Result<BodyImage, DecodeBodyError>
 {
     let mut reader = body.reader();
     match compression {
         Encoding::Gzip => {
             let mut decoder = GzDecoder::new(reader.as_read());
             let len_est = body.len() * u64::from(tune.size_estimate_gzip());
-            Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
+            Ok(BodyImage::read_from(&mut decoder, len_est, tune)?)
         }
         Encoding::Deflate => {
             let mut decoder = DeflateDecoder::new(reader.as_read());
             let len_est = body.len() * u64::from(tune.size_estimate_deflate());
-            Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
+            Ok(BodyImage::read_from(&mut decoder, len_est, tune)?)
         }
         #[cfg(feature = "brotli")]
         Encoding::Brotli => {
@@ -324,10 +369,10 @@ pub fn decompress(body: &BodyImage, compression: Encoding, tune: &Tunables)
                 reader.as_read(),
                 tune.buffer_size_ram());
             let len_est = body.len() * u64::from(tune.size_estimate_brotli());
-            Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
+            Ok(BodyImage::read_from(&mut decoder, len_est, tune)?)
         }
         _ => {
-            Ok(None)
+            Err(DecodeBodyError::UnsupportedEncoding(compression))
         }
     }
 }
