@@ -831,6 +831,9 @@ pub enum Encoding {
     /// This obsolete LZW format, is not generally used or supported
     /// currently, but is included for error reporting.
     Compress,
+    /// May be used to explicitly indicate that an encoding previously applied
+    /// has been decoded (removed).
+    Identity,
 }
 
 impl fmt::Display for Encoding {
@@ -841,6 +844,7 @@ impl fmt::Display for Encoding {
             Encoding::Gzip    => "gzip",
             Encoding::Brotli  => "br",
             Encoding::Compress  => "compress",
+            Encoding::Identity  => "identity",
         })
     }
 }

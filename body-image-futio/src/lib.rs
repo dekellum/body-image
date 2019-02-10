@@ -321,7 +321,7 @@ impl From<BodyError> for DecodeBodyError {
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     -> Result<bool, DecodeBodyError>
 {
-    let encodings = find_encodings(dialog.res_headers());
+    let mut encodings = find_encodings(dialog.res_headers());
 
     let compression = encodings.last().and_then(|e| {
         if *e != Encoding::Chunked { Some(*e) } else { None }
@@ -333,6 +333,10 @@ pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     } else {
         None
     };
+
+    // Positively indicate that we've checked, and if necessary, successfully
+    // decoded body to the associated raw Content-Type representation.
+    encodings.push(Encoding::Identity);
 
     if let Some(b) = new_body {
         dialog.set_res_body_decoded(b, encodings);
