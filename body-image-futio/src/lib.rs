@@ -205,15 +205,18 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
     let mut res = Vec::with_capacity(2);
 
     'headers: for v in encodings {
-        // Hyper's Content-Encoding includes Brotli (br) _and_
+        // hyperx's Content-Encoding includes Brotli (br) _and_
         // Chunked, is thus a super-set of Transfer-Encoding, so parse
         // all of these headers that way.
         if let Ok(v) = ContentEncoding::parse_header(&v) {
             for av in v.iter() {
                 match *av {
-                    HyEncoding::Identity => {}
+                    HyEncoding::Identity => {} //ignore
                     HyEncoding::Chunked => {
-                        res.push(Encoding::Chunked);
+                        // guard against duplicating.
+                        if res.is_empty() {
+                            res.push(Encoding::Chunked);
+                        }
                     }
                     HyEncoding::Deflate => {
                         res.push(Encoding::Deflate);
@@ -246,7 +249,7 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
         if let Ok(v) = TransferEncoding::parse_header(&v) {
             for av in v.iter() {
                 match *av {
-                    HyEncoding::Identity => {}
+                    HyEncoding::Identity => {} //ignore
                     HyEncoding::Chunked => {
                         return true;
                     }
