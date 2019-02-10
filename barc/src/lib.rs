@@ -31,7 +31,7 @@ use std::fs::{File, OpenOptions};
 use std::fmt;
 use std::io;
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
-use std::ops::{AddAssign,ShlAssign};
+use std::ops::{AddAssign, ShlAssign};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::path::Path;
 
