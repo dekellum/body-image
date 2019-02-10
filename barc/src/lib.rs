@@ -330,7 +330,7 @@ impl TryFrom<Dialog> for Record {
         );
 
         if !epilog.res_decoded.is_empty() {
-            let mut joined = String::with_capacity(20);
+            let mut joined = String::with_capacity(30);
             for e in epilog.res_decoded {
                 if !joined.is_empty() { joined.push_str(", "); }
                 joined.push_str(&e.to_string());
