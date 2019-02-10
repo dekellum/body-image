@@ -818,14 +818,19 @@ pub struct Epilog {
     pub res_decoded:  Vec<Encoding>,
 }
 
-/// A subset of supported HTTP Transfer or Content-Encoding values. The
-/// `Display`/`ToString` representation is as per the HTTP header value.
+/// A set of HTTP Transfer- or Content-Encoding values. The
+/// `Display`/`ToString` representation as per the HTTP header value.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum Encoding {
+    /// `Chunked` is typically applied or removed by HTTP client and server
+    /// implementations, even minimal ones.
     Chunked,
     Deflate,
     Gzip,
     Brotli,
+    /// This obsolete LZW format, is not generally used or supported
+    /// currently, but is included for error reporting.
+    Compress,
 }
 
 impl fmt::Display for Encoding {
@@ -835,6 +840,7 @@ impl fmt::Display for Encoding {
             Encoding::Deflate => "deflate",
             Encoding::Gzip    => "gzip",
             Encoding::Brotli  => "br",
+            Encoding::Compress  => "compress",
         })
     }
 }

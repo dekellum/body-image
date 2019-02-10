@@ -230,6 +230,10 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
                         res.push(Encoding::Brotli);
                         break 'headers;
                     }
+                    HyEncoding::Compress => {
+                        res.push(Encoding::Compress);
+                        break 'headers;
+                    }
                     _ => {
                         warn!("Found unknown encoding: {:?}", av);
                         break 'headers;
