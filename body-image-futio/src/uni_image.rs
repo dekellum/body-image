@@ -5,7 +5,6 @@ use std::ops::Deref;
 use std::vec::IntoIter;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
-use failure::Error as Flare;
 use http;
 use log::debug;
 use olio::fs::rc::ReadSlice;
@@ -16,7 +15,7 @@ use hyper;
 use tokio_threadpool;
 use futures::{Async, Poll, Stream};
 
-use crate::{MemMapBuf, RequestRecord, RequestRecorder};
+use crate::{Flaw, MemMapBuf, RequestRecord, RequestRecorder};
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits, using the custom
@@ -233,7 +232,7 @@ impl hyper::body::Payload for UniBodyImage {
 }
 
 impl RequestRecorder<UniBodyImage> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<UniBodyImage>, Flare> {
+    fn record(&mut self) -> Result<RequestRecord<UniBodyImage>, Flaw> {
         let request = {
             let body = BodyImage::empty();
             let tune = Tunables::default();
@@ -252,7 +251,7 @@ impl RequestRecorder<UniBodyImage> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<UniBodyImage>, Flare>
+        -> Result<RequestRecord<UniBodyImage>, Flaw>
         where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -274,7 +273,7 @@ impl RequestRecorder<UniBodyImage> for http::request::Builder {
     }
 
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<UniBodyImage>, Flare>
+        -> Result<RequestRecord<UniBodyImage>, Flaw>
     {
         let request = self.body(UniBodyImage::new(body.clone(), tune))?;
         let method      = request.method().clone();

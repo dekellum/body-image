@@ -1,12 +1,11 @@
 use bytes::Buf;
-use failure::{bail, Error as Flare};
 use futures::{Async, AsyncSink, Poll, Sink, StartSend};
 use log::debug;
 use tokio_threadpool;
 
-use body_image::{BodySink, Tunables};
+use body_image::{BodyError, BodySink, Tunables};
 
-use crate::UniBodyBuf;
+use crate::{Flaw, UniBodyBuf};
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `Stream<Item=UniBodyBuf>` to be forwarded (e.g. via
@@ -68,14 +67,14 @@ macro_rules! unblock {
 
 impl Sink for UniBodySink {
     type SinkItem = UniBodyBuf;
-    type SinkError = Flare;
+    type SinkError = Flaw;
 
     fn start_send(&mut self, buf: UniBodyBuf)
-        -> StartSend<UniBodyBuf, Flare>
+        -> StartSend<UniBodyBuf, Flaw>
     {
         let new_len = self.body.len() + (buf.remaining() as u64);
         if new_len > self.tune.max_body() {
-            bail!("Response stream too long: {}+", new_len);
+            return Err(BodyError::BodyTooLong(new_len).into());
         }
         if self.body.is_ram() && new_len > self.tune.max_body_ram() {
             unblock!(buf, || {
@@ -85,7 +84,7 @@ impl Sink for UniBodySink {
         }
         if self.body.is_ram() {
             debug!("to save buf (len: {})", buf.remaining());
-            self.body.write_all(&buf).map_err(Flare::from)?;
+            self.body.write_all(&buf).map_err(Flaw::from)?;
         } else {
             unblock!(buf, || {
                 debug!("to write buf (blocking, len: {})", buf.remaining());
@@ -96,11 +95,11 @@ impl Sink for UniBodySink {
         Ok(AsyncSink::Ready)
     }
 
-    fn poll_complete(&mut self) -> Poll<(), Flare> {
+    fn poll_complete(&mut self) -> Poll<(), Flaw> {
         Ok(Async::Ready(()))
     }
 
-    fn close(&mut self) -> Poll<(), Flare> {
+    fn close(&mut self) -> Poll<(), Flaw> {
         Ok(Async::Ready(()))
     }
 }

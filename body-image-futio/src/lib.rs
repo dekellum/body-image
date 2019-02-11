@@ -36,17 +36,14 @@
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
+use std::error::Error as StdError;
+use std::fmt;
 use std::mem;
+use std::time::Duration;
 
 #[cfg(feature = "brotli")] use brotli;
 
 use bytes::Bytes;
-use failure::{
-    bail,
-    // Convenient alias and "a sudden brief burst of bright flame or light."
-    Error as Flare,
-    format_err
-};
 use flate2::read::{DeflateDecoder, GzDecoder};
 use futures::{future, Future, Stream};
 use futures::future::Either;
@@ -66,6 +63,14 @@ use body_image::{
     BodyImage, BodySink, BodyError, Encoding,
     Epilog, Prolog, Dialog, Recorded, RequestRecorded, Tunables,
 };
+
+/// Conveniently compact type alias for dyn Trait `std::error::Error` errors,
+/// generally used in test code, to represent many possible errors, or where
+/// writing the concrete type would expose an implementation detail (e.g. of
+/// an otherwise private dependency). It is possible to query and downcast the
+/// type via methods of
+/// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
+pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
 mod image;
 pub use self::image::AsyncBodyImage;
@@ -102,12 +107,37 @@ pub static BROWSE_ACCEPT: &str =
      application/xml;q=0.9, \
      */*;q=0.8";
 
+/// Error enumeration for body-image-futio origin errors.
+#[derive(Debug, PartialEq)]
+enum FutioError {
+    ResponseTimeout(Duration),
+    BodyTimeout(Duration),
+    ContentLengthTooLong(u64),
+}
+
+impl fmt::Display for FutioError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FutioError::ResponseTimeout(d) =>
+                write!(f,
+                    "Timeout before initial response ({:?})", d),
+            FutioError::BodyTimeout(d) =>
+                write!(f,
+                    "Timeout before streaming body complete ({:?})", d),
+            FutioError::ContentLengthTooLong(l) =>
+                write!(f, "Response Content-Length too long: {}", l),
+        }
+    }
+}
+
+impl StdError for FutioError {}
+
 /// Run an HTTP request to completion, returning the full `Dialog`. This
 /// function constructs a default *tokio* `Runtime`,
 /// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
 /// internally, waiting with timeout, and dropping these on completion.
 pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
-    -> Result<Dialog, Flare>
+    -> Result<Dialog, Flaw>
     where B: hyper::body::Payload + Send
 {
     let mut rt = tokio::runtime::Builder::new()
@@ -130,7 +160,7 @@ pub fn request_dialog<CN, B>(
     client: &hyper::Client<CN, B>,
     rr: RequestRecord<B>,
     tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=Flare> + Send
+    -> impl Future<Item=Dialog, Error=Flaw> + Send
     where CN: hyper::client::connect::Connect + Sync + 'static,
           B: hyper::body::Payload + Send
 {
@@ -142,15 +172,15 @@ pub fn request_dialog<CN, B>(
 
     let futr = client
         .request(rr.request)
-        .from_err::<Flare>()
+        .from_err::<Flaw>()
         .map(|response| Monolog { prolog, response });
 
     let futr = if let Some(t) = res_timeout {
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_to_flare(te, || {
-                    format_err!("timeout before initial response ({:?})", t)
+                timeout_to_flaw(te, || {
+                    FutioError::ResponseTimeout(t).into()
                 })
             })
         )
@@ -164,11 +194,8 @@ pub fn request_dialog<CN, B>(
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_to_flare(te, || {
-                    format_err!(
-                        "timeout before streaming body complete ({:?})",
-                        t
-                    )
+                timeout_to_flaw(te, || {
+                    FutioError::BodyTimeout(t).into()
                 })
             })
         )
@@ -179,13 +206,13 @@ pub fn request_dialog<CN, B>(
     futr.and_then(InDialog::prepare)
 }
 
-fn timeout_to_flare<F>(te: timeout::Error<Flare>, on_elapsed: F) -> Flare
-    where F: FnOnce() -> Flare
+fn timeout_to_flaw<F>(te: timeout::Error<Flaw>, on_elapsed: F) -> Flaw
+    where F: FnOnce() -> Flaw
 {
     if te.is_elapsed() {
         on_elapsed()
     } else if te.is_timer() {
-        Flare::from(te.into_timer().unwrap())
+        Flaw::from(te.into_timer().unwrap())
     } else {
         te.into_inner().expect("inner")
     }
@@ -333,7 +360,7 @@ pub fn user_agent() -> String {
 }
 
 fn resp_future(monolog: Monolog, tune: Tunables)
-    -> impl Future<Item=InDialog, Error=Flare> + Send
+    -> impl Future<Item=InDialog, Error=Flaw> + Send
 {
     let (resp_parts, body) = monolog.response.into_parts();
 
@@ -341,7 +368,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     let bsink = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
         Some(v) => check_length(v, tune.max_body()).and_then(|cl| {
             if cl > tune.max_body_ram() {
-                BodySink::with_fs(tune.temp_dir()).map_err(Flare::from)
+                BodySink::with_fs(tune.temp_dir()).map_err(Flaw::from)
             } else {
                 Ok(BodySink::with_ram(cl))
             }
@@ -366,7 +393,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     };
 
     Either::B(
-        body.from_err::<Flare>()
+        body.from_err::<Flaw>()
             .forward(async_body)
             .and_then(|(_strm, mut async_body)| {
                 mem::swap(async_body.body_mut(), &mut in_dialog.res_body);
@@ -376,11 +403,11 @@ fn resp_future(monolog: Monolog, tune: Tunables)
 }
 
 fn check_length(v: &http::header::HeaderValue, max: u64)
-    -> Result<u64, Flare>
+    -> Result<u64, Flaw>
 {
     let l = *ContentLength::parse_header(&v)?;
     if l > max {
-        bail!("Response Content-Length too long: {}", l);
+        return Err(FutioError::ContentLengthTooLong(l).into());
     }
     Ok(l)
 }
@@ -436,7 +463,7 @@ impl InDialog {
     // Convert to `Dialog` by preparing the response body and adding an
     // initial res_decoded for Chunked, if hyper handled chunked transfer
     // encoding.
-    fn prepare(self) -> Result<Dialog, Flare> {
+    fn prepare(self) -> Result<Dialog, Flaw> {
         let res_decoded = if find_chunked(&self.res_headers) {
             vec![Encoding::Chunked]
         } else {
@@ -471,21 +498,21 @@ pub trait RequestRecorder<B>
 {
     /// Short-hand for completing the builder with an empty body, as is
     /// the case with many HTTP request methods (e.g. GET).
-    fn record(&mut self) -> Result<RequestRecord<B>, Flare>;
+    fn record(&mut self) -> Result<RequestRecord<B>, Flaw>;
 
     /// Complete the builder with any body that can be converted to a (Ram)
     /// `Bytes` buffer.
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<B>, Flare>
+        -> Result<RequestRecord<B>, Flaw>
         where BB: Into<Bytes>;
 
     /// Complete the builder with a `BodyImage` for the request body.
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<B>, Flare>;
+        -> Result<RequestRecord<B>, Flaw>;
 }
 
 impl RequestRecorder<hyper::Body> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flare> {
+    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flaw> {
         let request = self.body(hyper::Body::empty())?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -500,7 +527,7 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<hyper::Body>, Flare>
+        -> Result<RequestRecord<hyper::Body>, Flaw>
         where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -522,7 +549,7 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
     }
 
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<hyper::Body>, Flare>
+        -> Result<RequestRecord<hyper::Body>, Flaw>
     {
         let request = if !body.is_empty() {
             let stream = AsyncBodyImage::new(body.clone(), tune);

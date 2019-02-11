@@ -7,7 +7,6 @@ use std::vec::IntoIter;
 use http;
 use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
-use failure::Error as Flare;
 use log::debug;
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
@@ -16,7 +15,7 @@ use hyper;
 use tokio_threadpool;
 use futures::{Async, Poll, Stream};
 
-use crate::{RequestRecord, RequestRecorder};
+use crate::{Flaw, RequestRecord, RequestRecorder};
 
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
@@ -215,7 +214,7 @@ impl hyper::body::Payload for AsyncBodyImage {
 }
 
 impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, Flare> {
+    fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, Flaw> {
         let request = {
             let body = BodyImage::empty();
             let tune = Tunables::default();
@@ -234,7 +233,7 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<AsyncBodyImage>, Flare>
+        -> Result<RequestRecord<AsyncBodyImage>, Flaw>
         where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -256,7 +255,7 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
     }
 
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<AsyncBodyImage>, Flare>
+        -> Result<RequestRecord<AsyncBodyImage>, Flaw>
     {
         let request = self.body(AsyncBodyImage::new(body.clone(), tune))?;
         let method      = request.method().clone();

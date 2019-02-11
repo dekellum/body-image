@@ -7,7 +7,6 @@ use bytes::Bytes;
 
 use http;
 use http::{Request, Response};
-use failure::Error as Flare;
 use futures::{future, Future, Stream};
 
 use tokio;
@@ -26,7 +25,7 @@ use hyper::service::{service_fn, service_fn_ok};
 use log::warn;
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
-use crate::{AsyncBodyImage, RequestRecord, RequestRecorder,
+use crate::{AsyncBodyImage, Flaw, FutioError, RequestRecord, RequestRecorder,
             request_dialog, user_agent};
 #[cfg(feature = "mmap")] use crate::{AsyncBodySink, UniBodyImage};
 use crate::logger::LOG_SETUP;
@@ -190,9 +189,11 @@ fn timeout_before_response() {
             panic!("should have timed-out!");
         }
         Err(e) => {
-            let em = e.to_string();
-            assert!(em.starts_with("timeout"), em);
-            assert!(em.contains("initial"), em);
+            let fe = e.downcast_ref::<FutioError>().unwrap();
+            match fe {
+                FutioError::ResponseTimeout(_) => {},
+                _ => panic!("not response timeout {:?}", fe),
+            }
         }
     }
     rt.shutdown_on_idle().wait().unwrap();
@@ -215,9 +216,11 @@ fn timeout_during_streaming() {
             panic!("should have timed-out!");
         }
         Err(e) => {
-            let em = e.to_string();
-            assert!(em.starts_with("timeout"), em);
-            assert!(em.contains("streaming"), em);
+            let fe = e.downcast_ref::<FutioError>().unwrap();
+            match fe {
+                FutioError::BodyTimeout(_) => {},
+                _ => panic!("not a body timeout {:?}", fe),
+            }
         }
     }
     rt.shutdown_on_idle().wait().unwrap();
@@ -243,9 +246,11 @@ fn timeout_during_streaming_race() {
             panic!("should have timed-out!");
         }
         Err(e) => {
-            let em = e.to_string();
-            assert!(em.starts_with("timeout"), em);
-            assert!(em.contains("streaming"), em);
+            let fe = e.downcast_ref::<FutioError>().unwrap();
+            match fe {
+                FutioError::BodyTimeout(_) => {},
+                _ => panic!("not a body timeout {:?}", fe),
+            }
         }
     }
     rt.shutdown_on_idle().wait().unwrap();
@@ -289,7 +294,7 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
             tune
         );
         req.into_body()
-            .from_err::<Flare>()
+            .from_err::<Flaw>()
             .forward(asink)
             .and_then(move |(_strm, asink)| {
                 let tune = Tuner::new().set_buffer_size_fs(4972).finish();
@@ -299,7 +304,6 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
                    .status(200)
                    .body(UniBodyImage::new(bi, &tune))?)
             })
-            .map_err(|e| e.compat())
     });
     one_service!(svc)
 }
@@ -365,7 +369,7 @@ fn ram_body_image(csize: usize, count: usize) -> BodyImage {
 }
 
 fn get_req<T>(url: &str, tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=Flare> + Send
+    -> impl Future<Item=Dialog, Error=Flaw> + Send
     where T: hyper::body::Payload + Send,
           http::request::Builder: RequestRecorder<T>
 {
@@ -381,7 +385,7 @@ fn get_req<T>(url: &str, tune: &Tunables)
 }
 
 fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=Flare> + Send
+    -> impl Future<Item=Dialog, Error=Flaw> + Send
     where T: hyper::body::Payload + Send,
           http::request::Builder: RequestRecorder<T>
 {

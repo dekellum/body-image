@@ -1,11 +1,12 @@
-use failure::{bail, Error as Flare};
 use log::{debug};
 
-use body_image::{BodySink, Tunables};
+use body_image::{BodyError, BodySink, Tunables};
 
 use hyper;
 use tokio_threadpool;
 use futures::{Async, AsyncSink, Poll, Sink, StartSend};
+
+use crate::Flaw;
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `hyper::Body` (`hyper::Chunk` item) stream to be forwarded
@@ -67,14 +68,14 @@ macro_rules! unblock {
 
 impl Sink for AsyncBodySink {
     type SinkItem = hyper::Chunk;
-    type SinkError = Flare;
+    type SinkError = Flaw;
 
     fn start_send(&mut self, chunk: hyper::Chunk)
-        -> StartSend<hyper::Chunk, Flare>
+        -> StartSend<hyper::Chunk, Flaw>
     {
         let new_len = self.body.len() + (chunk.len() as u64);
         if new_len > self.tune.max_body() {
-            bail!("Response stream too long: {}+", new_len);
+            return Err(BodyError::BodyTooLong(new_len).into());
         }
         if self.body.is_ram() && new_len > self.tune.max_body_ram() {
             unblock!(chunk, || {
@@ -84,7 +85,7 @@ impl Sink for AsyncBodySink {
         }
         if self.body.is_ram() {
             debug!("to save chunk (len: {})", chunk.len());
-            self.body.save(chunk).map_err(Flare::from)?;
+            self.body.save(chunk).map_err(Flaw::from)?;
         } else {
             unblock!(chunk, || {
                 debug!("to write chunk (blocking, len: {})", chunk.len());
@@ -95,11 +96,11 @@ impl Sink for AsyncBodySink {
         Ok(AsyncSink::Ready)
     }
 
-    fn poll_complete(&mut self) -> Poll<(), Flare> {
+    fn poll_complete(&mut self) -> Poll<(), Flaw> {
         Ok(Async::Ready(()))
     }
 
-    fn close(&mut self) -> Poll<(), Flare> {
+    fn close(&mut self) -> Poll<(), Flaw> {
         Ok(Async::Ready(()))
     }
 }
