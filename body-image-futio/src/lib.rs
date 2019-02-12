@@ -512,21 +512,21 @@ pub trait RequestRecorder<B>
 {
     /// Short-hand for completing the builder with an empty body, as is
     /// the case with many HTTP request methods (e.g. GET).
-    fn record(&mut self) -> Result<RequestRecord<B>, Flaw>;
+    fn record(&mut self) -> Result<RequestRecord<B>, http::Error>;
 
     /// Complete the builder with any body that can be converted to a (Ram)
     /// `Bytes` buffer.
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<B>, Flaw>
+        -> Result<RequestRecord<B>, http::Error>
         where BB: Into<Bytes>;
 
     /// Complete the builder with a `BodyImage` for the request body.
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<B>, Flaw>;
+        -> Result<RequestRecord<B>, http::Error>;
 }
 
 impl RequestRecorder<hyper::Body> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flaw> {
+    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, http::Error> {
         let request = self.body(hyper::Body::empty())?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -541,7 +541,7 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<hyper::Body>, Flaw>
+        -> Result<RequestRecord<hyper::Body>, http::Error>
         where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -563,7 +563,7 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
     }
 
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<hyper::Body>, Flaw>
+        -> Result<RequestRecord<hyper::Body>, http::Error>
     {
         let request = if !body.is_empty() {
             let stream = AsyncBodyImage::new(body.clone(), tune);

@@ -15,7 +15,7 @@ use hyper;
 use tokio_threadpool;
 use futures::{Async, Poll, Stream};
 
-use crate::{Flaw, MemMapBuf, RequestRecord, RequestRecorder};
+use crate::{MemMapBuf, RequestRecord, RequestRecorder};
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits, using the custom
@@ -232,7 +232,7 @@ impl hyper::body::Payload for UniBodyImage {
 }
 
 impl RequestRecorder<UniBodyImage> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<UniBodyImage>, Flaw> {
+    fn record(&mut self) -> Result<RequestRecord<UniBodyImage>, http::Error> {
         let request = {
             let body = BodyImage::empty();
             let tune = Tunables::default();
@@ -251,7 +251,7 @@ impl RequestRecorder<UniBodyImage> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<UniBodyImage>, Flaw>
+        -> Result<RequestRecord<UniBodyImage>, http::Error>
         where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -273,7 +273,7 @@ impl RequestRecorder<UniBodyImage> for http::request::Builder {
     }
 
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<UniBodyImage>, Flaw>
+        -> Result<RequestRecord<UniBodyImage>, http::Error>
     {
         let request = self.body(UniBodyImage::new(body.clone(), tune))?;
         let method      = request.method().clone();

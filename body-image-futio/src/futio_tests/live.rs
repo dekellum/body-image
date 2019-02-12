@@ -1,10 +1,10 @@
 use body_image::Tunables;
-use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch, Flaw,
+use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
             Recorded, RequestRecord, RequestRecorder, user_agent};
 use crate::logger::LOG_SETUP;
 
 fn get_request(url: &str)
-    -> Result<RequestRecord<hyper::Body>, Flaw>
+    -> Result<RequestRecord<hyper::Body>, http::Error>
 {
     http::Request::builder()
         .method(http::Method::GET)

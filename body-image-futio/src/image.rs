@@ -15,7 +15,7 @@ use hyper;
 use tokio_threadpool;
 use futures::{Async, Poll, Stream};
 
-use crate::{Flaw, RequestRecord, RequestRecorder};
+use crate::{RequestRecord, RequestRecorder};
 
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
@@ -214,7 +214,7 @@ impl hyper::body::Payload for AsyncBodyImage {
 }
 
 impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, Flaw> {
+    fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, http::Error> {
         let request = {
             let body = BodyImage::empty();
             let tune = Tunables::default();
@@ -233,7 +233,7 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<AsyncBodyImage>, Flaw>
+        -> Result<RequestRecord<AsyncBodyImage>, http::Error>
         where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -255,7 +255,7 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
     }
 
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<AsyncBodyImage>, Flaw>
+        -> Result<RequestRecord<AsyncBodyImage>, http::Error>
     {
         let request = self.body(AsyncBodyImage::new(body.clone(), tune))?;
         let method      = request.method().clone();
