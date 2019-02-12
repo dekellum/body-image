@@ -188,12 +188,9 @@ fn timeout_before_response() {
         Ok(_) => {
             panic!("should have timed-out!");
         }
-        Err(e) => {
-            let fe = e.downcast_ref::<FutioError>().unwrap();
-            match fe {
-                FutioError::ResponseTimeout(_) => {},
-                _ => panic!("not response timeout {:?}", fe),
-            }
+        Err(e) => match e {
+            FutioError::ResponseTimeout(_) => {},
+            _ => panic!("not response timeout {:?}", e),
         }
     }
     rt.shutdown_on_idle().wait().unwrap();
@@ -215,12 +212,9 @@ fn timeout_during_streaming() {
         Ok(_) => {
             panic!("should have timed-out!");
         }
-        Err(e) => {
-            let fe = e.downcast_ref::<FutioError>().unwrap();
-            match fe {
-                FutioError::BodyTimeout(_) => {},
-                _ => panic!("not a body timeout {:?}", fe),
-            }
+        Err(e) => match e {
+            FutioError::BodyTimeout(_) => {},
+            _ => panic!("not a body timeout {:?}", e),
         }
     }
     rt.shutdown_on_idle().wait().unwrap();
@@ -245,12 +239,9 @@ fn timeout_during_streaming_race() {
         Ok(_) => {
             panic!("should have timed-out!");
         }
-        Err(e) => {
-            let fe = e.downcast_ref::<FutioError>().unwrap();
-            match fe {
-                FutioError::BodyTimeout(_) => {},
-                _ => panic!("not a body timeout {:?}", fe),
-            }
+        Err(e) => match e {
+            FutioError::BodyTimeout(_) => {},
+            _ => panic!("not a body timeout {:?}", e),
         }
     }
     rt.shutdown_on_idle().wait().unwrap();
@@ -369,7 +360,7 @@ fn ram_body_image(csize: usize, count: usize) -> BodyImage {
 }
 
 fn get_req<T>(url: &str, tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=Flaw> + Send
+    -> impl Future<Item=Dialog, Error=FutioError> + Send
     where T: hyper::body::Payload + Send,
           http::request::Builder: RequestRecorder<T>
 {
@@ -385,7 +376,7 @@ fn get_req<T>(url: &str, tune: &Tunables)
 }
 
 fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=Flaw> + Send
+    -> impl Future<Item=Dialog, Error=FutioError> + Send
     where T: hyper::body::Payload + Send,
           http::request::Builder: RequestRecorder<T>
 {

@@ -5,7 +5,7 @@ use tokio_threadpool;
 
 use body_image::{BodyError, BodySink, Tunables};
 
-use crate::{Flaw, UniBodyBuf};
+use crate::{FutioError, UniBodyBuf};
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `Stream<Item=UniBodyBuf>` to be forwarded (e.g. via
@@ -61,16 +61,16 @@ macro_rules! unblock {
             debug!("No blocking backup thread available -> NotReady");
             return Ok(AsyncSink::NotReady($c));
         }
-        Err(e) => return Err(e.into())
+        Err(e) => return Err(FutioError::Other(Box::new(e)))
     })
 }
 
 impl Sink for UniBodySink {
     type SinkItem = UniBodyBuf;
-    type SinkError = Flaw;
+    type SinkError = FutioError;
 
     fn start_send(&mut self, buf: UniBodyBuf)
-        -> StartSend<UniBodyBuf, Flaw>
+        -> StartSend<UniBodyBuf, FutioError>
     {
         let new_len = self.body.len() + (buf.remaining() as u64);
         if new_len > self.tune.max_body() {
@@ -84,7 +84,7 @@ impl Sink for UniBodySink {
         }
         if self.body.is_ram() {
             debug!("to save buf (len: {})", buf.remaining());
-            self.body.write_all(&buf).map_err(Flaw::from)?;
+            self.body.write_all(&buf).map_err(FutioError::from)?;
         } else {
             unblock!(buf, || {
                 debug!("to write buf (blocking, len: {})", buf.remaining());
@@ -95,11 +95,11 @@ impl Sink for UniBodySink {
         Ok(AsyncSink::Ready)
     }
 
-    fn poll_complete(&mut self) -> Poll<(), Flaw> {
+    fn poll_complete(&mut self) -> Poll<(), FutioError> {
         Ok(Async::Ready(()))
     }
 
-    fn close(&mut self) -> Poll<(), Flaw> {
+    fn close(&mut self) -> Poll<(), FutioError> {
         Ok(Async::Ready(()))
     }
 }

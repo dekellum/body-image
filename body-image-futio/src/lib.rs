@@ -38,6 +38,7 @@
 
 use std::error::Error as StdError;
 use std::fmt;
+use std::io;
 use std::mem;
 use std::time::Duration;
 
@@ -111,7 +112,10 @@ pub static BROWSE_ACCEPT: &str =
 /// extended in the future so exhaustive matching is gently discouraged with
 /// an unused variant.
 #[derive(Debug)]
-enum FutioError {
+pub enum FutioError {
+    /// Error from `BodySink` or `BodyImage`.
+    Body(BodyError),
+
     /// The `Tunables::res_timeout` duration was reached before receiving the
     /// initial response.
     ResponseTimeout(Duration),
@@ -123,6 +127,12 @@ enum FutioError {
     /// The content-length header exceeded `Tunables::max_body`.
     ContentLengthTooLong(u64),
 
+    /// Error from _hyper_.
+    Hyper(hyper::Error),
+
+    /// Other unclassified errors.
+    Other(Flaw),
+
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
     _FutureProof,
@@ -131,6 +141,8 @@ enum FutioError {
 impl fmt::Display for FutioError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            FutioError::Body(ref be) =>
+                write!(f, "With body: {}", be),
             FutioError::ResponseTimeout(d) =>
                 write!(f,
                     "Timeout before initial response ({:?})", d),
@@ -139,19 +151,56 @@ impl fmt::Display for FutioError {
                     "Timeout before streaming body complete ({:?})", d),
             FutioError::ContentLengthTooLong(l) =>
                 write!(f, "Response Content-Length too long: {}", l),
+            FutioError::Hyper(ref e) =>
+                write!(f, "Hyper error: {}", e),
+            FutioError::Other(ref flaw) =>
+                write!(f, "Other error: {}", flaw),
             FutioError::_FutureProof => unreachable!()
         }
     }
 }
 
-impl StdError for FutioError {}
+impl StdError for FutioError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match *self {
+            FutioError::Body(ref be) => Some(be),
+            FutioError::Hyper(ref he) => Some(he),
+            FutioError::Other(ref flaw) => Some(flaw.as_ref()),
+            _ => None
+        }
+    }
+}
+
+impl From<BodyError> for FutioError {
+    fn from(err: BodyError) -> FutioError {
+        FutioError::Body(err)
+    }
+}
+
+impl From<hyper::Error> for FutioError {
+    fn from(err: hyper::Error) -> FutioError {
+        FutioError::Hyper(err)
+    }
+}
+
+impl From<io::Error> for FutioError {
+    fn from(err: io::Error) -> FutioError {
+        FutioError::Body(BodyError::Io(err))
+    }
+}
+
+impl From<Flaw> for FutioError {
+    fn from(flaw: Flaw) -> FutioError {
+        FutioError::Other(flaw)
+    }
+}
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
 /// function constructs a default *tokio* `Runtime`,
 /// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
 /// internally, waiting with timeout, and dropping these on completion.
 pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
-    -> Result<Dialog, Flaw>
+    -> Result<Dialog, FutioError>
     where B: hyper::body::Payload + Send
 {
     let mut rt = tokio::runtime::Builder::new()
@@ -160,7 +209,8 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         .blocking_threads(2)
         .build()
         .unwrap();
-    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
+    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)
+        .map_err(|e| FutioError::Other(Box::new(e)))?;
     let client = hyper::Client::builder().build(connector);
     rt.block_on(request_dialog(&client, rr, tune))
     // Drop of `rt`, here, is equivalent to shutdown_now and wait
@@ -174,7 +224,7 @@ pub fn request_dialog<CN, B>(
     client: &hyper::Client<CN, B>,
     rr: RequestRecord<B>,
     tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=Flaw> + Send
+    -> impl Future<Item=Dialog, Error=FutioError> + Send
     where CN: hyper::client::connect::Connect + Sync + 'static,
           B: hyper::body::Payload + Send
 {
@@ -186,16 +236,14 @@ pub fn request_dialog<CN, B>(
 
     let futr = client
         .request(rr.request)
-        .from_err::<Flaw>()
+        .from_err::<FutioError>()
         .map(|response| Monolog { prolog, response });
 
     let futr = if let Some(t) = res_timeout {
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_to_flaw(te, || {
-                    FutioError::ResponseTimeout(t).into()
-                })
+                timeout_map(te, || FutioError::ResponseTimeout(t))
             })
         )
     } else {
@@ -208,9 +256,7 @@ pub fn request_dialog<CN, B>(
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_to_flaw(te, || {
-                    FutioError::BodyTimeout(t).into()
-                })
+                timeout_map(te, || FutioError::BodyTimeout(t))
             })
         )
     } else {
@@ -220,13 +266,13 @@ pub fn request_dialog<CN, B>(
     futr.and_then(InDialog::prepare)
 }
 
-fn timeout_to_flaw<F>(te: timeout::Error<Flaw>, on_elapsed: F) -> Flaw
-    where F: FnOnce() -> Flaw
+fn timeout_map<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
+    where F: FnOnce() -> FutioError
 {
     if te.is_elapsed() {
         on_elapsed()
     } else if te.is_timer() {
-        Flaw::from(te.into_timer().unwrap())
+        FutioError::Other(te.into_timer().unwrap().into())
     } else {
         te.into_inner().expect("inner")
     }
@@ -374,7 +420,7 @@ pub fn user_agent() -> String {
 }
 
 fn resp_future(monolog: Monolog, tune: Tunables)
-    -> impl Future<Item=InDialog, Error=Flaw> + Send
+    -> impl Future<Item=InDialog, Error=FutioError> + Send
 {
     let (resp_parts, body) = monolog.response.into_parts();
 
@@ -382,7 +428,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     let bsink = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
         Some(v) => check_length(v, tune.max_body()).and_then(|cl| {
             if cl > tune.max_body_ram() {
-                BodySink::with_fs(tune.temp_dir()).map_err(Flaw::from)
+                BodySink::with_fs(tune.temp_dir()).map_err(FutioError::from)
             } else {
                 Ok(BodySink::with_ram(cl))
             }
@@ -407,7 +453,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     };
 
     Either::B(
-        body.from_err::<Flaw>()
+        body.from_err::<FutioError>()
             .forward(async_body)
             .and_then(|(_strm, mut async_body)| {
                 mem::swap(async_body.body_mut(), &mut in_dialog.res_body);
@@ -417,11 +463,12 @@ fn resp_future(monolog: Monolog, tune: Tunables)
 }
 
 fn check_length(v: &http::header::HeaderValue, max: u64)
-    -> Result<u64, Flaw>
+    -> Result<u64, FutioError>
 {
-    let l = *ContentLength::parse_header(&v)?;
+    let l = *ContentLength::parse_header(&v)
+        .map_err(|e| FutioError::Other(Box::new(e)))?;
     if l > max {
-        return Err(FutioError::ContentLengthTooLong(l).into());
+        return Err(FutioError::ContentLengthTooLong(l));
     }
     Ok(l)
 }
@@ -477,7 +524,7 @@ impl InDialog {
     // Convert to `Dialog` by preparing the response body and adding an
     // initial res_decoded for Chunked, if hyper handled chunked transfer
     // encoding.
-    fn prepare(self) -> Result<Dialog, Flaw> {
+    fn prepare(self) -> Result<Dialog, FutioError> {
         let res_decoded = if find_chunked(&self.res_headers) {
             vec![Encoding::Chunked]
         } else {

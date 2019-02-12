@@ -6,7 +6,7 @@ use hyper;
 use tokio_threadpool;
 use futures::{Async, AsyncSink, Poll, Sink, StartSend};
 
-use crate::Flaw;
+use crate::FutioError;
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `hyper::Body` (`hyper::Chunk` item) stream to be forwarded
@@ -62,16 +62,16 @@ macro_rules! unblock {
             debug!("No blocking backup thread available -> NotReady");
             return Ok(AsyncSink::NotReady($c));
         }
-        Err(e) => return Err(e.into())
+        Err(e) => return Err(FutioError::Other(Box::new(e)))
     })
 }
 
 impl Sink for AsyncBodySink {
     type SinkItem = hyper::Chunk;
-    type SinkError = Flaw;
+    type SinkError = FutioError;
 
     fn start_send(&mut self, chunk: hyper::Chunk)
-        -> StartSend<hyper::Chunk, Flaw>
+        -> StartSend<hyper::Chunk, FutioError>
     {
         let new_len = self.body.len() + (chunk.len() as u64);
         if new_len > self.tune.max_body() {
@@ -85,7 +85,7 @@ impl Sink for AsyncBodySink {
         }
         if self.body.is_ram() {
             debug!("to save chunk (len: {})", chunk.len());
-            self.body.save(chunk).map_err(Flaw::from)?;
+            self.body.save(chunk).map_err(FutioError::from)?;
         } else {
             unblock!(chunk, || {
                 debug!("to write chunk (blocking, len: {})", chunk.len());
@@ -96,11 +96,11 @@ impl Sink for AsyncBodySink {
         Ok(AsyncSink::Ready)
     }
 
-    fn poll_complete(&mut self) -> Poll<(), Flaw> {
+    fn poll_complete(&mut self) -> Poll<(), FutioError> {
         Ok(Async::Ready(()))
     }
 
-    fn close(&mut self) -> Poll<(), Flaw> {
+    fn close(&mut self) -> Poll<(), FutioError> {
         Ok(Async::Ready(()))
     }
 }

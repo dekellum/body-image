@@ -5,7 +5,7 @@ use tokio::runtime::Runtime as DefaultRuntime;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 
-use crate::{Flaw, UniBodyImage, UniBodySink};
+use crate::{FutioError, UniBodyImage, UniBodySink};
 use crate::logger::LOG_SETUP;
 
 #[test]
@@ -15,7 +15,7 @@ fn forward_to_sink_empty() {
     let body = UniBodyImage::new(BodyImage::empty(), &tune);
     let asink = UniBodySink::new(BodySink::with_ram_buffers(0), tune.clone());
     let task = body
-        .from_err::<Flaw>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = CtRuntime::new().unwrap();
     let res = rt.block_on(task);
@@ -35,7 +35,7 @@ fn forward_to_sink_small() {
     let body = UniBodyImage::new(BodyImage::from_slice("body"), &tune);
     let asink = UniBodySink::new(BodySink::with_ram_buffers(1), tune.clone());
     let task = body
-        .from_err::<Flaw>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = CtRuntime::new().unwrap();
     let res = rt.block_on(task);
@@ -61,7 +61,7 @@ fn forward_to_sink_fs() {
         tune.clone()
     );
     let task = abody
-        .from_err::<Flaw>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = DefaultRuntime::new().unwrap();
     let res = rt.block_on(task);
@@ -87,7 +87,7 @@ fn forward_to_sink_fs_back() {
     let abody = UniBodyImage::new(in_body, &tune);
     let asink = UniBodySink::new(BodySink::with_ram_buffers(4), tune.clone());
     let task = abody
-        .from_err::<Flaw>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = DefaultRuntime::new().unwrap();
     let res = rt.block_on(task);
@@ -115,7 +115,7 @@ fn forward_to_sink_fs_map() {
     let abody = UniBodyImage::new(in_body, &tune);
     let asink = UniBodySink::new(BodySink::with_ram_buffers(4), tune.clone());
     let task = abody
-        .from_err::<Flaw>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = DefaultRuntime::new().unwrap();
     let res = rt.block_on(task);
