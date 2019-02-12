@@ -107,12 +107,25 @@ pub static BROWSE_ACCEPT: &str =
      application/xml;q=0.9, \
      */*;q=0.8";
 
-/// Error enumeration for body-image-futio origin errors.
-#[derive(Debug, PartialEq)]
+/// Error enumeration for body-image-futio origin errors. This may be
+/// extended in the future so exhaustive matching is gently discouraged with
+/// an unused variant.
+#[derive(Debug)]
 enum FutioError {
+    /// The `Tunables::res_timeout` duration was reached before receiving the
+    /// initial response.
     ResponseTimeout(Duration),
+
+    /// The `Tunables::body_timeout` duration was reached before receiving the
+    /// complete response body.
     BodyTimeout(Duration),
+
+    /// The content-length header exceeded `Tunables::max_body`.
     ContentLengthTooLong(u64),
+
+    /// Unused variant to both enable non-exhaustive matching and warn against
+    /// exhaustive matching.
+    _FutureProof,
 }
 
 impl fmt::Display for FutioError {
@@ -126,6 +139,7 @@ impl fmt::Display for FutioError {
                     "Timeout before streaming body complete ({:?})", d),
             FutioError::ContentLengthTooLong(l) =>
                 write!(f, "Response Content-Length too long: {}", l),
+            FutioError::_FutureProof => unreachable!()
         }
     }
 }
