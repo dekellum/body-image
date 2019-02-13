@@ -139,7 +139,7 @@ pub enum FutioError {
 
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
-    _FutureProof,
+    _FutureProof
 }
 
 impl fmt::Display for FutioError {
@@ -639,4 +639,20 @@ mod futio_tests {
 
     /// These tests may fail because they depend on public web servers
     #[cfg(feature = "may_fail")]    mod live;
+
+    use log::debug;
+    use super::{FutioError, Flaw};
+    use crate::logger::LOG_SETUP;
+
+    fn is_flaw(f: Flaw) -> bool {
+        debug!("({:?}) -> \"{}\"", &f, &f);
+        true
+    }
+
+    #[test]
+    fn test_error_as_flaw() {
+        assert!(*LOG_SETUP);
+        assert!(is_flaw(FutioError::ContentLengthTooLong(42).into()));
+        assert!(is_flaw(FutioError::Other("one off".into()).into()));
+    }
 }
