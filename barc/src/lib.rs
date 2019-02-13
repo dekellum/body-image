@@ -172,6 +172,10 @@ pub enum BarcError {
     /// Error parsing header name, value or block (with cause)
     InvalidHeader(Flaw),
 
+    /// Wraps a `DialogConvertError` as used for `Record` to `Dialog`
+    /// conversion.
+    IntoDialog(DialogConvertError),
+
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
     _FutureProof
@@ -196,6 +200,8 @@ impl fmt::Display for BarcError {
                 write!(f, "Invalid record head suffix"),
             BarcError::ReadInvalidRecHeadHex(b) =>
                 write!(f, "Invalid record head hex digit [{}]", b),
+            BarcError::IntoDialog(ref dce) =>
+                write!(f, "Record to Dialog conversion; {}", dce),
             BarcError::InvalidHeader(ref flaw) =>
                 write!(f, "Invalid header; {}", flaw),
             BarcError::_FutureProof => unreachable!()
@@ -209,6 +215,7 @@ impl StdError for BarcError {
             BarcError::Body(ref be)               => Some(be),
             BarcError::Io(ref e)                  => Some(e),
             BarcError::InvalidHeader(ref flaw)    => Some(flaw.as_ref()),
+            BarcError::IntoDialog(ref dce)        => Some(dce),
             _ => None
         }
     }
@@ -223,6 +230,12 @@ impl From<io::Error> for BarcError {
 impl From<BodyError> for BarcError {
     fn from(err: BodyError) -> BarcError {
         BarcError::Body(err)
+    }
+}
+
+impl From<DialogConvertError> for BarcError {
+    fn from(err: DialogConvertError) -> BarcError {
+        BarcError::IntoDialog(err)
     }
 }
 
@@ -354,8 +367,11 @@ impl TryFrom<Dialog> for Record {
 }
 
 /// Error enumeration for failures when converting from a `Record` to a
-/// `Dialog`. This may be extended in the future, so exhaustive matching is
-/// gently discouraged with an unused variant.
+/// `Dialog`.
+///
+/// This error type may also be converted to (wrapped as) a `BarcError`. It
+/// may be extended in the future, so exhaustive matching is gently
+/// discouraged with an unused variant.
 #[derive(Debug)]
 pub enum DialogConvertError {
     /// No url meta header found.
@@ -1474,10 +1490,15 @@ mod barc_tests {
     }
 
     fn is_flaw(_f: Flaw) -> bool { true }
+    fn is_barc_error(e: BarcError) -> bool {
+        assert!(is_flaw(e.into()));
+        true
+    }
 
     #[test]
     fn test_barc_error_as_flaw() {
-        assert!(is_flaw(BarcError::ReadInvalidRecHead.into()));
+        assert!(is_barc_error(BarcError::ReadInvalidRecHead));
+        assert!(is_barc_error(DialogConvertError::NoMetaUrl.into()));
     }
 
     #[test]
