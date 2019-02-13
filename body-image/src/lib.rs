@@ -82,7 +82,7 @@ pub enum BodyError {
 
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
-    _FutureProof,
+    _FutureProof
 }
 
 impl fmt::Display for BodyError {
@@ -1181,9 +1181,16 @@ mod body_tests {
     fn is_send<T: Send>() -> bool { true }
     fn is_sync<T: Sync>() -> bool { true }
 
+    type Flaw = Box<dyn StdError + Send + Sync + 'static>;
+    fn is_flaw(_f: Flaw) -> bool { true }
+
     #[test]
     fn test_send_sync() {
+        assert!(is_send::<BodyError>());
+        assert!(is_sync::<BodyError>());
+
         assert!(is_send::<BodyImage>());
+
         assert!(is_send::<Dialog>());
 
         assert!(is_send::<Tunables>());
@@ -1198,6 +1205,11 @@ mod body_tests {
     fn test_sync_not_mmap() {
         assert!(is_sync::<BodyImage>());
         assert!(is_sync::<Dialog>());
+    }
+
+    #[test]
+    fn test_body_error_as_flaw() {
+        assert!(is_flaw(BodyError::BodyTooLong(0).into()));
     }
 
     #[test]
