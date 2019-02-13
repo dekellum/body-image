@@ -1,10 +1,11 @@
 use std;
 
-use failure::Error as Flare;
 use fern;
 use log;
 
 #[cfg(test)] use lazy_static::lazy_static;
+
+use crate::Flaw;
 
 // Use lazy static to ensure we only setup logging once (by first test and
 // thread)
@@ -26,7 +27,7 @@ pub fn debug_logger() -> bool {
     true
 }
 
-pub fn setup_logger(level: u32) -> Result<(), Flare> {
+pub fn setup_logger(level: u32) -> Result<(), Flaw> {
     let mut disp = fern::Dispatch::new()
         .format(|out, message, record| {
             let t = std::thread::current();
@@ -58,7 +59,7 @@ pub fn setup_logger(level: u32) -> Result<(), Flare> {
 
     disp.chain(std::io::stderr())
         .apply()
-        .map_err(Flare::from)
+        .map_err(Flaw::from)
 }
 
 #[cfg(test)]

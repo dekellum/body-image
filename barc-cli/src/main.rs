@@ -2,6 +2,8 @@
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
+use std::error::Error as StdError;
+use std::fmt;
 use std::io;
 use std::process;
 
@@ -9,7 +11,7 @@ use clap::{
     Arg, ArgMatches, App, AppSettings,
     crate_version, SubCommand
 };
-use failure::{bail, Error as Flare};
+
 use log::error;
 
 use body_image::{Tunables, RequestRecorded, Recorded};
@@ -20,20 +22,39 @@ use barc::{
 };
 #[cfg(feature = "brotli")] use barc::BrotliCompressStrategy;
 
+// Conveniently compact type alias for dyn Trait `std::error::Error`.
+type Flaw = Box<dyn StdError + Send + Sync + 'static>;
+
 #[cfg(feature = "futio")] mod record;
 mod logger;
 
 use crate::logger::setup_logger;
 
+// Internal errors for the CLI
+#[derive(Debug)]
+struct ClError(String);
+
+impl fmt::Display for ClError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl StdError for ClError {}
+
+macro_rules! quit {
+    ($($args:tt)+) => { return Err(ClError(format!($($args)+)).into()) };
+}
+
 fn main() {
     let r = run();
     if let Err(e) = r {
-        error!("{}; (backtrace) {}", e.as_fail(), e.backtrace());
+        error!("{}", e);
         process::exit(2);
     }
 }
 
-fn run() -> Result<(), Flare> {
+fn run() -> Result<(), Flaw> {
     let var_help = VarHelp::default();
     let m = setup_cli(&var_help).get_matches();
 
@@ -72,11 +93,11 @@ fn run() -> Result<(), Flare> {
         }
         #[cfg(not(feature = "futio"))]
         "record" => {
-            bail!("Sub-command \"record\" requires the \"client\" \
+            quit!("Sub-command \"record\" requires the \"futio\"
                    build feature");
         }
         _ => {
-            bail!("Sub-command \"{}\" not supported", scname);
+            quit!("Sub-command \"{}\" not supported", scname);
         }
     }
 }
@@ -99,15 +120,18 @@ fn part_flags(matches: &ArgMatches<'_>) -> Parts {
 }
 
 // Parse the compress flags into a CompressStrategy
-fn compress_flags(matches: &ArgMatches<'_>) -> Result<Box<dyn CompressStrategy>, Flare>
+fn compress_flags(matches: &ArgMatches<'_>)
+    -> Result<Box<dyn CompressStrategy>, Flaw>
 {
-    let mut cs: Box<dyn CompressStrategy> = Box::new(NoCompressStrategy::default());
+    let mut cs: Box<dyn CompressStrategy> = Box::new(
+        NoCompressStrategy::default()
+    );
     if matches.is_present("brotli") {
         #[cfg(feature = "brotli")] {
             cs = Box::new(BrotliCompressStrategy::default());
         }
         #[cfg(not(feature = "brotli"))] {
-            bail!("Brotli compression requires the \"broli\" build feature");
+            quit!("Brotli compression requires the \"brotli\" build feature");
         }
     }
     // brotli/gzip are exclusive (conflicts_with)
@@ -118,14 +142,14 @@ fn compress_flags(matches: &ArgMatches<'_>) -> Result<Box<dyn CompressStrategy>,
 }
 
 // Parse filter flags and return (StartPos, count) or error.
-fn filter_flags(matches: &ArgMatches<'_>) -> Result<(StartPos, usize), Flare>
+fn filter_flags(matches: &ArgMatches<'_>) -> Result<(StartPos, usize), Flaw>
 {
     let files_len = matches.values_of("file").unwrap().len();
     let mut start = StartPos::default();
     let mut count = usize::max_value();
     if let Some(v) = matches.value_of("index") {
         if files_len > 1 {
-            bail!("--index flag can't be applied to more than one \
+            quit!("--index flag can't be applied to more than one \
                    input file");
         }
         let v = v.parse()?;
@@ -134,7 +158,7 @@ fn filter_flags(matches: &ArgMatches<'_>) -> Result<(StartPos, usize), Flare>
     // index/offset are exclusive (conflicts_with)
     if let Some(v) = matches.value_of("offset") {
         if files_len > 1 {
-            bail!("--offset flag can't be applied to more than one \
+            quit!("--offset flag can't be applied to more than one \
                    input file");
         }
         let v = if v.starts_with("0x") {
@@ -146,7 +170,7 @@ fn filter_flags(matches: &ArgMatches<'_>) -> Result<(StartPos, usize), Flare>
     }
     if let Some(v) = matches.value_of("count") {
         if files_len > 1 {
-            bail!("--count flag can't be applied to more than one \
+            quit!("--count flag can't be applied to more than one \
                    input file");
         }
         count = v.parse()?;
@@ -188,7 +212,7 @@ impl Default for Parts {
 
 // The `cat` command implementation.
 fn cat(barc_path: &str, start: &StartPos, count: usize, parts: &Parts)
-    -> Result<(), Flare>
+    -> Result<(), Flaw>
 {
     let bfile = BarcFile::new(barc_path);
     let tune = Tunables::new();
@@ -227,10 +251,10 @@ fn cp(
     start: &StartPos,
     count: usize,
     strategy: &dyn CompressStrategy)
-    -> Result<(), Flare>
+    -> Result<(), Flaw>
 {
     if barc_in == barc_out {
-        bail!("BARC input and output must be different files");
+        quit!("BARC input and output must be different files");
     }
     let bfin = BarcFile::new(barc_in);
     let tune = Tunables::new();

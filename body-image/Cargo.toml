@@ -16,7 +16,6 @@ travis-ci = { repository="dekellum/body-image" }
 
 [dependencies]
 bytes      = { version=">=0.4.6, <2" }
-failure    = { version=">=0.1.2, <2", default-features=false, features=["std"] }
 http       = { version=">=0.1.6, <2" }
 log        = { version=">=0.4.4, <2" }
 memmap     = { version=">=0.7.0, <2", optional=true }

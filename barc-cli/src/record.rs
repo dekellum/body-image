@@ -1,4 +1,3 @@
-use failure::Error as Flare;
 use http;
 use hyper;
 
@@ -9,6 +8,8 @@ use body_image_futio::{
     RequestRecord, RequestRecorder, user_agent
 };
 
+use crate::Flaw;
+
 /// The `record` command implementation.
 pub(crate) fn record(
     url: &str,
@@ -16,7 +17,7 @@ pub(crate) fn record(
     decode: bool,
     accept: Option<&str>,
     strategy: &dyn CompressStrategy)
-    -> Result<(), Flare>
+    -> Result<(), Flaw>
 {
     let req: RequestRecord<hyper::Body> = http::Request::builder()
         .method(http::Method::GET)
