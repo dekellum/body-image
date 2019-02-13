@@ -54,11 +54,8 @@ use body_image::{
     Epilog, Prolog, Recorded, RequestRecorded, Tunables
 };
 
-/// Conveniently compact type alias for dyn Trait `std::error::Error` errors,
-/// generally used in test code, to represent many possible errors, or where
-/// writing the concrete type would expose an implementation detail (e.g. of
-/// an otherwise private dependency). It is possible to query and downcast the
-/// type via methods of
+/// Conveniently compact type alias for dyn Trait `std::error::Error`. It is
+/// possible to query and downcast the type via methods of
 /// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
@@ -177,7 +174,7 @@ pub enum BarcError {
 
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
-    _FutureProof,
+    _FutureProof
 }
 
 impl fmt::Display for BarcError {
@@ -1474,6 +1471,13 @@ mod barc_tests {
             fs::remove_file(&fname)?;
         }
         Ok(fname)
+    }
+
+    fn is_flaw(_f: Flaw) -> bool { true }
+
+    #[test]
+    fn test_barc_error_as_flaw() {
+        assert!(is_flaw(BarcError::ReadInvalidRecHead.into()));
     }
 
     #[test]
