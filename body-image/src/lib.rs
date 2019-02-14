@@ -848,14 +848,22 @@ pub struct Epilog {
     pub res_decoded:  Vec<Encoding>,
 }
 
-/// A subset of supported HTTP Transfer or Content-Encoding values. The
-/// `Display`/`ToString` representation is as per the HTTP header value.
+/// A set of HTTP Transfer- or Content-Encoding values. The
+/// `Display`/`ToString` representation as per the HTTP header value.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum Encoding {
+    /// `Chunked` is typically applied or removed by HTTP client and server
+    /// implementations, even minimal ones.
     Chunked,
     Deflate,
     Gzip,
     Brotli,
+    /// This obsolete LZW format, is not generally used or supported
+    /// currently, but is included for error reporting.
+    Compress,
+    /// May be used to explicitly indicate that an encoding previously applied
+    /// has been decoded (removed).
+    Identity,
 }
 
 impl fmt::Display for Encoding {
@@ -865,6 +873,8 @@ impl fmt::Display for Encoding {
             Encoding::Deflate => "deflate",
             Encoding::Gzip    => "gzip",
             Encoding::Brotli  => "br",
+            Encoding::Compress  => "compress",
+            Encoding::Identity  => "identity",
         })
     }
 }
@@ -931,6 +941,11 @@ impl Dialog {
     /// A list of encodings that were removed (decoded) to provide this
     /// representation of the response body (`res_body`). May be empty.
     pub fn res_decoded(&self) -> &Vec<Encoding>        { &self.epi.res_decoded }
+
+    /// Set a new response decoded list.
+    pub fn set_res_decoded(&mut self, decoded: Vec<Encoding>) {
+        self.epi.res_decoded = decoded;
+    }
 
     /// A mutable reference to the response body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.

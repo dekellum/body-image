@@ -345,7 +345,7 @@ impl TryFrom<Dialog> for Record {
         );
 
         if !epilog.res_decoded.is_empty() {
-            let mut joined = String::with_capacity(20);
+            let mut joined = String::with_capacity(30);
             for e in epilog.res_decoded {
                 if !joined.is_empty() { joined.push_str(", "); }
                 joined.push_str(&e.to_string());
@@ -644,8 +644,8 @@ impl CompressStrategy for NoCompressStrategy {
     }
 }
 
-/// Strategy for gzip compression. Will only compress if a minimum length body
-/// with a compressible content-type header (of the request or response) is
+/// Strategy for gzip compression. Will only compress if a minimum length of
+/// compressible bytes, from the response and request bodies and headers is
 /// found.
 #[derive(Clone, Copy, Debug)]
 pub struct GzipCompressStrategy {
@@ -654,7 +654,7 @@ pub struct GzipCompressStrategy {
 }
 
 impl GzipCompressStrategy {
-    /// Set minimum length in bytes for when to use compression.
+    /// Set minimum length of compressible bytes required to use compression.
     /// Default: 4 KiB.
     pub fn set_min_len(mut self, size: u64) -> Self {
         self.min_len = size;
@@ -691,9 +691,9 @@ impl CompressStrategy for GzipCompressStrategy {
     }
 }
 
-/// Strategy for Brotli compression. Will only compress if a minimum length
-/// body with a compressible content-type header (of the request or response)
-/// is found.
+/// Strategy for Brotli compression. Will only compress if a minimum length of
+/// compressible bytes, from the response and request bodies and headers is
+/// found.
 #[cfg(feature = "brotli")]
 #[derive(Clone, Copy, Debug)]
 pub struct BrotliCompressStrategy {
@@ -703,7 +703,7 @@ pub struct BrotliCompressStrategy {
 
 #[cfg(feature = "brotli")]
 impl BrotliCompressStrategy {
-    /// Set minimum length in bytes for when to use compression.
+    /// Set minimum length of compressible bytes required to use compression.
     /// Default: 1 KiB.
     pub fn set_min_len(mut self, size: u64) -> Self {
         self.min_len = size;
@@ -746,20 +746,58 @@ impl CompressStrategy for BrotliCompressStrategy {
     }
 }
 
-/// Return true if the provided record is compressible because either the
-/// request or response content is of a compressible content-type and of
-/// sufficient length.
+/// Return true if the provided record has at least min_len of compressible
+/// bytes, from the response and request bodies and headers.
 pub fn is_compressible(rec: &dyn MetaRecorded, min_len: u64) -> bool {
-    static CT: http::header::HeaderName = http::header::CONTENT_TYPE;
-    ((rec.res_body().len() >= min_len &&
-      is_compressible_type(rec.res_headers().get(&CT))) ||
-     (rec.req_body().len() >= min_len &&
-      is_compressible_type(rec.req_headers().get(&CT))))
+    static CT: HeaderName = http::header::CONTENT_TYPE;
+    static IDY: &[u8] = b"identity";
+
+    let mut clen = 0;
+
+    if is_compressible_type(rec.res_headers().get(&CT)) {
+        if let Some(hv) = rec.meta().get(hname_meta_res_decoded()) {
+            let hvb = hv.as_bytes();
+            if hvb.len() >= IDY.len() && &hvb[(hvb.len()-IDY.len())..] == IDY {
+                clen += rec.res_body().len();
+                if clen >= min_len {
+                    debug!("sufficient (res_body) compressible length: {}",
+                           clen);
+                    return true;
+                }
+            }
+        }
+    }
+
+    if is_compressible_type(rec.req_headers().get(&CT)) {
+        clen += rec.req_body().len();
+        if clen >= min_len {
+            debug!("sufficient (req_body) compressible length: {}", clen);
+            return true;
+        }
+    }
+
+    clen += len_of_headers(rec.res_headers()) as u64;
+    if clen >= min_len {
+        debug!("sufficient (res_headers) compressible length: {}", clen);
+        return true;
+    }
+
+    clen += len_of_headers(rec.req_headers()) as u64;
+    if clen >= min_len {
+        debug!("sufficient (req_headers) compressible length: {}", clen);
+        return true;
+    }
+
+    clen += len_of_headers(rec.meta()) as u64;
+
+    debug!("full compressible length {}", clen);
+
+    (clen >= min_len)
 }
 
-/// Return true if the given content-type header value is expected to be
-/// compressible, e.g. "text/html", "image/svg", etc.
-pub fn is_compressible_type(ctype: Option<&http::header::HeaderValue>) -> bool {
+// Return true if the given content-type header value is expected to be
+// compressible, e.g. "text/html", "image/svg", etc.
+fn is_compressible_type(ctype: Option<&http::header::HeaderValue>) -> bool {
     if let Some(ctype_v) = ctype {
         if let Ok(ctype_str) = ctype_v.to_str() {
             is_compressible_type_str(ctype_str)
@@ -1031,6 +1069,20 @@ fn write_record_head<W>(out: &mut W, head: &RecordHead)
     ).as_bytes())?;
     assert_eq!(size, V2_HEAD_SIZE, "wrong record head size");
     Ok(())
+}
+
+// Compute length of a HeaderMap serialized as a block of bytes. This includes
+// the delimiter between name and value (": ") and CRLF after each line, but
+// not any block padding.
+fn len_of_headers(headers: &http::HeaderMap) -> usize {
+    let mut size = 0;
+    for (key, value) in headers.iter() {
+        let kb: &[u8] = key.as_ref();
+        size += kb.len();
+        size += value.len();
+        size += 4;
+    }
+    size
 }
 
 /// Write header block to out, with optional CR+LF end padding, and return the
@@ -1624,7 +1676,7 @@ mod barc_tests {
     fn test_write_read_empty_record_gzip() {
         assert!(*LOG_SETUP);
         let fname = barc_test_file("empty_record_gzip.barc").unwrap();
-        let strategy = GzipCompressStrategy::default().set_min_len(0);
+        let strategy = GzipCompressStrategy::default().set_min_len(1);
         write_read_empty_record(&fname, &strategy).unwrap();
         assert_compression(&fname, Compression::Plain);
     }
@@ -1634,7 +1686,7 @@ mod barc_tests {
     fn test_write_read_empty_record_brotli() {
         assert!(*LOG_SETUP);
         let fname = barc_test_file("empty_record_brotli.barc").unwrap();
-        let strategy = BrotliCompressStrategy::default().set_min_len(0);
+        let strategy = BrotliCompressStrategy::default().set_min_len(1);
         write_read_empty_record(&fname, &strategy).unwrap();
         assert_compression(&fname, Compression::Plain);
     }
@@ -1677,7 +1729,7 @@ mod barc_tests {
     fn test_write_read_large_gzip() {
         assert!(*LOG_SETUP);
         let fname = barc_test_file("large_gzip.barc").unwrap();
-        let strategy = GzipCompressStrategy::default();
+        let strategy = GzipCompressStrategy::default().set_min_len(0xa359b);
         write_read_large(&fname, &strategy).unwrap();
         assert_compression(&fname, Compression::Gzip);
     }
@@ -1696,7 +1748,7 @@ mod barc_tests {
     fn test_write_read_large_brotli() {
         assert!(*LOG_SETUP);
         let fname = barc_test_file("large_brotli.barc").unwrap();
-        let strategy = BrotliCompressStrategy::default();
+        let strategy = BrotliCompressStrategy::default().set_min_len(0xa359b);
         write_read_large(&fname, &strategy).unwrap();
         assert_compression(&fname, Compression::Brotli);
     }
@@ -1740,13 +1792,31 @@ mod barc_tests {
         }
         let res_body = res_body.prepare()?;
 
-        let mut headers = http::HeaderMap::default();
-        headers.insert(http::header::CONTENT_TYPE, "text/plain".parse().unwrap());
+        let mut res_headers = http::HeaderMap::default();
+        res_headers.insert(
+            http::header::CONTENT_TYPE,
+            "text/plain".parse().unwrap()
+        );
 
-        writer.write(&Record { req_body, req_headers: headers.clone(),
-                               res_body, res_headers: headers,
-                               ..Record::default()},
-                     strategy)?;
+        let mut req_headers = res_headers.clone();
+        req_headers.insert(
+            http::header::USER_AGENT,
+            "barc large tester".parse().unwrap()
+        );
+
+        let mut meta = http::HeaderMap::default();
+        meta.insert(
+            hname_meta_res_decoded(),
+            "identity".parse().unwrap()
+        );
+
+        writer.write(
+            &Record {
+                req_body, req_headers, res_body, res_headers, meta,
+                ..Record::default()
+            },
+            strategy
+        )?;
 
         let tune = Tunables::new();
         let mut reader = bfile.reader()?;
@@ -1755,8 +1825,8 @@ mod barc_tests {
         println!("{:#?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
-        assert_eq!(record.meta.len(), 0);
-        assert_eq!(record.req_headers.len(), 1);
+        assert_eq!(record.meta.len(), 1);
+        assert_eq!(record.req_headers.len(), 2);
         assert_eq!(record.req_body.len(),
                    (lorem_ipsum.len() * req_reps) as u64);
         assert_eq!(record.res_headers.len(), 1);

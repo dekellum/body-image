@@ -298,15 +298,18 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
     let mut res = Vec::with_capacity(2);
 
     'headers: for v in encodings {
-        // Hyper's Content-Encoding includes Brotli (br) _and_
+        // hyperx's Content-Encoding includes Brotli (br) _and_
         // Chunked, is thus a super-set of Transfer-Encoding, so parse
         // all of these headers that way.
         if let Ok(v) = ContentEncoding::parse_header(&v) {
             for av in v.iter() {
                 match *av {
-                    HyEncoding::Identity => {}
+                    HyEncoding::Identity => {} //ignore
                     HyEncoding::Chunked => {
-                        res.push(Encoding::Chunked);
+                        // guard against duplicating.
+                        if res.is_empty() {
+                            res.push(Encoding::Chunked);
+                        }
                     }
                     HyEncoding::Deflate => {
                         res.push(Encoding::Deflate);
@@ -318,6 +321,10 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
                     }
                     HyEncoding::Brotli => {
                         res.push(Encoding::Brotli);
+                        break 'headers;
+                    }
+                    HyEncoding::Compress => {
+                        res.push(Encoding::Compress);
                         break 'headers;
                     }
                     _ => {
@@ -339,7 +346,7 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
         if let Ok(v) = TransferEncoding::parse_header(&v) {
             for av in v.iter() {
                 match *av {
-                    HyEncoding::Identity => {}
+                    HyEncoding::Identity => {} //ignore
                     HyEncoding::Chunked => {
                         return true;
                     }
@@ -363,19 +370,29 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
     -> Result<bool, FutioError>
 {
-    let encodings = find_encodings(dialog.res_headers());
+    let mut encodings = find_encodings(dialog.res_headers());
 
     let compression = encodings.last().and_then(|e| {
         if *e != Encoding::Chunked { Some(*e) } else { None }
     });
 
-    if let Some(comp) = compression {
+    let new_body = if let Some(comp) = compression {
         debug!("Body to {:?} decode: {:?}", comp, dialog.res_body());
-        let new_body = decompress(dialog.res_body(), comp, tune)?;
-        dialog.set_res_body_decoded(new_body, encodings);
+        Some(decompress(dialog.res_body(), comp, tune)?)
+    } else {
+        None
+    };
+
+    // Positively indicate that we've checked, and if necessary, successfully
+    // decoded body to the associated raw Content-Type representation.
+    encodings.push(Encoding::Identity);
+
+    if let Some(b) = new_body {
+        dialog.set_res_body_decoded(b, encodings);
         debug!("Body update: {:?}", dialog.res_body());
         Ok(true)
     } else {
+        dialog.set_res_decoded(encodings);
         Ok(false)
     }
 }
