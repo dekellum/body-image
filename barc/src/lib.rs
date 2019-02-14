@@ -1731,30 +1731,19 @@ mod barc_tests {
         let res_body = res_body.prepare()?;
 
         let mut res_headers = http::HeaderMap::default();
-        res_headers.insert(
-            http::header::CONTENT_TYPE,
-            "text/plain".parse().unwrap()
-        );
+        res_headers.insert(http::header::CONTENT_TYPE, "text/plain".parse()?);
 
         let mut req_headers = res_headers.clone();
-        req_headers.insert(
-            http::header::USER_AGENT,
-            "barc large tester".parse().unwrap()
-        );
+        req_headers.insert(http::header::USER_AGENT,
+                           "barc large tester".parse()?);
 
         let mut meta = http::HeaderMap::default();
-        meta.insert(
-            hname_meta_res_decoded(),
-            "identity".parse().unwrap()
-        );
+        meta.insert(hname_meta_res_decoded(), "identity".parse()?);
 
         writer.write(
-            &Record {
-                req_body, req_headers, res_body, res_headers, meta,
-                ..Record::default()
-            },
-            strategy
-        )?;
+            &Record { req_body, req_headers, res_body, res_headers, meta,
+                      ..Record::default() },
+            strategy)?;
 
         let tune = Tunables::new();
         let mut reader = bfile.reader()?;
