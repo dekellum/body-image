@@ -732,21 +732,14 @@ impl CompressStrategy for BrotliCompressStrategy {
 /// bytes, from the response and request bodies and headers.
 pub fn is_compressible(rec: &dyn MetaRecorded, min_len: u64) -> bool {
     static CT: HeaderName = http::header::CONTENT_TYPE;
-    static IDY: &[u8] = b"identity";
-
     let mut clen = 0;
 
-    if is_compressible_type(rec.res_headers().get(&CT)) {
-        if let Some(hv) = rec.meta().get(hname_meta_res_decoded()) {
-            let hvb = hv.as_bytes();
-            if hvb.len() >= IDY.len() && &hvb[(hvb.len()-IDY.len())..] == IDY {
-                clen += rec.res_body().len();
-                if clen >= min_len {
-                    debug!("sufficient (res_body) compressible length: {}",
-                           clen);
-                    return true;
-                }
-            }
+    let res_dec = rec.meta().get(hname_meta_res_decoded());
+    if is_identity(res_dec) && is_compressible_type(rec.res_headers().get(&CT)) {
+        clen += rec.res_body().len();
+        if clen >= min_len {
+            debug!("sufficient (res_body) compressible length: {}", clen);
+            return true;
         }
     }
 
@@ -775,6 +768,20 @@ pub fn is_compressible(rec: &dyn MetaRecorded, min_len: u64) -> bool {
     debug!("full compressible length {}", clen);
 
     (clen >= min_len)
+}
+
+// Return true if the meta *decoded header end's with "identity", confirming
+// that associated body matches the content-type (no intervening compression).
+fn is_identity(decoded: Option<&http::header::HeaderValue>) -> bool {
+    static IDY: &[u8] = b"identity";
+
+    if let Some(hv) = decoded {
+        let hvb = hv.as_bytes();
+        if hvb.len() >= IDY.len() && &hvb[(hvb.len()-IDY.len())..] == IDY {
+            return true;
+        }
+    }
+    false
 }
 
 // Return true if the given content-type header value is expected to be
