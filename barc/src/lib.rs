@@ -897,6 +897,7 @@ impl<'a> Write for EncodeWrapper<'a> {
         match *self {
             EncodeWrapper::Plain(ref mut f) => f.flush(),
             EncodeWrapper::Gzip(ref mut gze) => gze.flush(),
+            #[cfg(feature = "brotli")]
             EncodeWrapper::Brotli(ref mut bcw) => bcw.flush(),
         }
     }
