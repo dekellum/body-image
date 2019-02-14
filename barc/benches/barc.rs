@@ -8,7 +8,6 @@ extern crate test; // Still required, see rust-lang/rust#55133
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use failure::Error as Flare;
 use test::Bencher;
 
 use body_image::{BodySink, Tunables};
@@ -63,7 +62,7 @@ fn write_read_large_brotli_0(b: &mut Bencher) {
 }
 
 fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
-    -> Result<(), Flare>
+    -> Result<(), BarcError>
 {
     let bfile = BarcFile::new(fname);
 
@@ -106,7 +105,7 @@ fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
     Ok(())
 }
 
-fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
+fn barc_test_file(name: &str) -> Result<PathBuf, Flaw> {
     let target = env!("CARGO_MANIFEST_DIR");
     let path = format!("{}/../target/testmp", target);
     let tpath = Path::new(&path);
