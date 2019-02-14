@@ -606,6 +606,59 @@ pub trait CompressStrategy {
     /// `MetaRecorded` for compression worthiness.
     fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>;
+
+    /// Return minimum length of compressible bytes for compression.
+    fn min_len(&self) -> u64 { 1 }
+
+    /// Return whether to check the meta -decoded header for an "identity"
+    /// value, as proof that the content-type header actually characterizes
+    /// the associated body, for the purpose of counting compressible bytes.
+    /// Default: false
+    fn check_identity(&self) -> bool { false }
+
+    /// Return true if the provided record has at least min_len of compressible
+    /// bytes, from the response and request bodies and headers.
+    fn is_compressible(&self, rec: &dyn MetaRecorded) -> bool {
+        static CT: HeaderName = http::header::CONTENT_TYPE;
+        let mut clen = 0;
+        let min_len = self.min_len();
+
+        let idd = !self.check_identity() ||
+            is_identity(rec.meta().get(hname_meta_res_decoded()));
+        if idd && is_compressible_type(rec.res_headers().get(&CT)) {
+            clen += rec.res_body().len();
+            if clen >= min_len {
+                debug!("sufficient (res_body) compressible length: {}", clen);
+                return true;
+            }
+        }
+
+        if is_compressible_type(rec.req_headers().get(&CT)) {
+            clen += rec.req_body().len();
+            if clen >= min_len {
+                debug!("sufficient (req_body) compressible length: {}", clen);
+                return true;
+            }
+        }
+
+        clen += len_of_headers(rec.res_headers()) as u64;
+        if clen >= min_len {
+            debug!("sufficient (res_headers) compressible length: {}", clen);
+            return true;
+        }
+
+        clen += len_of_headers(rec.req_headers()) as u64;
+        if clen >= min_len {
+            debug!("sufficient (req_headers) compressible length: {}", clen);
+            return true;
+        }
+
+        clen += len_of_headers(rec.meta()) as u64;
+
+        debug!("full compressible length {}", clen);
+
+        (clen >= min_len)
+    }
 }
 
 /// Strategy of no (aka `Plain`) compression.
@@ -633,6 +686,7 @@ impl CompressStrategy for NoCompressStrategy {
 pub struct GzipCompressStrategy {
     min_len: u64,
     compression_level: u32,
+    check_identity: bool,
 }
 
 impl GzipCompressStrategy {
@@ -650,12 +704,26 @@ impl GzipCompressStrategy {
         self.compression_level = level;
         self
     }
+
+    /// Set whether to check the meta -decoded header for an "identity" value,
+    /// as proof that the content-type header actually characterizes the
+    /// associated body.
+    ///
+    /// For example, `body_image_futio::decode_res_body` as of crate version
+    /// 1.1.0, will set this value on an original `Dialog`, which is preserved
+    /// when converted to a `Record` for barc write.
+    /// Default: false (but this may change in the future)
+    pub fn set_check_identity(mut self, check: bool) -> Self {
+        self.check_identity = check;
+        self
+    }
 }
 
 impl Default for GzipCompressStrategy {
     fn default() -> Self {
         Self { min_len: 4 * 1024,
-               compression_level: 6 }
+               compression_level: 6,
+               check_identity: false }
     }
 }
 
@@ -663,13 +731,21 @@ impl CompressStrategy for GzipCompressStrategy {
     fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
-        if is_compressible(rec, self.min_len) {
+        if self.is_compressible(rec) {
             Ok(EncodeWrapper::Gzip(Box::new(
                 GzEncoder::new(file, GzCompression::new(self.compression_level))
             )))
         } else {
             Ok(EncodeWrapper::Plain(file))
         }
+    }
+
+    fn min_len(&self) -> u64 {
+        self.min_len
+    }
+
+    fn check_identity(&self) -> bool {
+        self.check_identity
     }
 }
 
@@ -681,6 +757,7 @@ impl CompressStrategy for GzipCompressStrategy {
 pub struct BrotliCompressStrategy {
     min_len: u64,
     compression_level: u32,
+    check_identity: bool,
 }
 
 #[cfg(feature = "brotli")]
@@ -699,13 +776,27 @@ impl BrotliCompressStrategy {
         self.compression_level = level;
         self
     }
+
+    /// Set whether to check the meta -decoded header for an "identity" value,
+    /// as proof that the content-type header actually characterizes the
+    /// associated body.
+    ///
+    /// For example, `body_image_futio::decode_res_body` as of crate version
+    /// 1.1.0, will set this value on an original `Dialog`, which is preserved
+    /// when converted to a `Record` for barc write.
+    /// Default: false (but this may change in the future)
+    pub fn set_check_identity(mut self, check: bool) -> Self {
+        self.check_identity = check;
+        self
+    }
 }
 
 #[cfg(feature = "brotli")]
 impl Default for BrotliCompressStrategy {
     fn default() -> Self {
         Self { min_len: 1024,
-               compression_level: 6 }
+               compression_level: 6,
+               check_identity: false }
     }
 }
 
@@ -714,7 +805,7 @@ impl CompressStrategy for BrotliCompressStrategy {
     fn wrap_encoder<'a>(&self, rec: &'a dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
-        if is_compressible(rec, self.min_len) {
+        if self.is_compressible(rec) {
             Ok(EncodeWrapper::Brotli(Box::new(
                 brotli::CompressorWriter::new(
                     file,
@@ -726,48 +817,14 @@ impl CompressStrategy for BrotliCompressStrategy {
             Ok(EncodeWrapper::Plain(file))
         }
     }
-}
 
-/// Return true if the provided record has at least min_len of compressible
-/// bytes, from the response and request bodies and headers.
-pub fn is_compressible(rec: &dyn MetaRecorded, min_len: u64) -> bool {
-    static CT: HeaderName = http::header::CONTENT_TYPE;
-    let mut clen = 0;
-
-    let res_dec = rec.meta().get(hname_meta_res_decoded());
-    if is_identity(res_dec) && is_compressible_type(rec.res_headers().get(&CT)) {
-        clen += rec.res_body().len();
-        if clen >= min_len {
-            debug!("sufficient (res_body) compressible length: {}", clen);
-            return true;
-        }
+    fn min_len(&self) -> u64 {
+        self.min_len
     }
 
-    if is_compressible_type(rec.req_headers().get(&CT)) {
-        clen += rec.req_body().len();
-        if clen >= min_len {
-            debug!("sufficient (req_body) compressible length: {}", clen);
-            return true;
-        }
+    fn check_identity(&self) -> bool {
+        self.check_identity
     }
-
-    clen += len_of_headers(rec.res_headers()) as u64;
-    if clen >= min_len {
-        debug!("sufficient (res_headers) compressible length: {}", clen);
-        return true;
-    }
-
-    clen += len_of_headers(rec.req_headers()) as u64;
-    if clen >= min_len {
-        debug!("sufficient (req_headers) compressible length: {}", clen);
-        return true;
-    }
-
-    clen += len_of_headers(rec.meta()) as u64;
-
-    debug!("full compressible length {}", clen);
-
-    (clen >= min_len)
 }
 
 // Return true if the meta *decoded header end's with "identity", confirming
