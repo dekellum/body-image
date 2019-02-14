@@ -8,13 +8,12 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use failure::Error as Flare;
 use futures::Stream;
 use rand::seq::SliceRandom;
 use test::Bencher;
 use tokio;
 
-use body_image::{BodySink, BodyImage, Tunables, Tuner};
+use body_image::{BodyError, BodySink, BodyImage, Tunables, Tuner};
 use body_image_futio::*;
 
 // `AsyncBodyImage` in `Ram`, pre-gathered (single, contiguous buffer) and
@@ -220,7 +219,7 @@ fn summarize_stream<S>(stream: S, rt: &mut tokio::runtime::Runtime)
     }
 }
 
-fn sink_data(mut body: BodySink) -> Result<BodyImage, Flare> {
+fn sink_data(mut body: BodySink) -> Result<BodyImage, BodyError> {
     let reps = 1024;
     let mut vals: Vec<u8> = (0..reps).map(|v| (v % 256) as u8).collect();
     vals.shuffle(&mut rand::thread_rng());
@@ -232,7 +231,7 @@ fn sink_data(mut body: BodySink) -> Result<BodyImage, Flare> {
     Ok(body)
 }
 
-fn test_path() -> Result<PathBuf, Flare> {
+fn test_path() -> Result<PathBuf, Flaw> {
     let target = env!("CARGO_MANIFEST_DIR");
     let path = format!("{}/../target/testmp", target);
     let tpath = Path::new(&path);
