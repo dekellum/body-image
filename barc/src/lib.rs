@@ -43,7 +43,7 @@ use flate2::read::GzDecoder;
 use http;
 use httparse;
 use http::header::{HeaderName, HeaderValue};
-use log::{debug, info, warn};
+use log::{debug, trace, warn};
 use olio::fs::rc::{ReadPos, ReadSlice};
 
 #[cfg(feature = "brotli")]
@@ -848,11 +848,11 @@ fn is_compressible_type(ctype: Option<&http::header::HeaderValue>) -> bool {
         if let Ok(ctype_str) = ctype_v.to_str() {
             is_compressible_type_str(ctype_str)
         } else {
-            warn!("not compressible: content-type header not utf-8");
+            debug!("not compressible: content-type header not utf-8");
             false
         }
     } else {
-        info!("not compressible: no content-type header");
+        trace!("not compressible: no content-type header");
         false
     }
 }
@@ -883,7 +883,7 @@ fn is_compressible_type_str(ctype_str: &str) -> bool {
             _ => false
         }
         Err(e) => {
-            warn!("not compressible: unable to parse content-type: {}: {:?}",
+            debug!("not compressible: unable to parse content-type: {}: {:?}",
                   e, ctype_str);
             false
         }
