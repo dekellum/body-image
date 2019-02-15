@@ -62,7 +62,7 @@ fn write_read_large_brotli_0(b: &mut Bencher) {
 }
 
 fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
-    -> Result<(), BarcError>
+    -> Result<(), Flaw>
 {
     let bfile = BarcFile::new(fname);
 
@@ -94,7 +94,16 @@ fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
     }
     let res_body = res_body.prepare()?;
 
-    writer.write(&Record { req_body, res_body, ..Record::default()}, strategy)?;
+    let mut res_headers = http::HeaderMap::default();
+    res_headers.insert(http::header::CONTENT_TYPE, "text/plain".parse()?);
+    let req_headers = res_headers.clone();
+    let mut meta = http::HeaderMap::default();
+    meta.insert(hname_meta_res_decoded(), "identity".parse()?);
+
+    writer.write(
+        &Record { req_body, req_headers, res_body, res_headers, meta,
+                  ..Record::default()},
+        strategy)?;
 
     let tune = Tunables::new();
     let mut reader = bfile.reader()?;

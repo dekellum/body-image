@@ -43,7 +43,7 @@ use flate2::read::GzDecoder;
 use http;
 use httparse;
 use http::header::{HeaderName, HeaderValue};
-use log::{debug, info, warn};
+use log::{debug, trace, warn};
 use olio::fs::rc::{ReadPos, ReadSlice};
 
 #[cfg(feature = "brotli")]
@@ -624,6 +624,84 @@ pub trait CompressStrategy {
     /// `MetaRecorded` for compression worthiness.
     fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>;
+
+    /// Return minimum length of compressible bytes for compression.
+    fn min_len(&self) -> u64 { 0 }
+
+    /// Return a coefficient used to weight the discount of non-compressible
+    /// body bytes. Default: 0.5
+    fn non_compressible_coef(&self) -> f64 { 0.5 }
+
+    /// Return whether to check the meta -decoded header for an "identity"
+    /// value, as proof that the content-type header actually characterizes
+    /// the associated body, for the purpose of counting compressible bytes.
+    /// Default: false (may change in the future)
+    fn check_identity(&self) -> bool { false }
+
+    /// Return true if the provided record has at least `min_len` of
+    /// compressible bytes, from the response and request bodies and
+    /// headers.
+    ///
+    /// Any non-compressible bytes, from non-compressible bodies, are
+    /// discounted, weighted by `non_compressible_coef`.
+    #[allow(unused_parens)]
+    fn is_compressible(&self, rec: &dyn MetaRecorded) -> bool {
+        static CT: HeaderName = http::header::CONTENT_TYPE;
+        let mut clen = 0;
+        let mut min_len = self.min_len();
+        let mut sufficient = None;
+
+        let len = rec.res_body().len();
+        if len > 0 {
+            if ((!self.check_identity() ||
+                 is_identity(rec.meta().get(hname_meta_res_decoded()))) &&
+                is_compressible_type(rec.res_headers().get(&CT))) {
+                clen += len;
+            } else {
+                min_len = min_len.saturating_add(
+                    (len as f64 * self.non_compressible_coef()) as u64
+                );
+            }
+        }
+
+        let len = rec.req_body().len();
+        if len > 0 {
+            if is_compressible_type(rec.req_headers().get(&CT)) {
+                clen += len;
+            } else {
+                min_len = min_len.saturating_add(
+                    (len as f64 * self.non_compressible_coef()) as u64
+                );
+            }
+        }
+
+        if clen >= min_len { sufficient = Some("bodies"); }
+
+        if sufficient.is_none() {
+            clen += len_of_headers(rec.res_headers()) as u64;
+            if clen >= min_len { sufficient = Some("res_headers"); }
+        }
+
+        if sufficient.is_none() {
+            clen += len_of_headers(rec.req_headers()) as u64;
+            if clen >= min_len { sufficient = Some("req_headers"); }
+        }
+
+        if sufficient.is_none() {
+            clen += len_of_headers(rec.meta()) as u64;
+            if clen >= min_len { sufficient = Some("meta (all)"); }
+        }
+
+        if let Some(s) = sufficient {
+            debug!("found sufficient compressible length {} >= {}, at {}",
+                   clen, min_len, s);
+            true
+        } else {
+            debug!("compressible length {} < {}, won't compress",
+                   clen, min_len);
+            false
+        }
+    }
 }
 
 /// Strategy of no (aka `Plain`) compression.
@@ -651,6 +729,7 @@ impl CompressStrategy for NoCompressStrategy {
 pub struct GzipCompressStrategy {
     min_len: u64,
     compression_level: u32,
+    check_identity: bool,
 }
 
 impl GzipCompressStrategy {
@@ -668,12 +747,26 @@ impl GzipCompressStrategy {
         self.compression_level = level;
         self
     }
+
+    /// Set whether to check the meta -decoded header for an "identity" value,
+    /// as proof that the content-type header actually characterizes the
+    /// associated body.
+    ///
+    /// For example, `body_image_futio::decode_res_body` as of crate version
+    /// 1.1.0, will set this value on an original `Dialog`, which is preserved
+    /// when converted to a `Record` for barc write.
+    /// Default: false (may change in the future)
+    pub fn set_check_identity(mut self, check: bool) -> Self {
+        self.check_identity = check;
+        self
+    }
 }
 
 impl Default for GzipCompressStrategy {
     fn default() -> Self {
         Self { min_len: 4 * 1024,
-               compression_level: 6 }
+               compression_level: 6,
+               check_identity: false }
     }
 }
 
@@ -681,13 +774,21 @@ impl CompressStrategy for GzipCompressStrategy {
     fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
-        if is_compressible(rec, self.min_len) {
+        if self.is_compressible(rec) {
             Ok(EncodeWrapper::Gzip(Box::new(
                 GzEncoder::new(file, GzCompression::new(self.compression_level))
             )))
         } else {
             Ok(EncodeWrapper::Plain(file))
         }
+    }
+
+    fn min_len(&self) -> u64 {
+        self.min_len
+    }
+
+    fn check_identity(&self) -> bool {
+        self.check_identity
     }
 }
 
@@ -699,6 +800,7 @@ impl CompressStrategy for GzipCompressStrategy {
 pub struct BrotliCompressStrategy {
     min_len: u64,
     compression_level: u32,
+    check_identity: bool,
 }
 
 #[cfg(feature = "brotli")]
@@ -717,13 +819,27 @@ impl BrotliCompressStrategy {
         self.compression_level = level;
         self
     }
+
+    /// Set whether to check the meta -decoded header for an "identity" value,
+    /// as proof that the content-type header actually characterizes the
+    /// associated body.
+    ///
+    /// For example, `body_image_futio::decode_res_body` as of crate version
+    /// 1.1.0, will set this value on an original `Dialog`, which is preserved
+    /// when converted to a `Record` for barc write.
+    /// Default: false (but this may change in the future)
+    pub fn set_check_identity(mut self, check: bool) -> Self {
+        self.check_identity = check;
+        self
+    }
 }
 
 #[cfg(feature = "brotli")]
 impl Default for BrotliCompressStrategy {
     fn default() -> Self {
         Self { min_len: 1024,
-               compression_level: 6 }
+               compression_level: 6,
+               check_identity: false }
     }
 }
 
@@ -732,7 +848,7 @@ impl CompressStrategy for BrotliCompressStrategy {
     fn wrap_encoder<'a>(&self, rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
-        if is_compressible(rec, self.min_len) {
+        if self.is_compressible(rec) {
             Ok(EncodeWrapper::Brotli(Box::new(
                 brotli::CompressorWriter::new(
                     file,
@@ -744,55 +860,28 @@ impl CompressStrategy for BrotliCompressStrategy {
             Ok(EncodeWrapper::Plain(file))
         }
     }
-}
 
-/// Return true if the provided record has at least min_len of compressible
-/// bytes, from the response and request bodies and headers.
-pub fn is_compressible(rec: &dyn MetaRecorded, min_len: u64) -> bool {
-    static CT: HeaderName = http::header::CONTENT_TYPE;
-    static IDY: &[u8] = b"identity";
-
-    let mut clen = 0;
-
-    if is_compressible_type(rec.res_headers().get(&CT)) {
-        if let Some(hv) = rec.meta().get(hname_meta_res_decoded()) {
-            let hvb = hv.as_bytes();
-            if hvb.len() >= IDY.len() && &hvb[(hvb.len()-IDY.len())..] == IDY {
-                clen += rec.res_body().len();
-                if clen >= min_len {
-                    debug!("sufficient (res_body) compressible length: {}",
-                           clen);
-                    return true;
-                }
-            }
-        }
+    fn min_len(&self) -> u64 {
+        self.min_len
     }
 
-    if is_compressible_type(rec.req_headers().get(&CT)) {
-        clen += rec.req_body().len();
-        if clen >= min_len {
-            debug!("sufficient (req_body) compressible length: {}", clen);
+    fn check_identity(&self) -> bool {
+        self.check_identity
+    }
+}
+
+// Return true if the meta *decoded header end's with "identity", confirming
+// that associated body matches the content-type (no intervening compression).
+fn is_identity(decoded: Option<&http::header::HeaderValue>) -> bool {
+    static IDY: &[u8] = b"identity";
+
+    if let Some(hv) = decoded {
+        let hvb = hv.as_bytes();
+        if hvb.len() >= IDY.len() && &hvb[(hvb.len()-IDY.len())..] == IDY {
             return true;
         }
     }
-
-    clen += len_of_headers(rec.res_headers()) as u64;
-    if clen >= min_len {
-        debug!("sufficient (res_headers) compressible length: {}", clen);
-        return true;
-    }
-
-    clen += len_of_headers(rec.req_headers()) as u64;
-    if clen >= min_len {
-        debug!("sufficient (req_headers) compressible length: {}", clen);
-        return true;
-    }
-
-    clen += len_of_headers(rec.meta()) as u64;
-
-    debug!("full compressible length {}", clen);
-
-    (clen >= min_len)
+    false
 }
 
 // Return true if the given content-type header value is expected to be
@@ -802,11 +891,11 @@ fn is_compressible_type(ctype: Option<&http::header::HeaderValue>) -> bool {
         if let Ok(ctype_str) = ctype_v.to_str() {
             is_compressible_type_str(ctype_str)
         } else {
-            warn!("not compressible: content-type header not utf-8");
+            debug!("not compressible: content-type header not utf-8");
             false
         }
     } else {
-        info!("not compressible: no content-type header");
+        trace!("not compressible: no content-type header");
         false
     }
 }
@@ -814,30 +903,28 @@ fn is_compressible_type(ctype: Option<&http::header::HeaderValue>) -> bool {
 fn is_compressible_type_str(ctype_str: &str) -> bool {
     match ctype_str.trim().parse::<mime::Mime>() {
         Ok(mtype) => match (mtype.type_(), mtype.subtype()) {
-            (mime::TEXT, _) => true,
-            (mime::APPLICATION, mime::HTML) => true,
-            (mime::APPLICATION, mime::JAVASCRIPT) => true,
-            (mime::APPLICATION, mime::JSON) => true,
-            (mime::APPLICATION, mime::XML) => true,
-            (mime::APPLICATION, st)
-                if st == "atom"
-                || st == "rss"
-                || st == "x-font-opentype"
-                || st == "x-font-truetype"
-                || st == "x-font-ttf"
-                || st == "xhtml"
-                || st == "xml"
-                => true,
-            (mime::IMAGE, mime::SVG) => true,
-            (mime::FONT, st)
-                if st == "opentype"
-                || st == "otf"
-                || st == "ttf"
-                => true,
-            _ => false
+            (mime::TEXT, _)                           => true,
+            (mime::APPLICATION, mime::HTML)           => true,
+            (mime::APPLICATION, mime::JAVASCRIPT)     => true,
+            (mime::APPLICATION, mime::JSON)           => true,
+            (mime::APPLICATION, mime::XML)            => true,
+            (mime::APPLICATION, st) if
+                st == "atom" ||
+                st == "rss" ||
+                st == "x-font-opentype" ||
+                st == "x-font-truetype" ||
+                st == "x-font-ttf" ||
+                st == "xhtml" ||
+                st == "xml"                          => true,
+            (mime::IMAGE, mime::SVG)                 => true,
+            (mime::FONT, st) if
+                st == "opentype" ||
+                st == "otf" ||
+                st == "ttf"                          => true,
+            _                                        => false
         }
         Err(e) => {
-            warn!("not compressible: unable to parse content-type: {}: {:?}",
+            debug!("not compressible: unable to parse content-type: {}: {:?}",
                   e, ctype_str);
             false
         }
@@ -1794,30 +1881,19 @@ mod barc_tests {
         let res_body = res_body.prepare()?;
 
         let mut res_headers = http::HeaderMap::default();
-        res_headers.insert(
-            http::header::CONTENT_TYPE,
-            "text/plain".parse().unwrap()
-        );
+        res_headers.insert(http::header::CONTENT_TYPE, "text/plain".parse()?);
 
         let mut req_headers = res_headers.clone();
-        req_headers.insert(
-            http::header::USER_AGENT,
-            "barc large tester".parse().unwrap()
-        );
+        req_headers.insert(http::header::USER_AGENT,
+                           "barc large tester".parse()?);
 
         let mut meta = http::HeaderMap::default();
-        meta.insert(
-            hname_meta_res_decoded(),
-            "identity".parse().unwrap()
-        );
+        meta.insert(hname_meta_res_decoded(), "identity".parse()?);
 
         writer.write(
-            &Record {
-                req_body, req_headers, res_body, res_headers, meta,
-                ..Record::default()
-            },
-            strategy
-        )?;
+            &Record { req_body, req_headers, res_body, res_headers, meta,
+                      ..Record::default() },
+            strategy)?;
 
         let tune = Tunables::new();
         let mut reader = bfile.reader()?;
