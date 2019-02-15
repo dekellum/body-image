@@ -260,7 +260,7 @@ impl BrotliCompressStrategy {
     /// For example, `body_image_futio::decode_res_body` as of crate version
     /// 1.1.0, will set this value on an original `Dialog`, which is preserved
     /// when converted to a `Record` for barc write.
-    /// Default: false (but this may change in the future)
+    /// Default: false (may change in the future)
     pub fn set_check_identity(mut self, check: bool) -> Self {
         self.check_identity = check;
         self
@@ -303,7 +303,7 @@ impl CompressStrategy for BrotliCompressStrategy {
     }
 }
 
-// Return true if the meta *decoded header end's with "identity", confirming
+// Return true if the meta -decoded header end's with "identity", confirming
 // that associated body matches the content-type (no intervening compression).
 fn is_identity(decoded: Option<&http::header::HeaderValue>) -> bool {
     static IDY: &[u8] = b"identity";
