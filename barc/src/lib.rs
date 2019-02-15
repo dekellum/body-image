@@ -608,56 +608,81 @@ pub trait CompressStrategy {
         -> Result<EncodeWrapper<'a>, BarcError>;
 
     /// Return minimum length of compressible bytes for compression.
-    fn min_len(&self) -> u64 { 1 }
+    fn min_len(&self) -> u64 { 0 }
+
+    /// Return a coefficient used to weight the discount of non-compressible
+    /// body bytes. Default: 0.5
+    fn non_compressible_coef(&self) -> f64 { 0.5 }
 
     /// Return whether to check the meta -decoded header for an "identity"
     /// value, as proof that the content-type header actually characterizes
     /// the associated body, for the purpose of counting compressible bytes.
-    /// Default: false
+    /// Default: false (may change in the future)
     fn check_identity(&self) -> bool { false }
 
-    /// Return true if the provided record has at least min_len of compressible
-    /// bytes, from the response and request bodies and headers.
+    /// Return true if the provided record has at least `min_len` of
+    /// compressible bytes, from the response and request bodies and
+    /// headers.
+    ///
+    /// Any non-compressible bytes, from non-compressible bodies, are
+    /// discounted, weighted by `non_compressible_coef`.
+    #[allow(unused_parens)]
     fn is_compressible(&self, rec: &dyn MetaRecorded) -> bool {
         static CT: HeaderName = http::header::CONTENT_TYPE;
         let mut clen = 0;
-        let min_len = self.min_len();
+        let mut min_len = self.min_len();
+        let mut sufficient = None;
 
-        let idd = !self.check_identity() ||
-            is_identity(rec.meta().get(hname_meta_res_decoded()));
-        if idd && is_compressible_type(rec.res_headers().get(&CT)) {
-            clen += rec.res_body().len();
-            if clen >= min_len {
-                debug!("sufficient (res_body) compressible length: {}", clen);
-                return true;
+        let len = rec.res_body().len();
+        if len > 0 {
+            if ((!self.check_identity() ||
+                 is_identity(rec.meta().get(hname_meta_res_decoded()))) &&
+                is_compressible_type(rec.res_headers().get(&CT))) {
+                clen += len;
+            } else {
+                min_len = min_len.saturating_add(
+                    (len as f64 * self.non_compressible_coef()) as u64
+                );
             }
         }
 
-        if is_compressible_type(rec.req_headers().get(&CT)) {
-            clen += rec.req_body().len();
-            if clen >= min_len {
-                debug!("sufficient (req_body) compressible length: {}", clen);
-                return true;
+        let len = rec.req_body().len();
+        if len > 0 {
+            if is_compressible_type(rec.req_headers().get(&CT)) {
+                clen += len;
+            } else {
+                min_len = min_len.saturating_add(
+                    (len as f64 * self.non_compressible_coef()) as u64
+                );
             }
         }
 
-        clen += len_of_headers(rec.res_headers()) as u64;
-        if clen >= min_len {
-            debug!("sufficient (res_headers) compressible length: {}", clen);
-            return true;
+        if clen >= min_len { sufficient = Some("bodies"); }
+
+        if sufficient.is_none() {
+            clen += len_of_headers(rec.res_headers()) as u64;
+            if clen >= min_len { sufficient = Some("res_headers"); }
         }
 
-        clen += len_of_headers(rec.req_headers()) as u64;
-        if clen >= min_len {
-            debug!("sufficient (req_headers) compressible length: {}", clen);
-            return true;
+        if sufficient.is_none() {
+            clen += len_of_headers(rec.req_headers()) as u64;
+            if clen >= min_len { sufficient = Some("req_headers"); }
         }
 
-        clen += len_of_headers(rec.meta()) as u64;
+        if sufficient.is_none() {
+            clen += len_of_headers(rec.meta()) as u64;
+            if clen >= min_len { sufficient = Some("meta (all)"); }
+        }
 
-        debug!("full compressible length {}", clen);
-
-        (clen >= min_len)
+        if let Some(s) = sufficient {
+            debug!("found sufficient compressible length {} >= {}, at {}",
+                   clen, min_len, s);
+            true
+        } else {
+            debug!("compressible length {} < {}, won't compress",
+                   clen, min_len);
+            false
+        }
     }
 }
 
@@ -712,7 +737,7 @@ impl GzipCompressStrategy {
     /// For example, `body_image_futio::decode_res_body` as of crate version
     /// 1.1.0, will set this value on an original `Dialog`, which is preserved
     /// when converted to a `Record` for barc write.
-    /// Default: false (but this may change in the future)
+    /// Default: false (may change in the future)
     pub fn set_check_identity(mut self, check: bool) -> Self {
         self.check_identity = check;
         self
