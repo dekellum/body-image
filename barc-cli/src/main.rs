@@ -128,7 +128,9 @@ fn compress_flags(matches: &ArgMatches<'_>)
     );
     if matches.is_present("brotli") {
         #[cfg(feature = "brotli")] {
-            cs = Box::new(BrotliCompressStrategy::default());
+            cs = Box::new(
+                BrotliCompressStrategy::default().set_check_identity(true)
+            );
         }
         #[cfg(not(feature = "brotli"))] {
             quit!("Brotli compression requires the \"brotli\" build feature");
@@ -136,7 +138,9 @@ fn compress_flags(matches: &ArgMatches<'_>)
     }
     // brotli/gzip are exclusive (conflicts_with)
     if matches.is_present("gzip") {
-        cs = Box::new(GzipCompressStrategy::default());
+        cs = Box::new(
+            GzipCompressStrategy::default().set_check_identity(true)
+        );
     }
     Ok(cs)
 }
