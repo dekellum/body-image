@@ -860,27 +860,25 @@ fn is_compressible_type(ctype: Option<&http::header::HeaderValue>) -> bool {
 fn is_compressible_type_str(ctype_str: &str) -> bool {
     match ctype_str.trim().parse::<mime::Mime>() {
         Ok(mtype) => match (mtype.type_(), mtype.subtype()) {
-            (mime::TEXT, _) => true,
-            (mime::APPLICATION, mime::HTML) => true,
-            (mime::APPLICATION, mime::JAVASCRIPT) => true,
-            (mime::APPLICATION, mime::JSON) => true,
-            (mime::APPLICATION, mime::XML) => true,
-            (mime::APPLICATION, st)
-                if st == "atom"
-                || st == "rss"
-                || st == "x-font-opentype"
-                || st == "x-font-truetype"
-                || st == "x-font-ttf"
-                || st == "xhtml"
-                || st == "xml"
-                => true,
-            (mime::IMAGE, mime::SVG) => true,
-            (mime::FONT, st)
-                if st == "opentype"
-                || st == "otf"
-                || st == "ttf"
-                => true,
-            _ => false
+            (mime::TEXT, _)                           => true,
+            (mime::APPLICATION, mime::HTML)           => true,
+            (mime::APPLICATION, mime::JAVASCRIPT)     => true,
+            (mime::APPLICATION, mime::JSON)           => true,
+            (mime::APPLICATION, mime::XML)            => true,
+            (mime::APPLICATION, st) if
+                st == "atom" ||
+                st == "rss" ||
+                st == "x-font-opentype" ||
+                st == "x-font-truetype" ||
+                st == "x-font-ttf" ||
+                st == "xhtml" ||
+                st == "xml"                          => true,
+            (mime::IMAGE, mime::SVG)                 => true,
+            (mime::FONT, st) if
+                st == "opentype" ||
+                st == "otf" ||
+                st == "ttf"                          => true,
+            _                                        => false
         }
         Err(e) => {
             debug!("not compressible: unable to parse content-type: {}: {:?}",
