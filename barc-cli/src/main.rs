@@ -32,7 +32,7 @@ use crate::logger::setup_logger;
 
 // Internal errors for the CLI
 #[derive(Debug)]
-struct ClError(String);
+pub(crate) struct ClError(String);
 
 impl fmt::Display for ClError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -42,8 +42,8 @@ impl fmt::Display for ClError {
 
 impl StdError for ClError {}
 
-macro_rules! quit {
-    ($($args:tt)+) => { return Err(ClError(format!($($args)+)).into()) };
+#[macro_export] macro_rules! quit {
+    ($($args:tt)+) => { return Err($crate::ClError(format!($($args)+)).into()) };
 }
 
 fn main() {
