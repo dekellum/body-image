@@ -5,7 +5,7 @@ use barc::{BarcFile, CompressStrategy, Record, TryFrom};
 use body_image::Tunables;
 use body_image_futio::{
     ACCEPT_ENCODINGS, BROWSE_ACCEPT, decode_res_body, fetch,
-    RequestRecord, RequestRecorder, user_agent
+    FutioError, RequestRecord, RequestRecorder, user_agent
 };
 
 use crate::Flaw;
@@ -32,7 +32,16 @@ pub(crate) fn record(
     let mut dialog = fetch(req, &tune)?;
 
     if decode {
-        decode_res_body(&mut dialog, &tune)?;
+        match decode_res_body(&mut dialog, &tune) {
+            Ok(_) => {}
+            Err(FutioError::UnsupportedEncoding(enc)) => {
+                return Err(format!(
+                    "Unsupported encoding {}; \
+                     use `--no-decode` flag to record anyway",
+                    enc).into());
+            }
+            Err(e) => return Err(e.into())
+        }
     }
 
     let bfile = BarcFile::new(barc_path);
