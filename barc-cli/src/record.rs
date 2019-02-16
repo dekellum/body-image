@@ -8,7 +8,7 @@ use body_image_futio::{
     FutioError, RequestRecord, RequestRecorder, user_agent
 };
 
-use crate::Flaw;
+use crate::{Flaw, quit};
 
 /// The `record` command implementation.
 pub(crate) fn record(
@@ -35,10 +35,9 @@ pub(crate) fn record(
         match decode_res_body(&mut dialog, &tune) {
             Ok(_) => {}
             Err(FutioError::UnsupportedEncoding(enc)) => {
-                return Err(format!(
-                    "Unsupported encoding {}; \
-                     use `--no-decode` flag to record anyway",
-                    enc).into());
+                quit!("Unsupported encoding {}; \
+                       use `--no-decode` flag to record anyway",
+                      enc);
             }
             Err(e) => return Err(e.into())
         }
