@@ -134,7 +134,9 @@ pub enum FutioError {
     /// `Brotli`, when the _brotli_ feature is not enabled.
     UnsupportedEncoding(Encoding),
 
-    /// Other unclassified errors.
+    /// Other unclassified errors. There is intentionally no `From`
+    /// implementation for `Flaw` to this variant, as that could easily lead
+    /// to misclassification.  Instead it should be manually constructed.
     Other(Flaw),
 
     /// Unused variant to both enable non-exhaustive matching and warn against
@@ -191,12 +193,6 @@ impl From<hyper::Error> for FutioError {
 impl From<io::Error> for FutioError {
     fn from(err: io::Error) -> FutioError {
         FutioError::Body(BodyError::Io(err))
-    }
-}
-
-impl From<Flaw> for FutioError {
-    fn from(flaw: Flaw) -> FutioError {
-        FutioError::Other(flaw)
     }
 }
 
