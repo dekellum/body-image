@@ -148,11 +148,9 @@ impl fmt::Display for FutioError {
             FutioError::Body(ref be) =>
                 write!(f, "With body: {}", be),
             FutioError::ResponseTimeout(d) =>
-                write!(f,
-                    "Timeout before initial response ({:?})", d),
+                write!(f, "Timeout before initial response ({:?})", d),
             FutioError::BodyTimeout(d) =>
-                write!(f,
-                    "Timeout before streaming body complete ({:?})", d),
+                write!(f, "Timeout before streaming body complete ({:?})", d),
             FutioError::ContentLengthTooLong(l) =>
                 write!(f, "Response Content-Length too long: {}", l),
             FutioError::Hyper(ref e) =>
@@ -170,9 +168,9 @@ impl fmt::Display for FutioError {
 impl StdError for FutioError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
-            FutioError::Body(ref be) => Some(be),
-            FutioError::Hyper(ref he) => Some(he),
-            FutioError::Other(ref flaw) => Some(flaw.as_ref()),
+            FutioError::Body(ref be)         => Some(be),
+            FutioError::Hyper(ref he)        => Some(he),
+            FutioError::Other(ref flaw)      => Some(flaw.as_ref()),
             _ => None
         }
     }
@@ -250,7 +248,7 @@ pub fn request_dialog<CN, B>(
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_map(te, || FutioError::ResponseTimeout(t))
+                map_timeout(te, || FutioError::ResponseTimeout(t))
             })
         )
     } else {
@@ -263,7 +261,7 @@ pub fn request_dialog<CN, B>(
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_map(te, || FutioError::BodyTimeout(t))
+                map_timeout(te, || FutioError::BodyTimeout(t))
             })
         )
     } else {
@@ -273,7 +271,7 @@ pub fn request_dialog<CN, B>(
     futr.and_then(InDialog::prepare)
 }
 
-fn timeout_map<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
+fn map_timeout<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
     where F: FnOnce() -> FutioError
 {
     if te.is_elapsed() {
