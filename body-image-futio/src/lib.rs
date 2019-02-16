@@ -127,6 +127,9 @@ pub enum FutioError {
     /// The content-length header exceeded `Tunables::max_body`.
     ContentLengthTooLong(u64),
 
+    /// Error from _http_.
+    Http(http::Error),
+
     /// Error from _hyper_.
     Hyper(hyper::Error),
 
@@ -155,6 +158,8 @@ impl fmt::Display for FutioError {
                 write!(f, "Timeout before streaming body complete ({:?})", d),
             FutioError::ContentLengthTooLong(l) =>
                 write!(f, "Response Content-Length too long: {}", l),
+            FutioError::Http(ref e) =>
+                write!(f, "Http error: {}", e),
             FutioError::Hyper(ref e) =>
                 write!(f, "Hyper error: {}", e),
             FutioError::UnsupportedEncoding(e) =>
@@ -171,6 +176,7 @@ impl StdError for FutioError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
             FutioError::Body(ref be)         => Some(be),
+            FutioError::Http(ref ht)         => Some(ht),
             FutioError::Hyper(ref he)        => Some(he),
             FutioError::Other(ref flaw)      => Some(flaw.as_ref()),
             _ => None
@@ -181,6 +187,12 @@ impl StdError for FutioError {
 impl From<BodyError> for FutioError {
     fn from(err: BodyError) -> FutioError {
         FutioError::Body(err)
+    }
+}
+
+impl From<http::Error> for FutioError {
+    fn from(err: http::Error) -> FutioError {
+        FutioError::Http(err)
     }
 }
 
