@@ -95,7 +95,8 @@ impl fmt::Display for BodyError {
                 ),
             BodyError::Io(ref e) =>
                 write!(f, "Body I/O: {}", e),
-            BodyError::_FutureProof => unreachable!()
+            BodyError::_FutureProof =>
+                unreachable!("Don't abuse the _FutureProof!")
         }
     }
 }

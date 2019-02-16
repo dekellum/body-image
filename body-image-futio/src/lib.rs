@@ -161,7 +161,8 @@ impl fmt::Display for FutioError {
                 write!(f, "Unsupported encoding: {}", e),
             FutioError::Other(ref flaw) =>
                 write!(f, "Other error: {}", flaw),
-            FutioError::_FutureProof => unreachable!()
+            FutioError::_FutureProof =>
+                unreachable!("Don't abuse the _FutureProof!")
         }
     }
 }
@@ -671,5 +672,12 @@ mod futio_tests {
         assert!(*LOG_SETUP);
         assert!(is_flaw(FutioError::ContentLengthTooLong(42).into()));
         assert!(is_flaw(FutioError::Other("one off".into()).into()));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_error_future_proof() {
+        assert!(!FutioError::_FutureProof.to_string().is_empty(),
+                "should have panic'd before, unreachable")
     }
 }
