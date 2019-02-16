@@ -209,7 +209,8 @@ impl fmt::Display for BarcError {
                 write!(f, "Record to Dialog conversion; {}", dce),
             BarcError::InvalidHeader(ref flaw) =>
                 write!(f, "Invalid header; {}", flaw),
-            BarcError::_FutureProof => unreachable!()
+            BarcError::_FutureProof =>
+                unreachable!("Don't abuse the _FutureProof!")
         }
     }
 }
@@ -443,7 +444,8 @@ impl fmt::Display for DialogConvertError {
                 write!(f, "Invalid HTTP status code: {}", isc),
             DialogConvertError::InvalidResDecoded(ref d) =>
                 write!(f, "Invalid response-decoded header value: {}", d),
-            DialogConvertError::_FutureProof => unreachable!()
+            DialogConvertError::_FutureProof =>
+                unreachable!("Don't abuse the _FutureProof!")
         }
     }
 }

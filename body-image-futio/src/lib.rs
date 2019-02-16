@@ -127,6 +127,9 @@ pub enum FutioError {
     /// The content-length header exceeded `Tunables::max_body`.
     ContentLengthTooLong(u64),
 
+    /// Error from _http_.
+    Http(http::Error),
+
     /// Error from _hyper_.
     Hyper(hyper::Error),
 
@@ -134,7 +137,9 @@ pub enum FutioError {
     /// `Brotli`, when the _brotli_ feature is not enabled.
     UnsupportedEncoding(Encoding),
 
-    /// Other unclassified errors.
+    /// Other unclassified errors. There is intentionally no `From`
+    /// implementation for `Flaw` to this variant, as that could easily lead
+    /// to misclassification.  Instead it should be manually constructed.
     Other(Flaw),
 
     /// Unused variant to both enable non-exhaustive matching and warn against
@@ -148,20 +153,21 @@ impl fmt::Display for FutioError {
             FutioError::Body(ref be) =>
                 write!(f, "With body: {}", be),
             FutioError::ResponseTimeout(d) =>
-                write!(f,
-                    "Timeout before initial response ({:?})", d),
+                write!(f, "Timeout before initial response ({:?})", d),
             FutioError::BodyTimeout(d) =>
-                write!(f,
-                    "Timeout before streaming body complete ({:?})", d),
+                write!(f, "Timeout before streaming body complete ({:?})", d),
             FutioError::ContentLengthTooLong(l) =>
                 write!(f, "Response Content-Length too long: {}", l),
+            FutioError::Http(ref e) =>
+                write!(f, "Http error: {}", e),
             FutioError::Hyper(ref e) =>
                 write!(f, "Hyper error: {}", e),
             FutioError::UnsupportedEncoding(e) =>
                 write!(f, "Unsupported encoding: {}", e),
             FutioError::Other(ref flaw) =>
                 write!(f, "Other error: {}", flaw),
-            FutioError::_FutureProof => unreachable!()
+            FutioError::_FutureProof =>
+                unreachable!("Don't abuse the _FutureProof!")
         }
     }
 }
@@ -169,9 +175,10 @@ impl fmt::Display for FutioError {
 impl StdError for FutioError {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
-            FutioError::Body(ref be) => Some(be),
-            FutioError::Hyper(ref he) => Some(he),
-            FutioError::Other(ref flaw) => Some(flaw.as_ref()),
+            FutioError::Body(ref be)         => Some(be),
+            FutioError::Http(ref ht)         => Some(ht),
+            FutioError::Hyper(ref he)        => Some(he),
+            FutioError::Other(ref flaw)      => Some(flaw.as_ref()),
             _ => None
         }
     }
@@ -180,6 +187,12 @@ impl StdError for FutioError {
 impl From<BodyError> for FutioError {
     fn from(err: BodyError) -> FutioError {
         FutioError::Body(err)
+    }
+}
+
+impl From<http::Error> for FutioError {
+    fn from(err: http::Error) -> FutioError {
+        FutioError::Http(err)
     }
 }
 
@@ -192,12 +205,6 @@ impl From<hyper::Error> for FutioError {
 impl From<io::Error> for FutioError {
     fn from(err: io::Error) -> FutioError {
         FutioError::Body(BodyError::Io(err))
-    }
-}
-
-impl From<Flaw> for FutioError {
-    fn from(flaw: Flaw) -> FutioError {
-        FutioError::Other(flaw)
     }
 }
 
@@ -249,7 +256,7 @@ pub fn request_dialog<CN, B>(
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_map(te, || FutioError::ResponseTimeout(t))
+                map_timeout(te, || FutioError::ResponseTimeout(t))
             })
         )
     } else {
@@ -262,7 +269,7 @@ pub fn request_dialog<CN, B>(
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_map(te, || FutioError::BodyTimeout(t))
+                map_timeout(te, || FutioError::BodyTimeout(t))
             })
         )
     } else {
@@ -272,7 +279,7 @@ pub fn request_dialog<CN, B>(
     futr.and_then(InDialog::prepare)
 }
 
-fn timeout_map<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
+fn map_timeout<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
     where F: FnOnce() -> FutioError
 {
     if te.is_elapsed() {
@@ -671,5 +678,12 @@ mod futio_tests {
         assert!(*LOG_SETUP);
         assert!(is_flaw(FutioError::ContentLengthTooLong(42).into()));
         assert!(is_flaw(FutioError::Other("one off".into()).into()));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_error_future_proof() {
+        assert!(!FutioError::_FutureProof.to_string().is_empty(),
+                "should have panic'd before, unreachable")
     }
 }
