@@ -1,10 +1,11 @@
 ## 1.1.0 (TBD)
-* _Error reform_, add `FutioError` enum and remove _failure_ crate dependency:
+* _Error reform_: add `FutioError` enum and remove _failure_ crate dependency:
   * Introduce new `FutioError` enum for the most common error cases. This type
     implements `StdError`, aka `std::error::Error`.
   * Replace `failure::Error`, used for encapsulation of otherwise private
-    dependency errors, with compatible `Box<StdError + Send + Sync
-    + 'static>`, type-aliased as `Flaw` and in `FutioError::Other(Flaw)`.
+    dependency errors, with compatible
+    `Box<StdError + Send + Sync + 'static>`, type-aliased as `Flaw` and in
+    `FutioError::Other(Flaw)`.
   * Add `FutioError::UnsupportedEncoding` for use by `decompress` and
     `decode_res_body` for unsupported encodings.  Previously this case was
     treated as if no compression encoding was found.

@@ -7,7 +7,7 @@
   decoding support and an error for unsupported encodings, for which this CLI
   can now provide better context.
 
-* Upgrade to barc 1.1.0 for `*CompressStrategy::set_check_identity` support, to
+* Upgrade to barc 1.1.0 for `CompressStrategy::set_check_identity` support, to
   avoid double, non-productive compression.
 
 ## 1.0.1 (2019-1-4)

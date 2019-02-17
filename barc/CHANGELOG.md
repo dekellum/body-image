@@ -14,7 +14,7 @@
   internal, but include public utility methods `write_headers` and
   `write_body`. Reference types are used to maintain compatibility.
 
-* _Error reform_, remove _failure_ crate dependency:
+* _Error reform_: remove _failure_ crate dependency:
   * Drop `Fail` implementation of `BarcError` and add `impl StdError for
     BarcError` (aka `std::error::Error`).
   * `BarcError::InvalidHeader` variant's use of `failure::Error`
