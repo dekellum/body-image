@@ -1,10 +1,19 @@
 ## 1.1.0 (TBD)
 * `BodyImage::write_to` and `BodyImage::read_from` are now generic over `Write`
   and `Read` types, respectively, instead of using `dyn Trait`
-  objects. References types used to keep this a compatible change.
+  objects. Reference types are used to keep this a compatible change.
 
 * `BodyReader` now directly implements `Read`. The `BodyReader::as_read` method
   (returning `&mut dyn Read`) is now deprecated.
+
+* _Error reform:_ Drop `Fail` implementation of `BodyError` (and its _failure_
+  crate dependency) and add `impl std::error::Error for BodyError`.
+  Since `failure::Fail` offers a blanket implementation for
+  `std::error::Error`, this is graded a MINOR-version compatibility hazard.
+
+* Add `Encoding::Compress` (for error handling consistency with this legacy
+  format) and `Encoding::Identity` (as an explicit indicator that any
+  Transfer/Content-Encoding was decoded).
 
 ## 1.0.1 (2019-1-4)
 * Upgrade log dep to reflect 2018 minimal versions.

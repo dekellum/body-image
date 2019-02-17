@@ -1,6 +1,33 @@
 ## 1.1.0 (TBD)
-* Upgrade to body-image 1.1.0, for use of `BodyReader` as direct
-  `Read` implementation.
+* _Error reform_, add `FutioError` enum and remove _failure_ crate dependency:
+  * Introduce new `FutioError` enum for the most common error cases. This type
+    implements `StdError`, aka `std::error::Error`.
+  * Replace `failure::Error`, used for encapsulation of otherwise private
+    dependency errors, with compatible `Box<StdError + Send + Sync
+    + 'static>`, type-aliased as `Flaw` and in `FutioError::Other(Flaw)`.
+  * Add `FutioError::UnsupportedEncoding` for use by `decompress` and
+    `decode_res_body` for unsupported encodings.  Previously this case was
+    treated as if no compression encoding was found.
+  * `RequestRecorder<T>` trait methods now simply return `http::Error` for the
+    `Err(E)` type. None of the implementations have any other errors and are
+    unlikely to have them in the future. Struct `http::Error` is also
+    `StdError`, and for convenience and compatiblity, a `From` conversion to a
+    `FutioError::Http(http::Error)` variant is included.
+
+  Since `failure::Fail` offers a blanket implementation for `StdError`, which
+  includes `Flaw` and `FutioError`, this is graded a MINOR-version
+  compatibility hazard. Testing of unmodified dependent crates/projects
+  supports this conclusion.
+
+* Function `decode_res_body` now appends `Encoding::Identity` to the
+  `res_decoded` list upon success, regardless of if a compression encoding was
+  found to decode. This can be used an an explicit indicator that the check
+  was made and the associated content-type *should* characterize the current
+  `BodyImage`. For a use case, see `barc::CompressStrategy::check_identity` as
+  used by the latest _barc-cli_ to avoid double, non-productive compression.
+
+* Upgrade to body-image 1.1.0, for use of `BodyReader` as direct `Read`
+  implementation.
 
 ## 1.0.3 (2019-1-11)
 * Upgrade to tokio 0.1.14 and require only the tokio feature flags (and
