@@ -461,7 +461,7 @@ fn setup_cli<'a, 'b>(var_help: &'a VarHelp) -> App<'a, 'b>
              .short("d")
              .long("debug")
              .multiple(true)
-             .help("Enable more logging, and up to `-ddd`")
+             .help("Enable more logging, and up to `-dddd`")
              .global(true))
         .subcommand(cat)
         .subcommand(cp)

@@ -20,8 +20,10 @@ pub fn setup_logger(level: u32) -> Result<(), Flaw> {
         });
     disp = if level == 0 {
         disp.level(log::LevelFilter::Info)
-    } else {
+    } else if level < 3 {
         disp.level(log::LevelFilter::Debug)
+    } else {
+        disp.level(log::LevelFilter::Trace)
     };
 
     #[cfg(feature = "futio")]
