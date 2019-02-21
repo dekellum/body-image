@@ -42,8 +42,11 @@ impl fmt::Display for ClError {
 
 impl StdError for ClError {}
 
+// Export is really only for this bin crate
 #[macro_export] macro_rules! quit {
-    ($($args:tt)+) => { return Err($crate::ClError(format!($($args)+)).into()) };
+    ($($args:tt)+) => {
+        return Err($crate::ClError(format!($($args)+)).into())
+    };
 }
 
 fn main() {
