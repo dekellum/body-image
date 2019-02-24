@@ -47,16 +47,11 @@ pub fn setup_logger(level: u32) -> Result<(), Flaw> {
     } else {
         disp.level(log::LevelFilter::Trace)
     };
-
-    #[cfg(feature = "futio")]
-    {
-        if level < 2 {
-            // These are only for record/client deps
-            disp = disp
-                .level_for("hyper::proto",  log::LevelFilter::Info)
-                .level_for("tokio_core",    log::LevelFilter::Info)
-                .level_for("tokio_reactor", log::LevelFilter::Info);
-        }
+    if level < 2 {
+        disp = disp
+            .level_for("hyper::proto",  log::LevelFilter::Info)
+            .level_for("tokio_core",    log::LevelFilter::Info)
+            .level_for("tokio_reactor", log::LevelFilter::Info);
     }
 
     disp.chain(std::io::stderr())
