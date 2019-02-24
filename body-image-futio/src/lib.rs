@@ -666,7 +666,7 @@ mod futio_tests {
 
     use log::debug;
     use super::{FutioError, Flaw};
-    use crate::logger::LOG_SETUP;
+    use crate::logger::test_logger;
 
     fn is_flaw(f: Flaw) -> bool {
         debug!("({:?}) -> \"{}\"", &f, &f);
@@ -675,7 +675,7 @@ mod futio_tests {
 
     #[test]
     fn test_error_as_flaw() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         assert!(is_flaw(FutioError::ContentLengthTooLong(42).into()));
         assert!(is_flaw(FutioError::Other("one off".into()).into()));
     }

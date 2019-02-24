@@ -1,44 +1,35 @@
 use std;
+use std::sync::Once;
 
 use fern;
 use log;
-
-#[cfg(test)] use lazy_static::lazy_static;
-
 use crate::Flaw;
 
-// Use lazy static to ensure we only setup logging once (by first test and
-// thread)
-#[cfg(test)]
-lazy_static! {
-    pub static ref LOG_SETUP: bool = debug_logger();
-}
+pub fn test_logger() -> bool {
+    static TEST_LOG_INIT: Once = Once::new();
 
-#[cfg(test)]
-pub fn debug_logger() -> bool {
-    let level = if let Ok(l) = std::env::var("TEST_LOG") {
-        l.parse().expect("TEST_LOG parse integer")
-    } else {
-        0
-    };
-    if level > 0 {
-        setup_logger(level-1).expect("fern setup logger");
-    }
+    TEST_LOG_INIT.call_once(|| {
+        let level = if let Ok(l) = std::env::var("TEST_LOG") {
+            l.parse().expect("TEST_LOG parse integer")
+        } else {
+            0
+        };
+        if level > 0 {
+            setup_logger(level-1).expect("fern setup logger");
+        }
+    });
     true
 }
 
-pub fn setup_logger(level: u32) -> Result<(), Flaw> {
+fn setup_logger(level: u32) -> Result<(), Flaw> {
     let mut disp = fern::Dispatch::new()
         .format(|out, message, record| {
             let t = std::thread::current();
+            let tn = t.name().unwrap_or("-");
             out.finish(format_args!(
                 "{} {} {}: {}",
-                record.level(),
-                record.target(),
-                t.name().map(str::to_owned)
-                    .unwrap_or_else(|| format!("{:?}", t.id())),
-                message
-            ))
+                record.level(), record.target(), tn, message
+            ));
         });
     disp = if level == 0 {
         disp.level(log::LevelFilter::Info)
@@ -59,13 +50,12 @@ pub fn setup_logger(level: u32) -> Result<(), Flaw> {
         .map_err(Flaw::from)
 }
 
-#[cfg(test)]
 mod tests {
-    use super::LOG_SETUP;
+    use super::test_logger;
 
     /// Sanity test and silence non-use warnings.
     #[test]
     fn log_setup() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
     }
 }
