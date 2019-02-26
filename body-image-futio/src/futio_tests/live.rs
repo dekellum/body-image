@@ -2,6 +2,7 @@ use body_image::Tunables;
 use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
             Recorded, RequestRecord, RequestRecorder, user_agent};
 use crate::logger::test_logger;
+use log::debug;
 
 fn get_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, http::Error>
@@ -23,7 +24,7 @@ fn test_small_http() {
     let req = get_request("http://gravitext.com").unwrap();
 
     let dl = fetch(req, &tune).unwrap();
-    println!("Response {:#?}", dl);
+    debug!("Response {:#?}", dl);
 
     assert!(dl.res_body().is_ram());
     assert!(dl.res_body().len() > 0);
@@ -37,7 +38,7 @@ fn test_small_https() {
 
     let dl = fetch(req, &tune).unwrap();
     let dl = dl.clone();
-    println!("Response {:#?}", dl);
+    debug!("Response {:#?}", dl);
 
     assert!(dl.res_body().is_ram());
     assert!(dl.res_body().len() > 0);
@@ -50,7 +51,7 @@ fn test_not_found() {
     let req = get_request("http://gravitext.com/no/existe").unwrap();
 
     let dl = fetch(req, &tune).unwrap();
-    println!("Response {:#?}", dl);
+    debug!("Response {:#?}", dl);
 
     assert_eq!(dl.res_status().as_u16(), 404);
 

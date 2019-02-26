@@ -22,7 +22,7 @@ use hyper::client::{Client, HttpConnector};
 use hyper::server::conn::Http;
 use hyper::service::{service_fn, service_fn_ok};
 
-use log::warn;
+use log::{debug, warn};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 use crate::{AsyncBodyImage, Flaw, FutioError, RequestRecord, RequestRecorder,
@@ -76,7 +76,7 @@ fn post_echo_body() {
     let body = fs_body_image(445);
     match rt.block_on(post_body_req::<Body>(&url, body, &tune)) {
         Ok(dl) => {
-            println!("{:#?}", dl);
+            debug!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
         }
         Err(e) => {
@@ -100,7 +100,7 @@ fn post_echo_async_body() {
     let body = fs_body_image(445);
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
-            println!("{:#?}", dl);
+            debug!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
         }
         Err(e) => {
@@ -126,7 +126,7 @@ fn post_echo_async_body_mmap_copy() {
     body.mem_map().unwrap();
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
-            println!("{:#?}", dl);
+            debug!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
         }
         Err(e) => {
@@ -162,7 +162,7 @@ fn run_post_echo_uni_body(mmap: bool) {
     let body = fs_body_image(194_767);
     match rt.block_on(post_body_req::<UniBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
-            println!("{:#?}", dl);
+            debug!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 194_767);
         }
         Err(e) => {

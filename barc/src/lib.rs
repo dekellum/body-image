@@ -1257,7 +1257,7 @@ mod barc_tests {
         let mut reader = bfile.reader()?;
         let record = reader.read(&tune)?.unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 1);
@@ -1311,7 +1311,7 @@ mod barc_tests {
         let mut reader = bfile.reader()?;
         let record = reader.read(&tune)?.unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 0);
@@ -1418,7 +1418,7 @@ mod barc_tests {
         let mut reader = bfile.reader()?;
         let record = reader.read(&tune)?.unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 1);
@@ -1463,7 +1463,7 @@ mod barc_tests {
 
         let record = reader.read(&tune).unwrap().unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 0);
@@ -1494,7 +1494,7 @@ mod barc_tests {
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap().unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 5);
@@ -1564,7 +1564,7 @@ mod barc_tests {
             r
         };
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert!(!record.res_body.is_ram());
         let mut br = record.res_body.reader();
@@ -1593,7 +1593,7 @@ mod barc_tests {
         };
         record.res_body.mem_map().unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert!(!record.res_body.is_ram());
         let mut br = record.res_body.reader();
@@ -1624,7 +1624,7 @@ mod barc_tests {
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert!(record.is_none());
 
@@ -1698,7 +1698,7 @@ mod barc_tests {
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap().unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 4);
