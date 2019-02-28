@@ -1,4 +1,4 @@
-use log::{debug};
+use tao_log::debug;
 
 use body_image::{BodyError, BodySink, Tunables};
 

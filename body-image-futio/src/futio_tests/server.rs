@@ -22,7 +22,7 @@ use hyper::client::{Client, HttpConnector};
 use hyper::server::conn::Http;
 use hyper::service::{service_fn, service_fn_ok};
 
-use log::{debug, warn};
+use tao_log::{debug, warn};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 use crate::{AsyncBodyImage, Flaw, FutioError, RequestRecord, RequestRecorder,

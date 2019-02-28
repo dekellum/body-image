@@ -55,7 +55,7 @@ use hyperx::header::{
     ContentEncoding, ContentLength, Encoding as HyEncoding,
     Header, TransferEncoding
 };
-use log::{debug, warn};
+use tao_log::{debug, warn};
 use tokio;
 use tokio::timer::timeout;
 use tokio::util::FutureExt;
@@ -661,7 +661,7 @@ mod futio_tests {
     /// These tests may fail because they depend on public web servers
     #[cfg(feature = "may_fail")]    mod live;
 
-    use log::debug;
+    use tao_log::debug;
     use super::{FutioError, Flaw};
     use crate::logger::test_logger;
 

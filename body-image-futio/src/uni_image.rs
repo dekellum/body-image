@@ -6,7 +6,7 @@ use std::vec::IntoIter;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use http;
-use log::debug;
+use tao_log::debug;
 use olio::fs::rc::ReadSlice;
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
