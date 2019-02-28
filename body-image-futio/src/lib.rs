@@ -65,11 +65,8 @@ use body_image::{
     Epilog, Prolog, Dialog, Recorded, RequestRecorded, Tunables,
 };
 
-/// Conveniently compact type alias for dyn Trait `std::error::Error` errors,
-/// generally used in test code, to represent many possible errors, or where
-/// writing the concrete type would expose an implementation detail (e.g. of
-/// an otherwise private dependency). It is possible to query and downcast the
-/// type via methods of
+/// Conveniently compact type alias for dyn Trait `std::error::Error`. It is
+/// possible to query and downcast the type via methods of
 /// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
