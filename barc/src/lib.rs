@@ -1301,6 +1301,7 @@ mod barc_tests {
     fn write_read_empty_record(fname: &PathBuf, strategy: &dyn CompressStrategy)
         -> Result<(), Flaw>
     {
+        assert!(test_logger());
         let bfile = BarcFile::new(fname);
 
         let mut writer = bfile.writer()?;
@@ -1489,6 +1490,7 @@ mod barc_tests {
 
     #[test]
     fn test_read_sample() {
+        assert!(test_logger());
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/example.barc");
         let mut reader = bfile.reader().unwrap();
@@ -1550,6 +1552,7 @@ mod barc_tests {
 
     #[test]
     fn test_read_sample_larger() {
+        assert!(test_logger());
         let record = {
             let tune = Tuner::new()
                 .set_max_body_ram(1024) // < 1270 expected length
@@ -1578,6 +1581,7 @@ mod barc_tests {
     #[cfg(feature = "mmap")]
     #[test]
     fn test_read_sample_mapped() {
+        assert!(test_logger());
         let mut record = {
             let tune = Tuner::new()
                 .set_max_body_ram(1024) // < 1270 expected length
@@ -1606,6 +1610,7 @@ mod barc_tests {
 
     #[test]
     fn test_read_empty_file() {
+        assert!(test_logger());
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/empty.barc");
         let mut reader = bfile.reader().unwrap();
@@ -1619,6 +1624,7 @@ mod barc_tests {
 
     #[test]
     fn test_read_over_reserved() {
+        assert!(test_logger());
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/reserved.barc");
         let mut reader = bfile.reader().unwrap();
@@ -1693,6 +1699,7 @@ mod barc_tests {
 
     #[test]
     fn test_read_204_no_body() {
+        assert!(test_logger());
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/204_no_body.barc");
         let mut reader = bfile.reader().unwrap();
