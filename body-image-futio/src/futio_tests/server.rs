@@ -75,9 +75,9 @@ fn post_echo_body() {
         .finish();
     let body = fs_body_image(445);
     match rt.block_on(post_body_req::<Body>(&url, body, &tune)) {
-        Ok(dl) => {
-            debug!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 445);
+        Ok(dialog) => {
+            debugv!(&dialog);
+            assert_eq!(dialog.res_body().len(), 445);
         }
         Err(e) => {
             panic!("failed with: {}", e);
@@ -99,9 +99,9 @@ fn post_echo_async_body() {
         .finish();
     let body = fs_body_image(445);
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
-        Ok(dl) => {
-            debug!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 445);
+        Ok(dialog) => {
+            debugv!(&dialog);
+            assert_eq!(dialog.res_body().len(), 445);
         }
         Err(e) => {
             panic!("failed with: {}", e);
@@ -125,9 +125,9 @@ fn post_echo_async_body_mmap_copy() {
     let mut body = fs_body_image(445);
     body.mem_map().unwrap();
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
-        Ok(dl) => {
-            debug!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 445);
+        Ok(dialog) => {
+            debugv!(&dialog);
+            assert_eq!(dialog.res_body().len(), 445);
         }
         Err(e) => {
             panic!("failed with: {}", e);
@@ -161,9 +161,9 @@ fn run_post_echo_uni_body(mmap: bool) {
         .finish();
     let body = fs_body_image(194_767);
     match rt.block_on(post_body_req::<UniBodyImage>(&url, body, &tune)) {
-        Ok(dl) => {
-            debug!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 194_767);
+        Ok(dialog) => {
+            debugv!(&dialog);
+            assert_eq!(dialog.res_body().len(), 194_767);
         }
         Err(e) => {
             panic!("failed with: {}", e);

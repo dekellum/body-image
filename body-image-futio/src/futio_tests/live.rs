@@ -23,8 +23,7 @@ fn test_small_http() {
     let tune = Tunables::new();
     let req = get_request("http://gravitext.com").unwrap();
 
-    let dl = fetch(req, &tune).unwrap();
-    debug!("Response {:#?}", dl);
+    let dl = debugv!(fetch(req, &tune)).unwrap();
 
     assert!(dl.res_body().is_ram());
     assert!(dl.res_body().len() > 0);
@@ -36,9 +35,8 @@ fn test_small_https() {
     let tune = Tunables::new();
     let req = get_request("https://www.usa.gov").unwrap();
 
-    let dl = fetch(req, &tune).unwrap();
-    let dl = dl.clone();
-    debug!("Response {:#?}", dl);
+    let dl = debugv!(fetch(req, &tune)).unwrap();
+    let dl = dl.clone(); // for coverage only
 
     assert!(dl.res_body().is_ram());
     assert!(dl.res_body().len() > 0);
@@ -50,8 +48,7 @@ fn test_not_found() {
     let tune = Tunables::new();
     let req = get_request("http://gravitext.com/no/existe").unwrap();
 
-    let dl = fetch(req, &tune).unwrap();
-    debug!("Response {:#?}", dl);
+    let dl = debugv!(fetch(req, &tune)).unwrap();
 
     assert_eq!(dl.res_status().as_u16(), 404);
 

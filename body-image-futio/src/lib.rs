@@ -666,7 +666,7 @@ mod futio_tests {
     use crate::logger::test_logger;
 
     fn is_flaw(f: Flaw) -> bool {
-        debug!("({:?}) -> \"{}\"", &f, &f);
+        debug!("Flaw Debug: {:?}, Display: \"{}\"", f, f);
         true
     }
 
