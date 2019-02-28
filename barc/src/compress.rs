@@ -478,11 +478,11 @@ impl Read for DecodeWrapper {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logger::LOG_SETUP;
+    use crate::logger::test_logger;
 
     #[test]
     fn test_compressible_types() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         assert!(is_compressible_type_str("text/html"));
         assert!(is_compressible_type_str("Text/html; charset=utf8"));
         assert!(is_compressible_type_str("image/sVg"));
@@ -496,7 +496,7 @@ mod tests {
 
     #[test]
     fn test_not_compressible_types() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         assert!(!is_compressible_type_str("image/png"));
 
         // Mime isn't as lenient as we might like

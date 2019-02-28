@@ -42,8 +42,11 @@ impl fmt::Display for ClError {
 
 impl StdError for ClError {}
 
+// Export is really only for this bin crate
 #[macro_export] macro_rules! quit {
-    ($($args:tt)+) => { return Err($crate::ClError(format!($($args)+)).into()) };
+    ($($args:tt)+) => {
+        return Err($crate::ClError(format!($($args)+)).into())
+    };
 }
 
 fn main() {
@@ -461,7 +464,7 @@ fn setup_cli<'a, 'b>(var_help: &'a VarHelp) -> App<'a, 'b>
              .short("d")
              .long("debug")
              .multiple(true)
-             .help("Enable more logging, and up to `-ddd`")
+             .help("Enable more logging, and up to `-dddd`")
              .global(true))
         .subcommand(cat)
         .subcommand(cp)

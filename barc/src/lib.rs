@@ -1163,7 +1163,7 @@ mod barc_tests {
     use http::header::{AGE, REFERER, VIA};
     use super::*;
     use body_image::Tuner;
-    use crate::logger::LOG_SETUP;
+    use crate::logger::test_logger;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, Flaw> {
         let target = env!("CARGO_MANIFEST_DIR");
@@ -1199,7 +1199,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_small_gzip() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("small_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_min_len(0);
         write_read_small(&fname, &strategy).unwrap();
@@ -1209,7 +1209,7 @@ mod barc_tests {
     #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_small_brotli() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("small_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default().set_min_len(0);
         write_read_small(&fname, &strategy).unwrap();
@@ -1257,7 +1257,7 @@ mod barc_tests {
         let mut reader = bfile.reader()?;
         let record = reader.read(&tune)?.unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 1);
@@ -1273,7 +1273,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_empty_record() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("empty_record.barc").unwrap();
         let strategy = NoCompressStrategy::default();
         write_read_empty_record(&fname, &strategy).unwrap();;
@@ -1281,7 +1281,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_empty_record_gzip() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("empty_record_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_min_len(1);
         write_read_empty_record(&fname, &strategy).unwrap();
@@ -1291,7 +1291,7 @@ mod barc_tests {
     #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_empty_record_brotli() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("empty_record_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default().set_min_len(1);
         write_read_empty_record(&fname, &strategy).unwrap();
@@ -1301,6 +1301,7 @@ mod barc_tests {
     fn write_read_empty_record(fname: &PathBuf, strategy: &dyn CompressStrategy)
         -> Result<(), Flaw>
     {
+        assert!(test_logger());
         let bfile = BarcFile::new(fname);
 
         let mut writer = bfile.writer()?;
@@ -1311,7 +1312,7 @@ mod barc_tests {
         let mut reader = bfile.reader()?;
         let record = reader.read(&tune)?.unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 0);
@@ -1326,7 +1327,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_large() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("large.barc").unwrap();
         let strategy = NoCompressStrategy::default();
         write_read_large(&fname, &strategy).unwrap();;
@@ -1334,7 +1335,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_large_gzip() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("large_gzip.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_min_len(0xa359b);
         write_read_large(&fname, &strategy).unwrap();
@@ -1343,7 +1344,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_large_gzip_0() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("large_gzip_0.barc").unwrap();
         let strategy = GzipCompressStrategy::default().set_compression_level(0);
         write_read_large(&fname, &strategy).unwrap();
@@ -1353,7 +1354,7 @@ mod barc_tests {
     #[cfg(feature = "brotli")]
     #[test]
     fn test_write_read_large_brotli() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("large_brotli.barc").unwrap();
         let strategy = BrotliCompressStrategy::default().set_min_len(0xa359b);
         write_read_large(&fname, &strategy).unwrap();
@@ -1418,7 +1419,7 @@ mod barc_tests {
         let mut reader = bfile.reader()?;
         let record = reader.read(&tune)?.unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 1);
@@ -1435,7 +1436,7 @@ mod barc_tests {
 
     #[test]
     fn test_write_read_parallel() {
-        assert!(*LOG_SETUP);
+        assert!(test_logger());
         let fname = barc_test_file("parallel.barc").unwrap();
         let bfile = BarcFile::new(&fname);
         // Temp writer to ensure file is created
@@ -1463,7 +1464,7 @@ mod barc_tests {
 
         let record = reader.read(&tune).unwrap().unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 0);
@@ -1489,12 +1490,13 @@ mod barc_tests {
 
     #[test]
     fn test_read_sample() {
+        assert!(test_logger());
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/example.barc");
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap().unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 5);
@@ -1550,6 +1552,7 @@ mod barc_tests {
 
     #[test]
     fn test_read_sample_larger() {
+        assert!(test_logger());
         let record = {
             let tune = Tuner::new()
                 .set_max_body_ram(1024) // < 1270 expected length
@@ -1564,7 +1567,7 @@ mod barc_tests {
             r
         };
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert!(!record.res_body.is_ram());
         let mut br = record.res_body.reader();
@@ -1578,6 +1581,7 @@ mod barc_tests {
     #[cfg(feature = "mmap")]
     #[test]
     fn test_read_sample_mapped() {
+        assert!(test_logger());
         let mut record = {
             let tune = Tuner::new()
                 .set_max_body_ram(1024) // < 1270 expected length
@@ -1593,7 +1597,7 @@ mod barc_tests {
         };
         record.res_body.mem_map().unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert!(!record.res_body.is_ram());
         let mut br = record.res_body.reader();
@@ -1606,6 +1610,7 @@ mod barc_tests {
 
     #[test]
     fn test_read_empty_file() {
+        assert!(test_logger());
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/empty.barc");
         let mut reader = bfile.reader().unwrap();
@@ -1619,12 +1624,13 @@ mod barc_tests {
 
     #[test]
     fn test_read_over_reserved() {
+        assert!(test_logger());
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/reserved.barc");
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert!(record.is_none());
 
@@ -1693,12 +1699,13 @@ mod barc_tests {
 
     #[test]
     fn test_read_204_no_body() {
+        assert!(test_logger());
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/204_no_body.barc");
         let mut reader = bfile.reader().unwrap();
         let record = reader.read(&tune).unwrap().unwrap();
 
-        println!("{:#?}", record);
+        debug!("{:?}", record);
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 4);

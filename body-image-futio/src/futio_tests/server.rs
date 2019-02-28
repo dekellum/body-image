@@ -22,17 +22,17 @@ use hyper::client::{Client, HttpConnector};
 use hyper::server::conn::Http;
 use hyper::service::{service_fn, service_fn_ok};
 
-use log::warn;
+use log::{debug, warn};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 use crate::{AsyncBodyImage, Flaw, FutioError, RequestRecord, RequestRecorder,
             request_dialog, user_agent};
 #[cfg(feature = "mmap")] use crate::{AsyncBodySink, UniBodyImage};
-use crate::logger::LOG_SETUP;
+use crate::logger::test_logger;
 
 #[test]
 fn large_concurrent_gets() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut1, url1) = simple_server(174_333);
@@ -64,7 +64,7 @@ fn large_concurrent_gets() {
 
 #[test]
 fn post_echo_body() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = echo_server();
@@ -76,7 +76,7 @@ fn post_echo_body() {
     let body = fs_body_image(445);
     match rt.block_on(post_body_req::<Body>(&url, body, &tune)) {
         Ok(dl) => {
-            println!("{:#?}", dl);
+            debug!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
         }
         Err(e) => {
@@ -88,7 +88,7 @@ fn post_echo_body() {
 
 #[test]
 fn post_echo_async_body() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = echo_server();
@@ -100,7 +100,7 @@ fn post_echo_async_body() {
     let body = fs_body_image(445);
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
-            println!("{:#?}", dl);
+            debug!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
         }
         Err(e) => {
@@ -113,7 +113,7 @@ fn post_echo_async_body() {
 #[test]
 #[cfg(feature = "mmap")]
 fn post_echo_async_body_mmap_copy() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = echo_server();
@@ -126,7 +126,7 @@ fn post_echo_async_body_mmap_copy() {
     body.mem_map().unwrap();
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
-            println!("{:#?}", dl);
+            debug!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 445);
         }
         Err(e) => {
@@ -150,7 +150,7 @@ fn post_echo_uni_body_mmap() {
 
 #[cfg(feature = "mmap")]
 fn run_post_echo_uni_body(mmap: bool) {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = echo_server_uni(mmap);
@@ -162,7 +162,7 @@ fn run_post_echo_uni_body(mmap: bool) {
     let body = fs_body_image(194_767);
     match rt.block_on(post_body_req::<UniBodyImage>(&url, body, &tune)) {
         Ok(dl) => {
-            println!("{:#?}", dl);
+            debug!("{:#?}", dl);
             assert_eq!(dl.res_body().len(), 194_767);
         }
         Err(e) => {
@@ -174,7 +174,7 @@ fn run_post_echo_uni_body(mmap: bool) {
 
 #[test]
 fn timeout_before_response() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = delayed_server();
@@ -198,7 +198,7 @@ fn timeout_before_response() {
 
 #[test]
 fn timeout_during_streaming() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = delayed_server();
@@ -223,7 +223,7 @@ fn timeout_during_streaming() {
 #[test]
 #[cfg(feature = "may_fail")]
 fn timeout_during_streaming_race() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = delayed_server();

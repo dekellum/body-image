@@ -1,7 +1,8 @@
 use body_image::Tunables;
 use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
             Recorded, RequestRecord, RequestRecorder, user_agent};
-use crate::logger::LOG_SETUP;
+use crate::logger::test_logger;
+use log::debug;
 
 fn get_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, http::Error>
@@ -18,12 +19,12 @@ fn get_request(url: &str)
 
 #[test]
 fn test_small_http() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
     let tune = Tunables::new();
     let req = get_request("http://gravitext.com").unwrap();
 
     let dl = fetch(req, &tune).unwrap();
-    println!("Response {:#?}", dl);
+    debug!("Response {:#?}", dl);
 
     assert!(dl.res_body().is_ram());
     assert!(dl.res_body().len() > 0);
@@ -31,13 +32,13 @@ fn test_small_http() {
 
 #[test]
 fn test_small_https() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
     let tune = Tunables::new();
     let req = get_request("https://www.usa.gov").unwrap();
 
     let dl = fetch(req, &tune).unwrap();
     let dl = dl.clone();
-    println!("Response {:#?}", dl);
+    debug!("Response {:#?}", dl);
 
     assert!(dl.res_body().is_ram());
     assert!(dl.res_body().len() > 0);
@@ -45,12 +46,12 @@ fn test_small_https() {
 
 #[test]
 fn test_not_found() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
     let tune = Tunables::new();
     let req = get_request("http://gravitext.com/no/existe").unwrap();
 
     let dl = fetch(req, &tune).unwrap();
-    println!("Response {:#?}", dl);
+    debug!("Response {:#?}", dl);
 
     assert_eq!(dl.res_status().as_u16(), 404);
 
