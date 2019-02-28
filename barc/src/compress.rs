@@ -9,7 +9,7 @@ use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
 use http;
 use http::header::HeaderName;
-use log::{debug, trace};
+use tao_log::{debug, trace};
 use olio::fs::rc::ReadSlice;
 
 #[cfg(feature = "brotli")]
