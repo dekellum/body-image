@@ -266,7 +266,7 @@ macro_rules! one_service {
 /// The most simple body echo'ing server, using hyper body types.
 fn echo_server() -> (impl Future<Item=(), Error=()>, String) {
     let svc = service_fn_ok(move |req: Request<Body>| {
-        Response::new(req.into_body())
+        debugv!("echo server", Response::new(req.into_body()))
     });
     one_service!(svc)
 }
@@ -293,7 +293,7 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
                 if mmap { bi.mem_map()?; }
                 Ok(Response::builder()
                    .status(200)
-                   .body(UniBodyImage::new(bi, &tune))?)
+                   .body(debugv!("echo server", UniBodyImage::new(bi, &tune)))?
             })
     });
     one_service!(svc)
@@ -313,7 +313,7 @@ fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
         delay1.and_then(move |()| {
             future::result(Response::builder().status(200).body(
                 hyper::Body::wrap_stream(
-                    AsyncBodyImage::new(bi, &tune).select(
+                    debugv!("delayed", AsyncBodyImage::new(bi, &tune)).select(
                         delay2
                             .map(|_| Bytes::new())
                             .into_stream()
@@ -331,7 +331,7 @@ fn simple_server(size: usize) -> (impl Future<Item=(), Error=()>, String) {
         let tune = Tunables::default();
         Response::builder()
             .status(200)
-            .body(AsyncBodyImage::new(bi, &tune))
+            .body(debugv!("simple server", AsyncBodyImage::new(bi, &tune)))
     });
     one_service!(svc)
 }
