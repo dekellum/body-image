@@ -293,7 +293,7 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
                 if mmap { bi.mem_map()?; }
                 Ok(Response::builder()
                    .status(200)
-                   .body(debugv!("echo server", UniBodyImage::new(bi, &tune)))?
+                   .body(debugv!("echo server", UniBodyImage::new(bi, &tune)))?)
             })
     });
     one_service!(svc)
