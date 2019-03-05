@@ -40,7 +40,7 @@ use bytes::{BytesMut, BufMut};
 use http;
 use httparse;
 use http::header::{HeaderName, HeaderValue};
-use log::{debug, warn};
+use tao_log::{debug, warn};
 use olio::fs::rc::{ReadPos, ReadSlice};
 
 use body_image::{
@@ -1164,6 +1164,7 @@ mod barc_tests {
     use super::*;
     use body_image::Tuner;
     use crate::logger::test_logger;
+    use tao_log::debugv;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, Flaw> {
         let target = env!("CARGO_MANIFEST_DIR");
@@ -1255,9 +1256,7 @@ mod barc_tests {
 
         let tune = Tunables::new();
         let mut reader = bfile.reader()?;
-        let record = reader.read(&tune)?.unwrap();
-
-        debug!("{:?}", record);
+        let record = debugv!(reader.read(&tune))?.unwrap();
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 1);
@@ -1310,9 +1309,7 @@ mod barc_tests {
 
         let tune = Tunables::new();
         let mut reader = bfile.reader()?;
-        let record = reader.read(&tune)?.unwrap();
-
-        debug!("{:?}", record);
+        let record = debugv!(reader.read(&tune))?.unwrap();
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 0);
@@ -1417,9 +1414,7 @@ mod barc_tests {
 
         let tune = Tunables::new();
         let mut reader = bfile.reader()?;
-        let record = reader.read(&tune)?.unwrap();
-
-        debug!("{:?}", record);
+        let record = debugv!(reader.read(&tune))?.unwrap();
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 1);
@@ -1462,9 +1457,7 @@ mod barc_tests {
         assert_eq!(offset, 0);
         reader.seek(offset).unwrap();
 
-        let record = reader.read(&tune).unwrap().unwrap();
-
-        debug!("{:?}", record);
+        let record = debugv!(reader.read(&tune)).unwrap().unwrap();
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 0);
@@ -1494,9 +1487,7 @@ mod barc_tests {
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/example.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.read(&tune).unwrap().unwrap();
-
-        debug!("{:?}", record);
+        let record = debugv!(reader.read(&tune)).unwrap().unwrap();
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 5);
@@ -1566,8 +1557,7 @@ mod barc_tests {
             assert!(next.is_none());
             r
         };
-
-        debug!("{:?}", record);
+        debugv!(&record);
 
         assert!(!record.res_body.is_ram());
         let mut br = record.res_body.reader();
@@ -1596,8 +1586,7 @@ mod barc_tests {
             r
         };
         record.res_body.mem_map().unwrap();
-
-        debug!("{:?}", record);
+        debugv!(&record);
 
         assert!(!record.res_body.is_ram());
         let mut br = record.res_body.reader();
@@ -1618,7 +1607,7 @@ mod barc_tests {
         assert!(record.is_none());
 
         // Shouldn't have moved
-        let record = reader.read(&tune).unwrap();
+        let record = debugv!(reader.read(&tune)).unwrap();
         assert!(record.is_none());
     }
 
@@ -1628,9 +1617,7 @@ mod barc_tests {
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/reserved.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.read(&tune).unwrap();
-
-        debug!("{:?}", record);
+        let record = debugv!(reader.read(&tune)).unwrap();
 
         assert!(record.is_none());
 
@@ -1703,9 +1690,7 @@ mod barc_tests {
         let tune = Tunables::new();
         let bfile = BarcFile::new("sample/204_no_body.barc");
         let mut reader = bfile.reader().unwrap();
-        let record = reader.read(&tune).unwrap().unwrap();
-
-        debug!("{:?}", record);
+        let record = debugv!(reader.read(&tune)).unwrap().unwrap();
 
         assert_eq!(record.rec_type, RecordType::Dialog);
         assert_eq!(record.meta.len(), 4);

@@ -23,7 +23,7 @@ bytes      = { version=">=0.4.6, <2" }
 flate2     = { version=">=1.0.1, <2" }
 http       = { version=">=0.1.6, <2" }
 httparse   = { version=">=1.2.4, <2" }
-log        = { version=">=0.4.4, <2" }
+tao-log    = { version=">=0.1.0, <2" }
 memmap     = { version=">=0.7.0, <2", optional=true }
 mime       = { version=">=0.3.13, <2" }
 olio       = { version=">=1.0.0, <2", default-features=false }

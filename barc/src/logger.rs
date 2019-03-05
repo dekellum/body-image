@@ -2,7 +2,7 @@ use std;
 use std::sync::Once;
 
 use fern;
-use log;
+use tao_log::log;
 use crate::Flaw;
 
 pub fn test_logger() -> bool {

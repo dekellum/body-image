@@ -1,4 +1,5 @@
 use std::cmp;
+use std::fmt;
 use std::io;
 use std::io::{Cursor, Read};
 use std::ops::Deref;
@@ -6,7 +7,7 @@ use std::vec::IntoIter;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use http;
-use log::debug;
+use tao_log::debug;
 use olio::fs::rc::ReadSlice;
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
@@ -122,11 +123,33 @@ impl AsRef<[u8]> for UniBodyBuf {
     }
 }
 
-#[derive(Debug)]
 enum UniBodyState {
     Ram(IntoIter<Bytes>),
     File { rs: ReadSlice, bsize: u64 },
     MemMap(Option<MemMapBuf>),
+}
+
+impl fmt::Debug for UniBodyState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            UniBodyState::Ram(_) => {
+                // Avoids showing all buffers as u8 lists
+                write!(f, "Ram(IntoIter<Bytes>)")
+            }
+            UniBodyState::File { ref rs, ref bsize } => {
+                f.debug_struct("File")
+                    .field("rs", rs)
+                    .field("bsize", bsize)
+                    .finish()
+            }
+            #[cfg(feature = "mmap")]
+            UniBodyState::MemMap(ref ob) => {
+                f.debug_tuple("MemMap")
+                    .field(ob)
+                    .finish()
+            }
+        }
+    }
 }
 
 fn unblock<F, T>(f: F) -> Poll<T, io::Error>

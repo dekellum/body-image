@@ -1,6 +1,6 @@
 use bytes::Buf;
 use futures::{Async, AsyncSink, Poll, Sink, StartSend};
-use log::debug;
+use tao_log::debug;
 use tokio_threadpool;
 
 use body_image::{BodyError, BodySink, Tunables};
