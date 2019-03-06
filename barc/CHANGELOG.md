@@ -30,6 +30,8 @@
 * Upgrade to body-image 1.1.0, for use of `BodyReader` as direct `Read`
   implementation.
 
+* Broaden (optional default feature) _brotli_ dependency to >=2.2.1, <4.
+
 * Add logger implementation as dev-dependency for tests. Improve log and test
   output via _tao-log_ crate macros.
 
