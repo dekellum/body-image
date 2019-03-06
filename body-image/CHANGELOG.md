@@ -1,4 +1,4 @@
-## 1.1.0 (TBD)
+## 1.1.0 (2019-3-6)
 * `BodyImage::write_to` and `BodyImage::read_from` are now generic over `Write`
   and `Read` types, respectively, instead of using `dyn Trait`
   objects. Reference types are used to keep this a compatible change.

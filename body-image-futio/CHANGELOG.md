@@ -1,4 +1,4 @@
-## 1.1.0 (TBD)
+## 1.1.0 (2019-3-6)
 * _Error reform_: add `FutioError` enum and remove _failure_ crate dependency:
   * Introduce new `FutioError` enum for the most common error cases. This type
     implements `StdError`, aka `std::error::Error`.

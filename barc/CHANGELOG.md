@@ -1,4 +1,4 @@
-## 1.1.0 (TBD)
+## 1.1.0 (2019-3-6)
 * `GzipCompressStrategy` and `BrotliCompressStrategy` (_brotli_ feature) have
   learned to only compress if a record has a minimum length of compressible
   header and body bytes, after discounting any non-compressible body
