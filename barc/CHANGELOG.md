@@ -30,7 +30,8 @@
 * Upgrade to body-image 1.1.0, for use of `BodyReader` as direct `Read`
   implementation.
 
-* Add logger implementation as dev-dependency for tests.
+* Add logger implementation as dev-dependency for tests. Improve log and test
+  output via _tao-log_ crate macros.
 
 ## 1.0.1 (2019-1-4)
 * Upgrade log dep to reflect 2018 minimal versions.
