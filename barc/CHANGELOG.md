@@ -1,3 +1,40 @@
+## 1.1.0 (2019-3-6)
+* `GzipCompressStrategy` and `BrotliCompressStrategy` (_brotli_ feature) have
+  learned to only compress if a record has a minimum length of compressible
+  header and body bytes, after discounting any non-compressible body
+  bytes. This is determined via several new `CompressStrategy` trait methods
+  and implementation: `min_len`, `check_identity`, and `non_compressible_coef`
+  getters; and `is_compressible`, using content-type and meta -decoded headers.
+
+* `CompressStrategy::wrap_encoder` only needs a `MetaRecorded` reference for
+  the duration of that call. Make the lifetime more lenient.
+
+* Make the read and write implementation generic over `Read` and `Write` types,
+  instead of using `dyn Trait` objects, throughout. These changes are mostly
+  internal, but include public utility methods `write_headers` and
+  `write_body`. Reference types are used to maintain compatibility.
+
+* _Error reform_: remove _failure_ crate dependency:
+  * Drop `Fail` implementation of `BarcError` and add `impl StdError for
+    BarcError` (aka `std::error::Error`).
+  * `BarcError::InvalidHeader` variant's use of `failure::Error`
+    (for private encapsulation) replaced with compatible
+    `Box<StdError + Send + Sync + 'static>`, type-aliased as `Flaw`.
+  * Add `BarcError::IntoDialog` variant wrapper for `DialogConvertError` (also
+    now a `StdError`) for convenience in a mixed error context.
+
+  Since `failure::Fail` offers a blanket implementation for `StdError`, this is
+  graded a MINOR-version compatibility hazard. Testing of unmodified dependent
+  crates/projects supports this conclusion.
+
+* Upgrade to body-image 1.1.0, for use of `BodyReader` as direct `Read`
+  implementation.
+
+* Broaden (optional default feature) _brotli_ dependency to >=2.2.1, <4.
+
+* Add logger implementation as dev-dependency for tests. Improve log and test
+  output via _tao-log_ crate macros.
+
 ## 1.0.1 (2019-1-4)
 * Upgrade log dep to reflect 2018 minimal versions.
 

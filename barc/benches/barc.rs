@@ -8,7 +8,6 @@ extern crate test; // Still required, see rust-lang/rust#55133
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use failure::Error as Flare;
 use test::Bencher;
 
 use body_image::{BodySink, Tunables};
@@ -63,7 +62,7 @@ fn write_read_large_brotli_0(b: &mut Bencher) {
 }
 
 fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
-    -> Result<(), Flare>
+    -> Result<(), Flaw>
 {
     let bfile = BarcFile::new(fname);
 
@@ -95,7 +94,16 @@ fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
     }
     let res_body = res_body.prepare()?;
 
-    writer.write(&Record { req_body, res_body, ..Record::default()}, strategy)?;
+    let mut res_headers = http::HeaderMap::default();
+    res_headers.insert(http::header::CONTENT_TYPE, "text/plain".parse()?);
+    let req_headers = res_headers.clone();
+    let mut meta = http::HeaderMap::default();
+    meta.insert(hname_meta_res_decoded(), "identity".parse()?);
+
+    writer.write(
+        &Record { req_body, req_headers, res_body, res_headers, meta,
+                  ..Record::default()},
+        strategy)?;
 
     let tune = Tunables::new();
     let mut reader = bfile.reader()?;
@@ -106,7 +114,7 @@ fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
     Ok(())
 }
 
-fn barc_test_file(name: &str) -> Result<PathBuf, Flare> {
+fn barc_test_file(name: &str) -> Result<PathBuf, Flaw> {
     let target = env!("CARGO_MANIFEST_DIR");
     let path = format!("{}/../target/testmp", target);
     let tpath = Path::new(&path);

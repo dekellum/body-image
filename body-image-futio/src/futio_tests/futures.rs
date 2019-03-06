@@ -1,4 +1,3 @@
-use failure::Error as Flare;
 use futures::stream::Stream;
 
 use tokio::runtime::current_thread::Runtime as CtRuntime;
@@ -6,17 +5,17 @@ use tokio::runtime::Runtime as DefaultRuntime;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 
-use crate::{UniBodyImage, UniBodySink};
-use crate::logger::LOG_SETUP;
+use crate::{FutioError, UniBodyImage, UniBodySink};
+use crate::logger::test_logger;
 
 #[test]
 fn forward_to_sink_empty() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
     let tune = Tunables::default();
     let body = UniBodyImage::new(BodyImage::empty(), &tune);
     let asink = UniBodySink::new(BodySink::with_ram_buffers(0), tune.clone());
     let task = body
-        .from_err::<Flare>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = CtRuntime::new().unwrap();
     let res = rt.block_on(task);
@@ -31,12 +30,12 @@ fn forward_to_sink_empty() {
 
 #[test]
 fn forward_to_sink_small() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
     let tune = Tunables::default();
     let body = UniBodyImage::new(BodyImage::from_slice("body"), &tune);
     let asink = UniBodySink::new(BodySink::with_ram_buffers(1), tune.clone());
     let task = body
-        .from_err::<Flare>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = CtRuntime::new().unwrap();
     let res = rt.block_on(task);
@@ -51,7 +50,7 @@ fn forward_to_sink_small() {
 
 #[test]
 fn forward_to_sink_fs() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
     let tune = Tuner::new().set_buffer_size_fs(173).finish();
     let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
@@ -62,7 +61,7 @@ fn forward_to_sink_fs() {
         tune.clone()
     );
     let task = abody
-        .from_err::<Flare>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = DefaultRuntime::new().unwrap();
     let res = rt.block_on(task);
@@ -77,7 +76,7 @@ fn forward_to_sink_fs() {
 
 #[test]
 fn forward_to_sink_fs_back() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
     let tune = Tuner::new()
         .set_buffer_size_fs(173)
         .set_max_body_ram(15_000)
@@ -88,7 +87,7 @@ fn forward_to_sink_fs_back() {
     let abody = UniBodyImage::new(in_body, &tune);
     let asink = UniBodySink::new(BodySink::with_ram_buffers(4), tune.clone());
     let task = abody
-        .from_err::<Flare>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = DefaultRuntime::new().unwrap();
     let res = rt.block_on(task);
@@ -103,7 +102,7 @@ fn forward_to_sink_fs_back() {
 
 #[test]
 fn forward_to_sink_fs_map() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
     let tune = Tuner::new()
         .set_buffer_size_fs(173)
         .set_max_body_ram(15_000)
@@ -116,7 +115,7 @@ fn forward_to_sink_fs_map() {
     let abody = UniBodyImage::new(in_body, &tune);
     let asink = UniBodySink::new(BodySink::with_ram_buffers(4), tune.clone());
     let task = abody
-        .from_err::<Flare>()
+        .from_err::<FutioError>()
         .forward(asink);
     let mut rt = DefaultRuntime::new().unwrap();
     let res = rt.block_on(task);

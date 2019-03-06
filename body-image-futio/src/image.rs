@@ -1,4 +1,5 @@
 use std::cmp;
+use std::fmt;
 use std::io;
 use std::io::{Cursor, Read};
 
@@ -7,8 +8,7 @@ use std::vec::IntoIter;
 use http;
 use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
-use failure::Error as Flare;
-use log::debug;
+use tao_log::debug;
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
 
@@ -94,12 +94,34 @@ impl AsyncBodyImage {
     }
 }
 
-#[derive(Debug)]
 enum AsyncImageState {
     Ram(IntoIter<Bytes>),
     File { rs: ReadSlice, bsize: u64 },
     #[cfg(feature = "mmap")]
     MemMap(MemHandle<Mmap>),
+}
+
+impl fmt::Debug for AsyncImageState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            AsyncImageState::Ram(_) => {
+                // Avoids showing all buffers as u8 lists
+                write!(f, "Ram(IntoIter<Bytes>)")
+            }
+            AsyncImageState::File { ref rs, ref bsize } => {
+                f.debug_struct("File")
+                    .field("rs", rs)
+                    .field("bsize", bsize)
+                    .finish()
+            }
+            #[cfg(feature = "mmap")]
+            AsyncImageState::MemMap(ref m) => {
+                f.debug_tuple("MemMap")
+                    .field(m)
+                    .finish()
+            }
+        }
+    }
 }
 
 fn unblock<F, T>(f: F) -> Poll<T, io::Error>
@@ -215,7 +237,7 @@ impl hyper::body::Payload for AsyncBodyImage {
 }
 
 impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, Flare> {
+    fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, http::Error> {
         let request = {
             let body = BodyImage::empty();
             let tune = Tunables::default();
@@ -234,7 +256,7 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<AsyncBodyImage>, Flare>
+        -> Result<RequestRecord<AsyncBodyImage>, http::Error>
         where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -256,7 +278,7 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
     }
 
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<AsyncBodyImage>, Flare>
+        -> Result<RequestRecord<AsyncBodyImage>, http::Error>
     {
         let request = self.body(AsyncBodyImage::new(body.clone(), tune))?;
         let method      = request.method().clone();

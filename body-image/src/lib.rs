@@ -41,6 +41,7 @@
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
+use std::error::Error as StdError;
 use std::env;
 use std::fmt;
 use std::fs::File;
@@ -52,7 +53,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, BufMut};
-use failure::Fail;
 
 use http;
 use log::{debug, warn};
@@ -82,7 +82,7 @@ pub enum BodyError {
 
     /// Unused variant to both enable non-exhaustive matching and warn against
     /// exhaustive matching.
-    _FutureProof,
+    _FutureProof
 }
 
 impl fmt::Display for BodyError {
@@ -95,15 +95,16 @@ impl fmt::Display for BodyError {
                 ),
             BodyError::Io(ref e) =>
                 write!(f, "Body I/O: {}", e),
-            BodyError::_FutureProof => unreachable!()
+            BodyError::_FutureProof =>
+                unreachable!("Don't abuse the _FutureProof!")
         }
     }
 }
 
-impl Fail for BodyError {
-    fn cause(&self) -> Option<&dyn Fail> {
+impl StdError for BodyError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match *self {
-            BodyError::Io(ref e)     => Some(e),
+            BodyError::Io(ref e) => Some(e),
             _ => None
         }
     }
@@ -579,18 +580,25 @@ impl BodyImage {
         }
     }
 
-    /// Given a `Read` object, a length estimate in bytes, and `Tunables` read
-    /// and prepare a new `BodyImage`. `Tunables`, the estimate and actual
-    /// length read will determine which buffering strategy is used. The
-    /// length estimate provides a hint to use the file system from the start,
-    /// which is more optimal than writing out accumulated `Ram` buffers
-    /// later. If the length can't be estimated, use zero (0).
-    pub fn read_from(r: &mut dyn Read, len_estimate: u64, tune: &Tunables)
+    /// Given a `Read` reference, a length estimate in bytes and `Tunables`,
+    /// read and prepare a new `BodyImage`. `Tunables`, the estimate and
+    /// actual length read will determine which buffering strategy is
+    /// used. The length estimate provides a hint to use the file system from
+    /// the start, which is more optimal than writing out accumulated `Ram`
+    /// buffers later. If the length can't be estimated, use zero (0).
+    ///
+    /// The `Read` is passed by reference for backward compatibility with its
+    /// original non-generic form as `&mut dyn Read`. [C-RW-VALUE] prefers
+    /// pass by value, but this would now be a breaking change.
+    ///
+    /// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+    pub fn read_from<R>(rin: &mut R, len_estimate: u64, tune: &Tunables)
         -> Result<BodyImage, BodyError>
+        where R: Read + ?Sized
     {
         if len_estimate > tune.max_body_ram() {
             let b = BodySink::with_fs(tune.temp_dir())?;
-            return read_to_body_fs(r, b, tune);
+            return read_to_body_fs(rin, b, tune);
         }
 
         let mut body = BodySink::with_ram(len_estimate);
@@ -599,7 +607,7 @@ impl BodyImage {
         'eof: loop {
             let mut buf = BytesMut::with_capacity(tune.buffer_size_ram());
             'fill: loop {
-                let len = match r.read(unsafe { buf.bytes_mut() }) {
+                let len = match rin.read(unsafe { buf.bytes_mut() }) {
                     Ok(len) => len,
                     Err(e) => {
                         if e.kind() == ErrorKind::Interrupted {
@@ -631,7 +639,7 @@ impl BodyImage {
                 body.write_back(tune.temp_dir())?;
                 debug!("Write (Fs) buffer len {}", len);
                 body.write_all(&buf)?;
-                return read_to_body_fs(r, body, tune)
+                return read_to_body_fs(rin, body, tune)
             }
             debug!("Saved (Ram) buffer len {}", len);
             body.save(buf.freeze())?;
@@ -642,7 +650,17 @@ impl BodyImage {
 
     /// Write self to `out` and return length. If `FsRead` this is performed
     /// using `std::io::copy` with `ReadPos` as input.
-    pub fn write_to(&self, out: &mut dyn Write) -> Result<u64, BodyError> {
+    ///
+    /// The `Write` is passed by reference for backward compatibility with its
+    /// original non-generic form as `&mut dyn Write`. [C-RW-VALUE] prefers
+    /// pass by value, but this would now be a breaking change.
+    /// [`std::io::copy`] is presumably in the same position.
+    ///
+    /// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+    /// [`std::io::copy`]: https://doc.rust-lang.org/std/io/fn.copy.html
+    pub fn write_to<W>(&self, out: &mut W) -> Result<u64, BodyError>
+        where W: Write + ?Sized
+    {
         match self.state {
             ImageState::Ram(ref v) => {
                 for b in v {
@@ -690,8 +708,9 @@ fn image_from_read_slice(rslice: ReadSlice) -> BodyImage {
 
 // Read all bytes from r, consume and write to a `BodySink` in state
 // `FsWrite`, returning a final prepared `BodyImage`.
-fn read_to_body_fs(r: &mut dyn Read, mut body: BodySink, tune: &Tunables)
+fn read_to_body_fs<R>(r: &mut R, mut body: BodySink, tune: &Tunables)
     -> Result<BodyImage, BodyError>
+    where R: Read + ?Sized
 {
     assert!(!body.is_ram());
 
@@ -786,8 +805,20 @@ pub enum BodyReader<'a> {
     FileSlice(ReadSlice),
 }
 
+impl<'a> Read for BodyReader<'a> {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
+        match *self {
+            BodyReader::Contiguous(ref mut cursor) => cursor.read(buf),
+            BodyReader::Scattered(ref mut gatherer) => gatherer.read(buf),
+            BodyReader::FileSlice(ref mut rslice) => rslice.read(buf),
+        }
+    }
+}
+
 impl<'a> BodyReader<'a> {
     /// Return the `Read` reference.
+    #[deprecated(since="1.1.0", note="BodyReader now implements Read directly")]
     pub fn as_read(&mut self) -> &mut dyn Read {
         match *self {
             BodyReader::Contiguous(ref mut cursor) => cursor,
@@ -818,14 +849,22 @@ pub struct Epilog {
     pub res_decoded:  Vec<Encoding>,
 }
 
-/// A subset of supported HTTP Transfer or Content-Encoding values. The
-/// `Display`/`ToString` representation is as per the HTTP header value.
+/// A set of HTTP Transfer- or Content-Encoding values. The
+/// `Display`/`ToString` representation as per the HTTP header value.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum Encoding {
+    /// `Chunked` is typically applied or removed by HTTP client and server
+    /// implementations, even minimal ones.
     Chunked,
     Deflate,
     Gzip,
     Brotli,
+    /// This obsolete LZW format, is not generally used or supported
+    /// currently, but is included for error reporting.
+    Compress,
+    /// May be used to explicitly indicate that an encoding previously applied
+    /// has been decoded (removed).
+    Identity,
 }
 
 impl fmt::Display for Encoding {
@@ -835,6 +874,8 @@ impl fmt::Display for Encoding {
             Encoding::Deflate => "deflate",
             Encoding::Gzip    => "gzip",
             Encoding::Brotli  => "br",
+            Encoding::Compress  => "compress",
+            Encoding::Identity  => "identity",
         })
     }
 }
@@ -901,6 +942,11 @@ impl Dialog {
     /// A list of encodings that were removed (decoded) to provide this
     /// representation of the response body (`res_body`). May be empty.
     pub fn res_decoded(&self) -> &Vec<Encoding>        { &self.epi.res_decoded }
+
+    /// Set a new response decoded list.
+    pub fn set_res_decoded(&mut self, decoded: Vec<Encoding>) {
+        self.epi.res_decoded = decoded;
+    }
 
     /// A mutable reference to the response body. This is primarly provided
     /// to allow state mutating operations such as `BodyImage::mem_map`.
@@ -1089,7 +1135,7 @@ impl Tuner {
     /// Set the size estimate, as an integer multiple of the encoded buffer
     /// size, for the _Brotli_ compression algorithm.
     pub fn set_size_estimate_brotli(&mut self, multiple: u16) -> &mut Tuner {
-        assert!(multiple > 0, "size_estimate_brotli must be >= 1" );
+        assert!(multiple > 0, "size_estimate_brotli must be >= 1");
         self.template.size_estimate_brotli = multiple;
         self
     }
@@ -1151,9 +1197,16 @@ mod body_tests {
     fn is_send<T: Send>() -> bool { true }
     fn is_sync<T: Sync>() -> bool { true }
 
+    type Flaw = Box<dyn StdError + Send + Sync + 'static>;
+    fn is_flaw(_f: Flaw) -> bool { true }
+
     #[test]
     fn test_send_sync() {
+        assert!(is_send::<BodyError>());
+        assert!(is_sync::<BodyError>());
+
         assert!(is_send::<BodyImage>());
+
         assert!(is_send::<Dialog>());
 
         assert!(is_send::<Tunables>());
@@ -1171,10 +1224,14 @@ mod body_tests {
     }
 
     #[test]
+    fn test_body_error_as_flaw() {
+        assert!(is_flaw(BodyError::BodyTooLong(0).into()));
+    }
+
+    #[test]
     fn test_empty_read() {
         let body = BodyImage::empty();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = Vec::new();
         br.read_to_end(&mut obuf).unwrap();
         assert!(obuf.is_empty());
@@ -1185,8 +1242,7 @@ mod body_tests {
         let mut body = BodySink::with_ram_buffers(2);
         body.write_all("hello world").unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1199,8 +1255,7 @@ mod body_tests {
         body.write_all(" ").unwrap();
         body.write_all("world").unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1216,14 +1271,12 @@ mod body_tests {
         let body_clone = body.clone();
         body.gather();
 
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
 
-        let mut body_reader = body_clone.reader();
-        let br = body_reader.as_read();
+        let mut br = body_clone.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1251,8 +1304,7 @@ mod body_tests {
         let salutation = b"hello world";
         let mut src = Cursor::new(salutation);
         let body = BodyImage::read_from(&mut src, 0, &tune).unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = Vec::new();
         br.read_to_end(&mut obuf).unwrap();
         assert_eq!(salutation, &obuf[..]);
@@ -1285,8 +1337,7 @@ mod body_tests {
         body.write_all(" ").unwrap();
         body.write_all("world").unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1301,8 +1352,7 @@ mod body_tests {
         body.write_all("world").unwrap();
         body.write_back(tune.temp_dir()).unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1317,8 +1367,7 @@ mod body_tests {
         body.write_all(" ").unwrap();
         body.write_all("world").unwrap();
         let body = body.prepare().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1349,8 +1398,7 @@ mod body_tests {
         body.write_all("world").unwrap();
         let mut body = body.prepare().unwrap();
         body.mem_map().unwrap();
-        let mut body_reader = body.reader();
-        let br = body_reader.as_read();
+        let mut br = body.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
@@ -1367,8 +1415,7 @@ mod body_tests {
         let body = body.prepare().unwrap();
 
         {
-            let mut body_reader = body.reader();
-            let br = body_reader.as_read();
+            let mut br = body.reader();
             let mut obuf = String::new();
             br.read_to_string(&mut obuf).unwrap();
             assert_eq!("hello world", &obuf[..]);
@@ -1377,20 +1424,17 @@ mod body_tests {
         let body_clone_1 = body.clone();
         let body_clone_2 = body_clone_1.clone();
 
-        let mut body_reader = body_clone_1.reader();
-        let br = body_reader.as_read();
+        let mut br = body_clone_1.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
 
-        let mut body_reader = body.reader(); // read original (prepared) body
-        let br = body_reader.as_read();
+        let mut br = body.reader(); // read original (prepared) body
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);
 
-        let mut body_reader = body_clone_2.reader();
-        let br = body_reader.as_read();
+        let mut br = body_clone_2.reader();
         let mut obuf = String::new();
         br.read_to_string(&mut obuf).unwrap();
         assert_eq!("hello world", &obuf[..]);

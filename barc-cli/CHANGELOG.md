@@ -1,3 +1,15 @@
+## 1.1.0 (2019-3-6)
+* _Error reform_: Remove _failure_ crate dependency, internally replacing
+  `failure::Error` with `Box<StdError + Send + Sync + 'static>` (type-aliased
+  as `Flaw`).
+
+* Upgrade to body-image 1.1.0, body-image-futio 1.1.0 for improved response
+  decoding support and an error for unsupported encodings, for which this CLI
+  can now provide better context.
+
+* Upgrade to barc 1.1.0 for `CompressStrategy::set_check_identity` support, to
+  avoid double, non-productive compression.
+
 ## 1.0.1 (2019-1-4)
 * Upgrade log dep to reflect 2018 minimal versions.
 

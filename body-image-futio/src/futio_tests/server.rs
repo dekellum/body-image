@@ -7,7 +7,6 @@ use bytes::Bytes;
 
 use http;
 use http::{Request, Response};
-use failure::Error as Flare;
 use futures::{future, Future, Stream};
 
 use tokio;
@@ -23,17 +22,17 @@ use hyper::client::{Client, HttpConnector};
 use hyper::server::conn::Http;
 use hyper::service::{service_fn, service_fn_ok};
 
-use log::warn;
+use tao_log::{debug, debugv, warn};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
-use crate::{AsyncBodyImage, RequestRecord, RequestRecorder,
+use crate::{AsyncBodyImage, Flaw, FutioError, RequestRecord, RequestRecorder,
             request_dialog, user_agent};
 #[cfg(feature = "mmap")] use crate::{AsyncBodySink, UniBodyImage};
-use crate::logger::LOG_SETUP;
+use crate::logger::test_logger;
 
 #[test]
 fn large_concurrent_gets() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut1, url1) = simple_server(174_333);
@@ -65,7 +64,7 @@ fn large_concurrent_gets() {
 
 #[test]
 fn post_echo_body() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = echo_server();
@@ -76,9 +75,9 @@ fn post_echo_body() {
         .finish();
     let body = fs_body_image(445);
     match rt.block_on(post_body_req::<Body>(&url, body, &tune)) {
-        Ok(dl) => {
-            println!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 445);
+        Ok(dialog) => {
+            debugv!(&dialog);
+            assert_eq!(dialog.res_body().len(), 445);
         }
         Err(e) => {
             panic!("failed with: {}", e);
@@ -89,7 +88,7 @@ fn post_echo_body() {
 
 #[test]
 fn post_echo_async_body() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = echo_server();
@@ -100,9 +99,9 @@ fn post_echo_async_body() {
         .finish();
     let body = fs_body_image(445);
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
-        Ok(dl) => {
-            println!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 445);
+        Ok(dialog) => {
+            debugv!(&dialog);
+            assert_eq!(dialog.res_body().len(), 445);
         }
         Err(e) => {
             panic!("failed with: {}", e);
@@ -114,7 +113,7 @@ fn post_echo_async_body() {
 #[test]
 #[cfg(feature = "mmap")]
 fn post_echo_async_body_mmap_copy() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = echo_server();
@@ -126,9 +125,9 @@ fn post_echo_async_body_mmap_copy() {
     let mut body = fs_body_image(445);
     body.mem_map().unwrap();
     match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
-        Ok(dl) => {
-            println!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 445);
+        Ok(dialog) => {
+            debugv!(&dialog);
+            assert_eq!(dialog.res_body().len(), 445);
         }
         Err(e) => {
             panic!("failed with: {}", e);
@@ -151,7 +150,7 @@ fn post_echo_uni_body_mmap() {
 
 #[cfg(feature = "mmap")]
 fn run_post_echo_uni_body(mmap: bool) {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = echo_server_uni(mmap);
@@ -162,9 +161,9 @@ fn run_post_echo_uni_body(mmap: bool) {
         .finish();
     let body = fs_body_image(194_767);
     match rt.block_on(post_body_req::<UniBodyImage>(&url, body, &tune)) {
-        Ok(dl) => {
-            println!("{:#?}", dl);
-            assert_eq!(dl.res_body().len(), 194_767);
+        Ok(dialog) => {
+            debugv!(&dialog);
+            assert_eq!(dialog.res_body().len(), 194_767);
         }
         Err(e) => {
             panic!("failed with: {}", e);
@@ -175,7 +174,7 @@ fn run_post_echo_uni_body(mmap: bool) {
 
 #[test]
 fn timeout_before_response() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = delayed_server();
@@ -189,10 +188,9 @@ fn timeout_before_response() {
         Ok(_) => {
             panic!("should have timed-out!");
         }
-        Err(e) => {
-            let em = e.to_string();
-            assert!(em.starts_with("timeout"), em);
-            assert!(em.contains("initial"), em);
+        Err(e) => match e {
+            FutioError::ResponseTimeout(_) => debug!("expected: {}", e),
+            _ => panic!("not response timeout {:?}", e),
         }
     }
     rt.shutdown_on_idle().wait().unwrap();
@@ -200,7 +198,7 @@ fn timeout_before_response() {
 
 #[test]
 fn timeout_during_streaming() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = delayed_server();
@@ -214,10 +212,9 @@ fn timeout_during_streaming() {
         Ok(_) => {
             panic!("should have timed-out!");
         }
-        Err(e) => {
-            let em = e.to_string();
-            assert!(em.starts_with("timeout"), em);
-            assert!(em.contains("streaming"), em);
+        Err(e) => match e {
+            FutioError::BodyTimeout(_) => debug!("expected: {}", e),
+            _ => panic!("not a body timeout {:?}", e),
         }
     }
     rt.shutdown_on_idle().wait().unwrap();
@@ -226,7 +223,7 @@ fn timeout_during_streaming() {
 #[test]
 #[cfg(feature = "may_fail")]
 fn timeout_during_streaming_race() {
-    assert!(*LOG_SETUP);
+    assert!(test_logger());
 
     let mut rt = new_limited_runtime();
     let (fut, url) = delayed_server();
@@ -242,10 +239,9 @@ fn timeout_during_streaming_race() {
         Ok(_) => {
             panic!("should have timed-out!");
         }
-        Err(e) => {
-            let em = e.to_string();
-            assert!(em.starts_with("timeout"), em);
-            assert!(em.contains("streaming"), em);
+        Err(e) => match e {
+            FutioError::BodyTimeout(_) => {},
+            _ => panic!("not a body timeout {:?}", e),
         }
     }
     rt.shutdown_on_idle().wait().unwrap();
@@ -270,7 +266,7 @@ macro_rules! one_service {
 /// The most simple body echo'ing server, using hyper body types.
 fn echo_server() -> (impl Future<Item=(), Error=()>, String) {
     let svc = service_fn_ok(move |req: Request<Body>| {
-        Response::new(req.into_body())
+        debugv!("echo server", Response::new(req.into_body()))
     });
     one_service!(svc)
 }
@@ -289,7 +285,7 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
             tune
         );
         req.into_body()
-            .from_err::<Flare>()
+            .from_err::<Flaw>()
             .forward(asink)
             .and_then(move |(_strm, asink)| {
                 let tune = Tuner::new().set_buffer_size_fs(4972).finish();
@@ -297,9 +293,8 @@ fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
                 if mmap { bi.mem_map()?; }
                 Ok(Response::builder()
                    .status(200)
-                   .body(UniBodyImage::new(bi, &tune))?)
+                   .body(debugv!("echo server", UniBodyImage::new(bi, &tune)))?)
             })
-            .map_err(|e| e.compat())
     });
     one_service!(svc)
 }
@@ -318,7 +313,7 @@ fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
         delay1.and_then(move |()| {
             future::result(Response::builder().status(200).body(
                 hyper::Body::wrap_stream(
-                    AsyncBodyImage::new(bi, &tune).select(
+                    debugv!("delayed", AsyncBodyImage::new(bi, &tune)).select(
                         delay2
                             .map(|_| Bytes::new())
                             .into_stream()
@@ -331,12 +326,12 @@ fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
 }
 
 fn simple_server(size: usize) -> (impl Future<Item=(), Error=()>, String) {
-    let svc = service_fn( move |_req| {
+    let svc = service_fn(move |_req| {
         let bi = fs_body_image(size);
         let tune = Tunables::default();
         Response::builder()
             .status(200)
-            .body(AsyncBodyImage::new(bi, &tune))
+            .body(debugv!("simple server", AsyncBodyImage::new(bi, &tune)))
     });
     one_service!(svc)
 }
@@ -365,7 +360,7 @@ fn ram_body_image(csize: usize, count: usize) -> BodyImage {
 }
 
 fn get_req<T>(url: &str, tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=Flare> + Send
+    -> impl Future<Item=Dialog, Error=FutioError> + Send
     where T: hyper::body::Payload + Send,
           http::request::Builder: RequestRecorder<T>
 {
@@ -381,7 +376,7 @@ fn get_req<T>(url: &str, tune: &Tunables)
 }
 
 fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=Flare> + Send
+    -> impl Future<Item=Dialog, Error=FutioError> + Send
     where T: hyper::body::Payload + Send,
           http::request::Builder: RequestRecorder<T>
 {

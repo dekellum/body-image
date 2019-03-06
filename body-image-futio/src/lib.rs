@@ -36,17 +36,15 @@
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
+use std::error::Error as StdError;
+use std::fmt;
+use std::io;
 use std::mem;
+use std::time::Duration;
 
 #[cfg(feature = "brotli")] use brotli;
 
 use bytes::Bytes;
-use failure::{
-    bail,
-    // Convenient alias and "a sudden brief burst of bright flame or light."
-    Error as Flare,
-    format_err
-};
 use flate2::read::{DeflateDecoder, GzDecoder};
 use futures::{future, Future, Stream};
 use futures::future::Either;
@@ -57,7 +55,7 @@ use hyperx::header::{
     ContentEncoding, ContentLength, Encoding as HyEncoding,
     Header, TransferEncoding
 };
-use log::{debug, warn};
+use tao_log::{debug, warn};
 use tokio;
 use tokio::timer::timeout;
 use tokio::util::FutureExt;
@@ -66,6 +64,11 @@ use body_image::{
     BodyImage, BodySink, BodyError, Encoding,
     Epilog, Prolog, Dialog, Recorded, RequestRecorded, Tunables,
 };
+
+/// Conveniently compact type alias for dyn Trait `std::error::Error`. It is
+/// possible to query and downcast the type via methods of
+/// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
+pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
 mod image;
 pub use self::image::AsyncBodyImage;
@@ -102,12 +105,112 @@ pub static BROWSE_ACCEPT: &str =
      application/xml;q=0.9, \
      */*;q=0.8";
 
+/// Error enumeration for body-image-futio origin errors. This may be
+/// extended in the future so exhaustive matching is gently discouraged with
+/// an unused variant.
+#[derive(Debug)]
+pub enum FutioError {
+    /// Error from `BodySink` or `BodyImage`.
+    Body(BodyError),
+
+    /// The `Tunables::res_timeout` duration was reached before receiving the
+    /// initial response.
+    ResponseTimeout(Duration),
+
+    /// The `Tunables::body_timeout` duration was reached before receiving the
+    /// complete response body.
+    BodyTimeout(Duration),
+
+    /// The content-length header exceeded `Tunables::max_body`.
+    ContentLengthTooLong(u64),
+
+    /// Error from _http_.
+    Http(http::Error),
+
+    /// Error from _hyper_.
+    Hyper(hyper::Error),
+
+    /// Failed to decode an unsupported `Encoding`; such as `Compress`, or
+    /// `Brotli`, when the _brotli_ feature is not enabled.
+    UnsupportedEncoding(Encoding),
+
+    /// Other unclassified errors. There is intentionally no `From`
+    /// implementation for `Flaw` to this variant, as that could easily lead
+    /// to misclassification.  Instead it should be manually constructed.
+    Other(Flaw),
+
+    /// Unused variant to both enable non-exhaustive matching and warn against
+    /// exhaustive matching.
+    _FutureProof
+}
+
+impl fmt::Display for FutioError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FutioError::Body(ref be) =>
+                write!(f, "With body: {}", be),
+            FutioError::ResponseTimeout(d) =>
+                write!(f, "Timeout before initial response ({:?})", d),
+            FutioError::BodyTimeout(d) =>
+                write!(f, "Timeout before streaming body complete ({:?})", d),
+            FutioError::ContentLengthTooLong(l) =>
+                write!(f, "Response Content-Length too long: {}", l),
+            FutioError::Http(ref e) =>
+                write!(f, "Http error: {}", e),
+            FutioError::Hyper(ref e) =>
+                write!(f, "Hyper error: {}", e),
+            FutioError::UnsupportedEncoding(e) =>
+                write!(f, "Unsupported encoding: {}", e),
+            FutioError::Other(ref flaw) =>
+                write!(f, "Other error: {}", flaw),
+            FutioError::_FutureProof =>
+                unreachable!("Don't abuse the _FutureProof!")
+        }
+    }
+}
+
+impl StdError for FutioError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match *self {
+            FutioError::Body(ref be)         => Some(be),
+            FutioError::Http(ref ht)         => Some(ht),
+            FutioError::Hyper(ref he)        => Some(he),
+            FutioError::Other(ref flaw)      => Some(flaw.as_ref()),
+            _ => None
+        }
+    }
+}
+
+impl From<BodyError> for FutioError {
+    fn from(err: BodyError) -> FutioError {
+        FutioError::Body(err)
+    }
+}
+
+impl From<http::Error> for FutioError {
+    fn from(err: http::Error) -> FutioError {
+        FutioError::Http(err)
+    }
+}
+
+impl From<hyper::Error> for FutioError {
+    fn from(err: hyper::Error) -> FutioError {
+        FutioError::Hyper(err)
+    }
+}
+
+impl From<io::Error> for FutioError {
+    fn from(err: io::Error) -> FutioError {
+        FutioError::Body(BodyError::Io(err))
+    }
+}
+
 /// Run an HTTP request to completion, returning the full `Dialog`. This
 /// function constructs a default *tokio* `Runtime`,
 /// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
 /// internally, waiting with timeout, and dropping these on completion.
 pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
-    -> Result<Dialog, Flare>
+    -> Result<Dialog, FutioError>
     where B: hyper::body::Payload + Send
 {
     let mut rt = tokio::runtime::Builder::new()
@@ -116,7 +219,8 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         .blocking_threads(2)
         .build()
         .unwrap();
-    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)?;
+    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)
+        .map_err(|e| FutioError::Other(Box::new(e)))?;
     let client = hyper::Client::builder().build(connector);
     rt.block_on(request_dialog(&client, rr, tune))
     // Drop of `rt`, here, is equivalent to shutdown_now and wait
@@ -130,7 +234,7 @@ pub fn request_dialog<CN, B>(
     client: &hyper::Client<CN, B>,
     rr: RequestRecord<B>,
     tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=Flare> + Send
+    -> impl Future<Item=Dialog, Error=FutioError> + Send
     where CN: hyper::client::connect::Connect + Sync + 'static,
           B: hyper::body::Payload + Send
 {
@@ -142,16 +246,14 @@ pub fn request_dialog<CN, B>(
 
     let futr = client
         .request(rr.request)
-        .from_err::<Flare>()
+        .from_err::<FutioError>()
         .map(|response| Monolog { prolog, response });
 
     let futr = if let Some(t) = res_timeout {
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_to_flare(te, || {
-                    format_err!("timeout before initial response ({:?})", t)
-                })
+                map_timeout(te, || FutioError::ResponseTimeout(t))
             })
         )
     } else {
@@ -164,12 +266,7 @@ pub fn request_dialog<CN, B>(
         Either::A(futr
             .timeout(t)
             .map_err(move |te| {
-                timeout_to_flare(te, || {
-                    format_err!(
-                        "timeout before streaming body complete ({:?})",
-                        t
-                    )
-                })
+                map_timeout(te, || FutioError::BodyTimeout(t))
             })
         )
     } else {
@@ -179,13 +276,13 @@ pub fn request_dialog<CN, B>(
     futr.and_then(InDialog::prepare)
 }
 
-fn timeout_to_flare<F>(te: timeout::Error<Flare>, on_elapsed: F) -> Flare
-    where F: FnOnce() -> Flare
+fn map_timeout<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
+    where F: FnOnce() -> FutioError
 {
     if te.is_elapsed() {
         on_elapsed()
     } else if te.is_timer() {
-        Flare::from(te.into_timer().unwrap())
+        FutioError::Other(te.into_timer().unwrap().into())
     } else {
         te.into_inner().expect("inner")
     }
@@ -205,15 +302,18 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
     let mut res = Vec::with_capacity(2);
 
     'headers: for v in encodings {
-        // Hyper's Content-Encoding includes Brotli (br) _and_
+        // hyperx's Content-Encoding includes Brotli (br) _and_
         // Chunked, is thus a super-set of Transfer-Encoding, so parse
         // all of these headers that way.
         if let Ok(v) = ContentEncoding::parse_header(&v) {
             for av in v.iter() {
                 match *av {
-                    HyEncoding::Identity => {}
+                    HyEncoding::Identity => {} //ignore
                     HyEncoding::Chunked => {
-                        res.push(Encoding::Chunked);
+                        // guard against duplicating.
+                        if res.is_empty() {
+                            res.push(Encoding::Chunked);
+                        }
                     }
                     HyEncoding::Deflate => {
                         res.push(Encoding::Deflate);
@@ -225,6 +325,10 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
                     }
                     HyEncoding::Brotli => {
                         res.push(Encoding::Brotli);
+                        break 'headers;
+                    }
+                    HyEncoding::Compress => {
+                        res.push(Encoding::Compress);
                         break 'headers;
                     }
                     _ => {
@@ -246,7 +350,7 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
         if let Ok(v) = TransferEncoding::parse_header(&v) {
             for av in v.iter() {
                 match *av {
-                    HyEncoding::Identity => {}
+                    HyEncoding::Identity => {} //ignore
                     HyEncoding::Chunked => {
                         return true;
                     }
@@ -265,62 +369,67 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
 /// supported `Encoding`, updated the dialog accordingly.  The provided
 /// `Tunables` controls decompression buffer sizes and if the final
 /// `BodyImage` will be in `Ram` or `FsRead`. Returns `Ok(true)` if the
-/// response body was decoded, `Ok(false)` if no or unsupported encoding,
-/// or an error on failure.
+/// response body was decoded, or `Ok(false)` if no encoding was found, or an
+/// error on failure, including from an unsupported `Encoding`.
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
-    -> Result<bool, BodyError>
+    -> Result<bool, FutioError>
 {
-    let encodings = find_encodings(dialog.res_headers());
+    let mut encodings = find_encodings(dialog.res_headers());
 
     let compression = encodings.last().and_then(|e| {
         if *e != Encoding::Chunked { Some(*e) } else { None }
     });
 
-    let mut decoded = false;
-    if let Some(comp) = compression {
+    let new_body = if let Some(comp) = compression {
         debug!("Body to {:?} decode: {:?}", comp, dialog.res_body());
-        let new_body = decompress(dialog.res_body(), comp, tune)?;
-        if let Some(b) = new_body {
-            dialog.set_res_body_decoded(b, encodings);
-            decoded = true;
-            debug!("Body update: {:?}", dialog.res_body());
-        } else {
-            warn!("Unsupported encoding: {:?} not decoded", comp);
-        }
-    }
+        Some(decompress(dialog.res_body(), comp, tune)?)
+    } else {
+        None
+    };
 
-    Ok(decoded)
+    // Positively indicate that we've checked, and if necessary, successfully
+    // decoded body to the associated raw Content-Type representation.
+    encodings.push(Encoding::Identity);
+
+    if let Some(b) = new_body {
+        dialog.set_res_body_decoded(b, encodings);
+        debug!("Body update: {:?}", dialog.res_body());
+        Ok(true)
+    } else {
+        dialog.set_res_decoded(encodings);
+        Ok(false)
+    }
 }
 
 /// Decompress the provided body of any supported compression `Encoding`,
 /// using `Tunables` for buffering and the final returned `BodyImage`. If the
 /// encoding is not supported (e.g. `Chunked` or `Brotli`, without the feature
-/// enabled), returns `None`.
+/// enabled), returns `Err(FutioError::UnsupportedEncoding)`.
 pub fn decompress(body: &BodyImage, compression: Encoding, tune: &Tunables)
-    -> Result<Option<BodyImage>, BodyError>
+    -> Result<BodyImage, FutioError>
 {
-    let mut reader = body.reader();
+    let reader = body.reader();
     match compression {
         Encoding::Gzip => {
-            let mut decoder = GzDecoder::new(reader.as_read());
+            let mut decoder = GzDecoder::new(reader);
             let len_est = body.len() * u64::from(tune.size_estimate_gzip());
-            Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
+            Ok(BodyImage::read_from(&mut decoder, len_est, tune)?)
         }
         Encoding::Deflate => {
-            let mut decoder = DeflateDecoder::new(reader.as_read());
+            let mut decoder = DeflateDecoder::new(reader);
             let len_est = body.len() * u64::from(tune.size_estimate_deflate());
-            Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
+            Ok(BodyImage::read_from(&mut decoder, len_est, tune)?)
         }
         #[cfg(feature = "brotli")]
         Encoding::Brotli => {
             let mut decoder = brotli::Decompressor::new(
-                reader.as_read(),
+                reader,
                 tune.buffer_size_ram());
             let len_est = body.len() * u64::from(tune.size_estimate_brotli());
-            Ok(Some(BodyImage::read_from(&mut decoder, len_est, tune)?))
+            Ok(BodyImage::read_from(&mut decoder, len_est, tune)?)
         }
         _ => {
-            Ok(None)
+            Err(FutioError::UnsupportedEncoding(compression))
         }
     }
 }
@@ -333,7 +442,7 @@ pub fn user_agent() -> String {
 }
 
 fn resp_future(monolog: Monolog, tune: Tunables)
-    -> impl Future<Item=InDialog, Error=Flare> + Send
+    -> impl Future<Item=InDialog, Error=FutioError> + Send
 {
     let (resp_parts, body) = monolog.response.into_parts();
 
@@ -341,7 +450,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     let bsink = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
         Some(v) => check_length(v, tune.max_body()).and_then(|cl| {
             if cl > tune.max_body_ram() {
-                BodySink::with_fs(tune.temp_dir()).map_err(Flare::from)
+                BodySink::with_fs(tune.temp_dir()).map_err(FutioError::from)
             } else {
                 Ok(BodySink::with_ram(cl))
             }
@@ -366,7 +475,7 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     };
 
     Either::B(
-        body.from_err::<Flare>()
+        body.from_err::<FutioError>()
             .forward(async_body)
             .and_then(|(_strm, mut async_body)| {
                 mem::swap(async_body.body_mut(), &mut in_dialog.res_body);
@@ -376,11 +485,12 @@ fn resp_future(monolog: Monolog, tune: Tunables)
 }
 
 fn check_length(v: &http::header::HeaderValue, max: u64)
-    -> Result<u64, Flare>
+    -> Result<u64, FutioError>
 {
-    let l = *ContentLength::parse_header(&v)?;
+    let l = *ContentLength::parse_header(&v)
+        .map_err(|e| FutioError::Other(Box::new(e)))?;
     if l > max {
-        bail!("Response Content-Length too long: {}", l);
+        return Err(FutioError::ContentLengthTooLong(l));
     }
     Ok(l)
 }
@@ -436,7 +546,7 @@ impl InDialog {
     // Convert to `Dialog` by preparing the response body and adding an
     // initial res_decoded for Chunked, if hyper handled chunked transfer
     // encoding.
-    fn prepare(self) -> Result<Dialog, Flare> {
+    fn prepare(self) -> Result<Dialog, FutioError> {
         let res_decoded = if find_chunked(&self.res_headers) {
             vec![Encoding::Chunked]
         } else {
@@ -471,21 +581,21 @@ pub trait RequestRecorder<B>
 {
     /// Short-hand for completing the builder with an empty body, as is
     /// the case with many HTTP request methods (e.g. GET).
-    fn record(&mut self) -> Result<RequestRecord<B>, Flare>;
+    fn record(&mut self) -> Result<RequestRecord<B>, http::Error>;
 
     /// Complete the builder with any body that can be converted to a (Ram)
     /// `Bytes` buffer.
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<B>, Flare>
+        -> Result<RequestRecord<B>, http::Error>
         where BB: Into<Bytes>;
 
     /// Complete the builder with a `BodyImage` for the request body.
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<B>, Flare>;
+        -> Result<RequestRecord<B>, http::Error>;
 }
 
 impl RequestRecorder<hyper::Body> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, Flare> {
+    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, http::Error> {
         let request = self.body(hyper::Body::empty())?;
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -500,7 +610,7 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
     }
 
     fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<hyper::Body>, Flare>
+        -> Result<RequestRecord<hyper::Body>, http::Error>
         where BB: Into<Bytes>
     {
         let buf: Bytes = body.into();
@@ -522,7 +632,7 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
     }
 
     fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<hyper::Body>, Flare>
+        -> Result<RequestRecord<hyper::Body>, http::Error>
     {
         let request = if !body.is_empty() {
             let stream = AsyncBodyImage::new(body.clone(), tune);
@@ -550,4 +660,27 @@ mod futio_tests {
 
     /// These tests may fail because they depend on public web servers
     #[cfg(feature = "may_fail")]    mod live;
+
+    use tao_log::debug;
+    use super::{FutioError, Flaw};
+    use crate::logger::test_logger;
+
+    fn is_flaw(f: Flaw) -> bool {
+        debug!("Flaw Debug: {:?}, Display: \"{}\"", f, f);
+        true
+    }
+
+    #[test]
+    fn test_error_as_flaw() {
+        assert!(test_logger());
+        assert!(is_flaw(FutioError::ContentLengthTooLong(42).into()));
+        assert!(is_flaw(FutioError::Other("one off".into()).into()));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_error_future_proof() {
+        assert!(!FutioError::_FutureProof.to_string().is_empty(),
+                "should have panic'd before, unreachable")
+    }
 }
