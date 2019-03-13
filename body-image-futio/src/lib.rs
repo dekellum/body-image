@@ -134,9 +134,7 @@ pub enum FutioError {
     /// `Brotli`, when the _brotli_ feature is not enabled.
     UnsupportedEncoding(Encoding),
 
-    /// Other unclassified errors. There is intentionally no `From`
-    /// implementation for `Flaw` to this variant, as that could easily lead
-    /// to misclassification.  Instead it should be manually constructed.
+    /// Other unclassified errors.
     Other(Flaw),
 
     /// Unused variant to both enable non-exhaustive matching and warn against
@@ -204,6 +202,10 @@ impl From<io::Error> for FutioError {
         FutioError::Body(BodyError::Io(err))
     }
 }
+
+// Note: There is intentionally no `From` implementation for `Flaw` to
+// `FutioError::Other`, as that could easily lead to misclassification.
+// Instead it should be manually constructed.
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
 /// function constructs a default *tokio* `Runtime`,
