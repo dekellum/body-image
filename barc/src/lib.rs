@@ -1181,7 +1181,7 @@ mod barc_tests {
     use crate::logger::test_logger;
     use tao_log::debugv;
 
-    fn barc_test_file(name: &str) -> Result<PathBuf, Flaw> {
+    fn barc_test_file(name: &str) -> Result<PathBuf, io::Error> {
         let target = env!("CARGO_MANIFEST_DIR");
         let path = format!("{}/../target/testmp", target);
         let tpath = Path::new(&path);
