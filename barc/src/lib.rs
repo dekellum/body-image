@@ -847,7 +847,7 @@ impl BarcReader {
         let rhead = match read_record_head(fin) {
             Ok(Some(rh)) => rh,
             Ok(None) => return Ok(None),
-            Err(e) => return Err(e)
+            Err(e) => return Err(*e)
         };
 
         let rec_type = rhead.rec_type;
@@ -944,7 +944,7 @@ fn read_compressed(rslice: ReadSlice, rhead: &RecordHead, tune: &Tunables)
 
 // Return RecordHead or None if EOF
 fn read_record_head<R>(rin: &mut R)
-    -> Result<Option<RecordHead>, BarcError>
+    -> Result<Option<RecordHead>, Box<BarcError>>
     where R: Read + ?Sized
 {
     let mut buf = [0u8; V2_HEAD_SIZE];
@@ -954,10 +954,10 @@ fn read_record_head<R>(rin: &mut R)
         return Ok(None);
     }
     if size != V2_HEAD_SIZE {
-        return Err(BarcError::ReadIncompleteRecHead(size));
+        return Err(BarcError::ReadIncompleteRecHead(size).into());
     }
     if &buf[0..6] != b"BARC2 " {
-        return Err(BarcError::ReadInvalidRecHead);
+        return Err(BarcError::ReadInvalidRecHead.into());
     }
 
     let len       = parse_hex(&buf[6..18])?;
@@ -974,7 +974,7 @@ fn read_record_head<R>(rin: &mut R)
 // (EOF) from partial bytes read (a format error), so it also returns
 // the number of bytes read.
 fn read_record_head_buf<R>(rin: &mut R, mut buf: &mut [u8])
-    -> Result<usize, BarcError>
+    -> Result<usize, Box<BarcError>>
     where R: Read + ?Sized
 {
     let mut size = 0;
@@ -993,7 +993,7 @@ fn read_record_head_buf<R>(rin: &mut R, mut buf: &mut [u8])
                 if e.kind() == ErrorKind::Interrupted {
                     continue;
                 } else {
-                    return Err(e.into());
+                    return Err(Box::new(e.into()));
                 }
             }
         }
@@ -1002,7 +1002,7 @@ fn read_record_head_buf<R>(rin: &mut R, mut buf: &mut [u8])
 }
 
 // Read lowercase hexadecimal unsigned value directly from bytes.
-fn parse_hex<T>(buf: &[u8]) -> Result<T, BarcError>
+fn parse_hex<T>(buf: &[u8]) -> Result<T, Box<BarcError>>
     where T: AddAssign<T> + From<u8> + ShlAssign<u8>
 {
     let mut v = T::from(0u8);
@@ -1013,7 +1013,7 @@ fn parse_hex<T>(buf: &[u8]) -> Result<T, BarcError>
         } else if *d >= b'a' && *d <= b'f' {
             v += T::from(10 + (*d - b'a'));
         } else {
-            return Err(BarcError::ReadInvalidRecHeadHex(*d));
+            return Err(BarcError::ReadInvalidRecHeadHex(*d).into());
         }
     }
     Ok(v)
