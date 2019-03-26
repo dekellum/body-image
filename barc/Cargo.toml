@@ -29,6 +29,9 @@ mime       = { version=">=0.3.13, <2" }
 olio       = { version=">=1.0.0, <2", default-features=false }
 tempfile   = { version=">=2.2.0, <4" }
 
+[build-dependencies]
+version_check = { version=">=0.1.5, <2" }
+
 [dev-dependencies]
 fern        = { version=">=0.5.5, <2" }
 

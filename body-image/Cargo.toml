@@ -22,6 +22,9 @@ memmap     = { version=">=0.7.0, <2", optional=true }
 olio       = { version=">=1.0.0, <2", default-features=false }
 tempfile   = { version=">=2.2.0, <4" }
 
+[build-dependencies]
+version_check = { version=">=0.1.5, <2" }
+
 [features]
 default = ["mmap"]
 mmap = ["memmap", "olio/mmap"]
