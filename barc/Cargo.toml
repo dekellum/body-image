@@ -10,8 +10,8 @@ repository    = "https://github.com/dekellum/body-image"
 readme        = "README.md"
 keywords      = ["http", "compression", "serialization"]
 categories    = ["web-programming"]
-
 exclude       = ["barc.stash/*"]
+build         = "build.rs"
 
 [badges]
 travis-ci = { repository = "dekellum/body-image" }
