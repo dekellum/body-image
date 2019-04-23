@@ -32,9 +32,6 @@ olio       = { version=">=1.0.0, <2", default-features=false }
 tokio      = { version=">=0.1.14, <0.2", default-features=false, features=["rt-full"] }
 tokio-threadpool = { version=">=0.1.10, <0.2" }
 
-[build-dependencies]
-version_check = { version=">=0.1.5, <2" }
-
 [features]
 default = ["mmap", "brotli"]
 mmap = ["memmap", "olio/mmap", "body-image/mmap"]
