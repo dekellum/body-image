@@ -312,7 +312,7 @@ impl MetaRecorded for Record {
 }
 
 impl TryFrom<Dialog> for Record {
-    type Err = BarcError;
+    type Error = BarcError;
 
     /// Attempt to convert `Dialog` to `Record`.  This derives meta headers
     /// from various `Dialog` fields, and could potentially fail, based on
@@ -321,7 +321,7 @@ impl TryFrom<Dialog> for Record {
     /// `http::Uri` validation complexity, but any conversion failure would
     /// suggest an *http* crate bug or breaking change—as currently stated,
     /// allowed `Uri` bytes are a subset of allowed `HeaderValue` bytes.
-    fn try_from(dialog: Dialog) -> Result<Self, Self::Err> {
+    fn try_from(dialog: Dialog) -> Result<Self, Self::Error> {
 
         let (prolog, epilog) = dialog.explode();
         let mut meta = http::HeaderMap::with_capacity(6);
@@ -462,14 +462,14 @@ impl StdError for DialogConvertError {
 }
 
 impl TryFrom<Record> for Dialog {
-    type Err = DialogConvertError;
+    type Error = DialogConvertError;
 
     /// Attempt to convert `Record` to `Dialog`. This parses various meta
     /// header values to produce `Dialog` equivalents such as
     /// `http::StatusCode` and `http::Method`, which could fail, if the
     /// `Record` was not originally produced from a `Dialog` or was otherwise
     /// modified in an unsupported way.
-    fn try_from(rec: Record) -> Result<Self, Self::Err> {
+    fn try_from(rec: Record) -> Result<Self, Self::Error> {
         let url = if let Some(uv) = rec.meta.get(hname_meta_url()) {
             http::Uri::from_shared(uv.as_bytes().into())
                 .map_err(DialogConvertError::InvalidUrl)
