@@ -294,52 +294,38 @@ fn map_timeout<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
 /// and Content-Encoding.  The `Chunked` encoding will be the first value if
 /// found. At most one compression encoding will be the last value if found.
 pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
-    let encodings = headers
-        .get_all(http::header::TRANSFER_ENCODING)
-        .iter()
-        .chain(headers
-               .get_all(http::header::CONTENT_ENCODING)
-               .iter());
-
+    let mut chunked = false;
     let mut res = Vec::with_capacity(2);
 
-    'headers: for v in encodings {
-        // hyperx's Content-Encoding includes Brotli (br) _and_
-        // Chunked, is thus a super-set of Transfer-Encoding, so parse
-        // all of these headers that way.
-        if let Ok(v) = ContentEncoding::parse_header(&v) {
-            for av in v.iter() {
+    for v in &[headers.get_all(http::header::TRANSFER_ENCODING),
+               headers.get_all(http::header::CONTENT_ENCODING)] {
+        match ContentEncoding::parse_header(v) {
+            Ok(encs) => for av in encs.iter().rev() {
+                // check in reverse, since these are in order of application
+                // and we want the last
                 match *av {
                     HyEncoding::Identity => {} //ignore
-                    HyEncoding::Chunked => {
-                        // guard against duplicating.
-                        if res.is_empty() {
-                            res.push(Encoding::Chunked);
-                        }
-                    }
-                    HyEncoding::Deflate => {
-                        res.push(Encoding::Deflate);
-                        break 'headers;
-                    }
-                    HyEncoding::Gzip => {
-                        res.push(Encoding::Gzip);
-                        break 'headers;
-                    }
-                    HyEncoding::Brotli => {
-                        res.push(Encoding::Brotli);
-                        break 'headers;
-                    }
-                    HyEncoding::Compress => {
-                        res.push(Encoding::Compress);
-                        break 'headers;
-                    }
-                    _ => {
-                        warn!("Found unknown encoding: {:?}", av);
-                        break 'headers;
-                    }
+                    HyEncoding::Chunked  => chunked = true,
+                    HyEncoding::Deflate  => res.push(Encoding::Deflate),
+                    HyEncoding::Gzip     => res.push(Encoding::Gzip),
+                    HyEncoding::Brotli   => res.push(Encoding::Brotli),
+                    HyEncoding::Compress => res.push(Encoding::Compress),
+                    _ => warn!("Found unknown encoding: {:?}", av),
                 }
             }
+            Err(e) => {
+                warn!("{} on header {:?}", e, v.iter().collect::<Vec<_>>());
+            }
         }
+    }
+    if res.len() > 1 {
+        warn!("Found multiple compression encodings, \
+               using first (reversed): {:?}",
+              res);
+        res.truncate(1);
+    }
+    if chunked {
+        res.insert(0, Encoding::Chunked);
     }
     res
 }
@@ -348,18 +334,10 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
 pub fn find_chunked(headers: &http::HeaderMap) -> bool {
     let encodings = headers.get_all(http::header::TRANSFER_ENCODING);
 
-    'headers: for v in encodings {
+    for v in encodings {
         if let Ok(v) = TransferEncoding::parse_header(&v) {
             for av in v.iter() {
-                match *av {
-                    HyEncoding::Identity => {} //ignore
-                    HyEncoding::Chunked => {
-                        return true;
-                    }
-                    _ => {
-                        break 'headers;
-                    }
-                }
+                if let HyEncoding::Chunked = *av { return true }
             }
         }
     }
