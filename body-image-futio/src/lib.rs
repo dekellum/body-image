@@ -308,6 +308,8 @@ pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
                     HyEncoding::Chunked  => chunked = true,
                     HyEncoding::Deflate  => res.push(Encoding::Deflate),
                     HyEncoding::Gzip     => res.push(Encoding::Gzip),
+                    HyEncoding::EncodingExt(ref s) if s == "x-gzip"
+                                         => res.push(Encoding::Gzip),
                     HyEncoding::Brotli   => res.push(Encoding::Brotli),
                     HyEncoding::Compress => res.push(Encoding::Compress),
                     _ => warn!("Found unknown encoding: {:?}", av),
