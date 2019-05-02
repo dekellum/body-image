@@ -48,7 +48,7 @@ use futures::future::Either;
 use http;
 use hyper;
 use hyper_tls;
-use hyperx::header::{ContentLength, Header};
+use hyperx::header::{ContentLength, TypedHeaders};
 use tao_log::warn;
 use tokio;
 use tokio::timer::timeout;
@@ -300,14 +300,17 @@ fn resp_future(monolog: Monolog, tune: Tunables)
     let (resp_parts, body) = monolog.response.into_parts();
 
     // Result<BodySink> based on CONTENT_LENGTH header.
-    let bsink = match resp_parts.headers.get(http::header::CONTENT_LENGTH) {
-        Some(v) => check_length(v, tune.max_body()).and_then(|cl| {
-            if cl > tune.max_body_ram() {
+    let bsink = match resp_parts.headers.try_decode::<ContentLength>() {
+        Some(Ok(ContentLength(l))) => {
+            if l > tune.max_body() {
+                Err(FutioError::ContentLengthTooLong(l))
+            } else if l > tune.max_body_ram() {
                 BodySink::with_fs(tune.temp_dir()).map_err(FutioError::from)
             } else {
-                Ok(BodySink::with_ram(cl))
+                Ok(BodySink::with_ram(l))
             }
-        }),
+        },
+        Some(Err(e)) => Err(FutioError::Other(Box::new(e))),
         None => Ok(BodySink::with_ram(tune.max_body_ram()))
     };
 
@@ -335,17 +338,6 @@ fn resp_future(monolog: Monolog, tune: Tunables)
                 Ok(in_dialog)
             })
     )
-}
-
-fn check_length(v: &http::header::HeaderValue, max: u64)
-    -> Result<u64, FutioError>
-{
-    let l = *ContentLength::parse_header(&v)
-        .map_err(|e| FutioError::Other(Box::new(e)))?;
-    if l > max {
-        return Err(FutioError::ContentLengthTooLong(l));
-    }
-    Ok(l)
 }
 
 /// An `http::Request` and recording. Note that other important getter
