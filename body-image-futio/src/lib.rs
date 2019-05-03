@@ -290,8 +290,8 @@ fn map_timeout<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
     }
 }
 
-/// Return a list of supported encodings from the headers Transfer-Encoding
-/// and Content-Encoding.  The `Chunked` encoding will be the first value if
+/// Return a list of relevant encodings from the headers Transfer-Encoding and
+/// Content-Encoding.  The `Chunked` encoding will be the first value if
 /// found. At most one compression encoding will be the last value if found.
 pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
     let mut chunked = false;
