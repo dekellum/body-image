@@ -142,6 +142,8 @@ pub fn decompress(body: &BodyImage, compression: Encoding, tune: &Tunables)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use body_image::{BodyError, Tuner};
+    use tao_log::debugv;
 
     #[test]
     fn finds_chunked() {
@@ -209,5 +211,46 @@ mod tests {
         assert_eq!(
             find_encodings(&hmap),
             vec![Encoding::Chunked, Encoding::Gzip]);
+    }
+
+    #[test]
+    fn decompress_empty_fails() {
+        assert!(crate::logger::test_logger());
+
+        let tune = Tuner::new().finish();
+        let body = BodyImage::empty();
+
+        if let Err(e @ FutioError::Body(BodyError::Io(_))) =
+            decompress(&body, Encoding::Deflate, &tune)
+        {
+            debugv!("deflate empty", e);
+        } else {
+            panic!("should not succeed!");
+        }
+
+        if let Err(e @ FutioError::Body(BodyError::Io(_))) =
+            decompress(&body, Encoding::Gzip, &tune)
+        {
+            debugv!("gunzip empty", e);
+        } else {
+            panic!("should not succeed!");
+        }
+    }
+
+    #[cfg(feature = "brotli")]
+    #[test]
+    fn decompress_empty_fails_brotli() {
+        assert!(crate::logger::test_logger());
+
+        let tune = Tuner::new().finish();
+        let body = BodyImage::empty();
+
+        if let Err(e @ FutioError::Body(BodyError::Io(_))) =
+            decompress(&body, Encoding::Brotli, &tune)
+        {
+            debugv!("de-brotli empty", e);
+        } else {
+            panic!("should not succeed!");
+        }
     }
 }
