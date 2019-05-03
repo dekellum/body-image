@@ -179,7 +179,7 @@ mod tests {
 
         let mut hmap = http::HeaderMap::new();
         hmap.insert(http::header::TRANSFER_ENCODING,
-                    "chunked,deflate".parse().unwrap());
+                    " chunked,deflate ".parse().unwrap());
         assert_eq!(
             find_encodings(&hmap),
             vec![Encoding::Chunked, Encoding::Deflate]);
