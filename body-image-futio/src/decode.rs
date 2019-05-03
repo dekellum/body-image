@@ -188,12 +188,26 @@ mod tests {
     #[test]
     fn finds_content_compression() {
         let mut hmap = http::HeaderMap::new();
-        hmap.append(http::header::TRANSFER_ENCODING,
+        hmap.insert(http::header::TRANSFER_ENCODING,
                     "chunked".parse().unwrap());
         hmap.insert(http::header::CONTENT_ENCODING,
                     "br".parse().unwrap());
         assert_eq!(
             find_encodings(&hmap),
             vec![Encoding::Chunked, Encoding::Brotli]);
+    }
+
+    #[test]
+    fn ignores_additional_compressions() {
+        assert!(crate::logger::test_logger());
+
+        let mut hmap = http::HeaderMap::new();
+        hmap.insert(http::header::TRANSFER_ENCODING,
+                    "deflate, chunked, gzip".parse().unwrap());
+        hmap.insert(http::header::CONTENT_ENCODING,
+                    "br".parse().unwrap());
+        assert_eq!(
+            find_encodings(&hmap),
+            vec![Encoding::Chunked, Encoding::Gzip]);
     }
 }
