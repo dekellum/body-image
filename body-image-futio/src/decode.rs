@@ -138,3 +138,62 @@ pub fn decompress(body: &BodyImage, compression: Encoding, tune: &Tunables)
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finds_chunked() {
+        let mut hmap = http::HeaderMap::new();
+        assert!(!find_chunked(&hmap));
+
+        hmap.insert(http::header::TRANSFER_ENCODING,
+                    "gzip".parse().unwrap());
+        hmap.append(http::header::TRANSFER_ENCODING,
+                    "chunked".parse().unwrap());
+        assert!(find_chunked(&hmap));
+    }
+
+    #[test]
+    fn finds_transfer_compression() {
+        let mut hmap = http::HeaderMap::new();
+        assert_eq!(find_encodings(&hmap), vec![]);
+
+        hmap.insert(http::header::TRANSFER_ENCODING,
+                    "gzip".parse().unwrap());
+        hmap.append(http::header::TRANSFER_ENCODING,
+                    "chunked".parse().unwrap());
+        assert_eq!(
+            find_encodings(&hmap),
+            vec![Encoding::Chunked, Encoding::Gzip]);
+
+        let mut hmap = http::HeaderMap::new();
+        hmap.insert(http::header::TRANSFER_ENCODING,
+                    "chunked".parse().unwrap());
+        hmap.append(http::header::TRANSFER_ENCODING,
+                    "x-gzip".parse().unwrap());
+        assert_eq!(
+            find_encodings(&hmap),
+            vec![Encoding::Chunked, Encoding::Gzip]);
+
+        let mut hmap = http::HeaderMap::new();
+        hmap.insert(http::header::TRANSFER_ENCODING,
+                    "chunked,deflate".parse().unwrap());
+        assert_eq!(
+            find_encodings(&hmap),
+            vec![Encoding::Chunked, Encoding::Deflate]);
+    }
+
+    #[test]
+    fn finds_content_compression() {
+        let mut hmap = http::HeaderMap::new();
+        hmap.append(http::header::TRANSFER_ENCODING,
+                    "chunked".parse().unwrap());
+        hmap.insert(http::header::CONTENT_ENCODING,
+                    "br".parse().unwrap());
+        assert_eq!(
+            find_encodings(&hmap),
+            vec![Encoding::Chunked, Encoding::Brotli]);
+    }
+}
