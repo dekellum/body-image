@@ -1,3 +1,5 @@
+## 1.2.0 (TBD)
+
 ## 1.1.0 (2019-3-6)
 * _Error reform_: Remove _failure_ crate dependency, internally replacing
   `failure::Error` with `Box<StdError + Send + Sync + 'static>` (type-aliased

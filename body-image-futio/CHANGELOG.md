@@ -1,3 +1,5 @@
+## 1.2.0 (TBD)
+
 ## 1.1.1 (2019-5-8)
 * Previously functions `find_encodings` and `find_chunked` were sensitive to
   the order of transfer/content-encoding header value lists, and while the
