@@ -36,7 +36,7 @@ pub(crate) struct ClError(String);
 
 impl fmt::Display for ClError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -261,7 +261,7 @@ fn cp(
     -> Result<(), Flaw>
 {
     if barc_in == barc_out {
-        quit!("BARC input and output must be different files");
+        quit!("BARC input and output file are the same: {}", barc_in);
     }
     let bfin = BarcFile::new(barc_in);
     let tune = Tunables::new();

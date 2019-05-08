@@ -42,33 +42,30 @@ use std::io;
 use std::mem;
 use std::time::Duration;
 
-#[cfg(feature = "brotli")] use brotli;
-
 use bytes::Bytes;
-use flate2::read::{DeflateDecoder, GzDecoder};
 use futures::{future, Future, Stream};
 use futures::future::Either;
 use http;
 use hyper;
 use hyper_tls;
-use hyperx::header::{
-    ContentEncoding, ContentLength, Encoding as HyEncoding,
-    Header, TransferEncoding
-};
-use tao_log::{debug, warn};
+use hyperx::header::{ContentLength, Header};
+use tao_log::warn;
 use tokio;
 use tokio::timer::timeout;
 use tokio::util::FutureExt;
 
 use body_image::{
     BodyImage, BodySink, BodyError, Encoding,
-    Epilog, Prolog, Dialog, Recorded, RequestRecorded, Tunables,
+    Epilog, Prolog, Dialog, RequestRecorded, Tunables,
 };
 
 /// Conveniently compact type alias for dyn Trait `std::error::Error`. It is
 /// possible to query and downcast the type via methods of
 /// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
+
+mod decode;
+pub use self::decode::{decode_res_body, find_encodings, find_chunked};
 
 mod image;
 pub use self::image::AsyncBodyImage;
@@ -134,9 +131,7 @@ pub enum FutioError {
     /// `Brotli`, when the _brotli_ feature is not enabled.
     UnsupportedEncoding(Encoding),
 
-    /// Other unclassified errors. There is intentionally no `From`
-    /// implementation for `Flaw` to this variant, as that could easily lead
-    /// to misclassification.  Instead it should be manually constructed.
+    /// Other unclassified errors.
     Other(Flaw),
 
     /// Unused variant to both enable non-exhaustive matching and warn against
@@ -204,6 +199,10 @@ impl From<io::Error> for FutioError {
         FutioError::Body(BodyError::Io(err))
     }
 }
+
+// Note: There is intentionally no `From` implementation for `Flaw` to
+// `FutioError::Other`, as that could easily lead to misclassification.
+// Instead it should be manually constructed.
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
 /// function constructs a default *tokio* `Runtime`,
@@ -285,152 +284,6 @@ fn map_timeout<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
         FutioError::Other(te.into_timer().unwrap().into())
     } else {
         te.into_inner().expect("inner")
-    }
-}
-
-/// Return a list of supported encodings from the headers Transfer-Encoding
-/// and Content-Encoding.  The `Chunked` encoding will be the first value if
-/// found. At most one compression encoding will be the last value if found.
-pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
-    let encodings = headers
-        .get_all(http::header::TRANSFER_ENCODING)
-        .iter()
-        .chain(headers
-               .get_all(http::header::CONTENT_ENCODING)
-               .iter());
-
-    let mut res = Vec::with_capacity(2);
-
-    'headers: for v in encodings {
-        // hyperx's Content-Encoding includes Brotli (br) _and_
-        // Chunked, is thus a super-set of Transfer-Encoding, so parse
-        // all of these headers that way.
-        if let Ok(v) = ContentEncoding::parse_header(&v) {
-            for av in v.iter() {
-                match *av {
-                    HyEncoding::Identity => {} //ignore
-                    HyEncoding::Chunked => {
-                        // guard against duplicating.
-                        if res.is_empty() {
-                            res.push(Encoding::Chunked);
-                        }
-                    }
-                    HyEncoding::Deflate => {
-                        res.push(Encoding::Deflate);
-                        break 'headers;
-                    }
-                    HyEncoding::Gzip => {
-                        res.push(Encoding::Gzip);
-                        break 'headers;
-                    }
-                    HyEncoding::Brotli => {
-                        res.push(Encoding::Brotli);
-                        break 'headers;
-                    }
-                    HyEncoding::Compress => {
-                        res.push(Encoding::Compress);
-                        break 'headers;
-                    }
-                    _ => {
-                        warn!("Found unknown encoding: {:?}", av);
-                        break 'headers;
-                    }
-                }
-            }
-        }
-    }
-    res
-}
-
-/// Return true if the chunked Transfer-Encoding can be found in the headers.
-pub fn find_chunked(headers: &http::HeaderMap) -> bool {
-    let encodings = headers.get_all(http::header::TRANSFER_ENCODING);
-
-    'headers: for v in encodings {
-        if let Ok(v) = TransferEncoding::parse_header(&v) {
-            for av in v.iter() {
-                match *av {
-                    HyEncoding::Identity => {} //ignore
-                    HyEncoding::Chunked => {
-                        return true;
-                    }
-                    _ => {
-                        break 'headers;
-                    }
-                }
-            }
-        }
-    }
-
-    false
-}
-
-/// Decode the response body of the provided `Dialog` compressed with any
-/// supported `Encoding`, updated the dialog accordingly.  The provided
-/// `Tunables` controls decompression buffer sizes and if the final
-/// `BodyImage` will be in `Ram` or `FsRead`. Returns `Ok(true)` if the
-/// response body was decoded, or `Ok(false)` if no encoding was found, or an
-/// error on failure, including from an unsupported `Encoding`.
-pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)
-    -> Result<bool, FutioError>
-{
-    let mut encodings = find_encodings(dialog.res_headers());
-
-    let compression = encodings.last().and_then(|e| {
-        if *e != Encoding::Chunked { Some(*e) } else { None }
-    });
-
-    let new_body = if let Some(comp) = compression {
-        debug!("Body to {:?} decode: {:?}", comp, dialog.res_body());
-        Some(decompress(dialog.res_body(), comp, tune)?)
-    } else {
-        None
-    };
-
-    // Positively indicate that we've checked, and if necessary, successfully
-    // decoded body to the associated raw Content-Type representation.
-    encodings.push(Encoding::Identity);
-
-    if let Some(b) = new_body {
-        dialog.set_res_body_decoded(b, encodings);
-        debug!("Body update: {:?}", dialog.res_body());
-        Ok(true)
-    } else {
-        dialog.set_res_decoded(encodings);
-        Ok(false)
-    }
-}
-
-/// Decompress the provided body of any supported compression `Encoding`,
-/// using `Tunables` for buffering and the final returned `BodyImage`. If the
-/// encoding is not supported (e.g. `Chunked` or `Brotli`, without the feature
-/// enabled), returns `Err(FutioError::UnsupportedEncoding)`.
-pub fn decompress(body: &BodyImage, compression: Encoding, tune: &Tunables)
-    -> Result<BodyImage, FutioError>
-{
-    let reader = body.reader();
-    match compression {
-        Encoding::Gzip => {
-            let mut decoder = GzDecoder::new(reader);
-            let len_est = body.len() * u64::from(tune.size_estimate_gzip());
-            Ok(BodyImage::read_from(&mut decoder, len_est, tune)?)
-        }
-        Encoding::Deflate => {
-            let mut decoder = DeflateDecoder::new(reader);
-            let len_est = body.len() * u64::from(tune.size_estimate_deflate());
-            Ok(BodyImage::read_from(&mut decoder, len_est, tune)?)
-        }
-        #[cfg(feature = "brotli")]
-        Encoding::Brotli => {
-            let mut decoder = brotli::Decompressor::new(
-                reader,
-                tune.buffer_size_ram());
-            let len_est = body.len() * u64::from(tune.size_estimate_brotli());
-            Ok(BodyImage::read_from(&mut decoder, len_est, tune)?)
-        }
-        _ => {
-            Err(FutioError::UnsupportedEncoding(compression))
-        }
     }
 }
 

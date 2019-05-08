@@ -489,8 +489,8 @@ mod tests {
         assert!(is_compressible_type_str("application/rss"));
         assert!(is_compressible_type_str("font/TTF")); //case insensitive
 
-        /// httparse originating HeaderValue's should not have
-        /// leading/trailing whitespace, but we trim just in case
+        // httparse originating HeaderValue's should not have
+        // leading/trailing whitespace, but we trim just in case
         assert!(is_compressible_type_str("  text/html"));
     }
 

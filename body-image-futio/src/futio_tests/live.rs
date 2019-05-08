@@ -1,6 +1,6 @@
-use body_image::Tunables;
+use body_image::{Recorded, Tunables};
 use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
-            Recorded, RequestRecord, RequestRecorder, user_agent};
+            RequestRecord, RequestRecorder, user_agent};
 use crate::logger::test_logger;
 use tao_log::debugv;
 
@@ -26,7 +26,7 @@ fn test_small_http() {
     let dl = debugv!(fetch(req, &tune)).unwrap();
 
     assert!(dl.res_body().is_ram());
-    assert!(dl.res_body().len() > 0);
+    assert!(!dl.res_body().is_empty());
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn test_small_https() {
     let dl = dl.clone(); // for coverage only
 
     assert!(dl.res_body().is_ram());
-    assert!(dl.res_body().len() > 0);
+    assert!(!dl.res_body().is_empty());
 }
 
 #[test]
@@ -53,6 +53,6 @@ fn test_not_found() {
     assert_eq!(dl.res_status().as_u16(), 404);
 
     assert!(dl.res_body().is_ram());
-    assert!(dl.res_body().len() > 0);
+    assert!(!dl.res_body().is_empty());
     assert!(dl.res_body().len() < 1000);
 }

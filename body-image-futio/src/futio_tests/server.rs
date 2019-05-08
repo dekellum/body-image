@@ -25,9 +25,9 @@ use hyper::service::{service_fn, service_fn_ok};
 use tao_log::{debug, debugv, warn};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
-use crate::{AsyncBodyImage, Flaw, FutioError, RequestRecord, RequestRecorder,
+use crate::{AsyncBodyImage, FutioError, RequestRecord, RequestRecorder,
             request_dialog, user_agent};
-#[cfg(feature = "mmap")] use crate::{AsyncBodySink, UniBodyImage};
+#[cfg(feature = "mmap")] use crate::{AsyncBodySink, Flaw, UniBodyImage};
 use crate::logger::test_logger;
 
 #[test]
