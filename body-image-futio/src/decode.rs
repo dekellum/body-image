@@ -17,42 +17,59 @@ use crate::FutioError;
 /// Content-Encoding.  The `Chunked` encoding will be the first value if
 /// found. At most one compression encoding will be the last value if found.
 pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
-    let mut chunked = false;
     let mut res = Vec::with_capacity(2);
 
-    for v in &[headers.get_all(http::header::TRANSFER_ENCODING),
-               headers.get_all(http::header::CONTENT_ENCODING)] {
-        match ContentEncoding::parse_header(v) {
-            Ok(encs) => for av in encs.iter().rev() {
-                // check in reverse, since these are in order of application
-                // and we want the last
-                match *av {
-                    HyEncoding::Identity => {} //ignore
-                    HyEncoding::Chunked  => chunked = true,
-                    HyEncoding::Deflate  => res.push(Encoding::Deflate),
-                    HyEncoding::Gzip     => res.push(Encoding::Gzip),
-                    HyEncoding::EncodingExt(ref s) if s == "x-gzip"
-                                         => res.push(Encoding::Gzip),
-                    HyEncoding::Brotli   => res.push(Encoding::Brotli),
-                    HyEncoding::Compress => res.push(Encoding::Compress),
-                    _ => warn!("Found unknown encoding: {:?}", av),
-                }
-            }
-            Err(e) => {
-                warn!("{} on header {:?}", e, v.iter().collect::<Vec<_>>());
-            }
-        }
-    }
+    // Only consider chunked from transfer-encoding
+    let chunked = parse_encodings(
+        &headers.get_all(http::header::TRANSFER_ENCODING),
+        &mut res);
+
+    parse_encodings(
+        &headers.get_all(http::header::CONTENT_ENCODING),
+        &mut res);
+
     if res.len() > 1 {
         warn!("Found multiple compression encodings, \
                using first (reversed): {:?}",
               res);
         res.truncate(1);
     }
+
     if chunked {
         res.insert(0, Encoding::Chunked);
     }
     res
+}
+
+// Parse *-encoding header values, pushing compression encodings to res, and
+// return if "chunked" was found, logging any parse errors as warnings.
+fn parse_encodings<'a>(
+    raw: &http::header::GetAll<'a, http::header::HeaderValue>,
+    res: &mut Vec<Encoding>)
+    -> bool
+{
+    let mut chunked = false;
+    match ContentEncoding::parse_header(raw) {
+        Ok(encs) => for av in encs.iter().rev() {
+            // check in reverse, since these are in order of application
+            // and we want the last
+            match *av {
+                HyEncoding::Identity => {} //ignore
+                HyEncoding::Chunked  => chunked = true,
+                HyEncoding::Deflate  => res.push(Encoding::Deflate),
+                HyEncoding::Gzip     => res.push(Encoding::Gzip),
+                HyEncoding::EncodingExt(ref s) if s == "x-gzip"
+                                     => res.push(Encoding::Gzip),
+                HyEncoding::Brotli   => res.push(Encoding::Brotli),
+                HyEncoding::Compress => res.push(Encoding::Compress),
+                _ => warn!("Found unknown encoding: {:?}", av),
+            }
+        }
+        Err(e) => {
+            warn!("{} on header {:?}", e, raw.iter().collect::<Vec<_>>());
+        }
+    }
+    chunked
 }
 
 /// Return true if the chunked Transfer-Encoding can be found in the headers.
