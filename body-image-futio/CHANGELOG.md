@@ -1,4 +1,15 @@
 ## 1.1.1 (TBD)
+* Previously functions `find_encodings` and `find_chunked` were sensitive to
+  the order of transfer/content-encoding header value lists, and while the
+  ordering is under-specified, had assumed the opposite of documented examples
+  in order of _application_, e.g. "gzip, chunked". With this reasonably common
+  case, these functions would fail to find `Encoding::Chunked`, since they
+  terminated at the first recognized compression encoding.  Fix this by not
+  terminating the scan early. Also add support for parsing "x-gzip" as
+  alternate for `Encoding::Gzip`, per HTTP 1.1. Finally, handle the edge case
+  of multiple compression encodings by using the _last_ (per application order,
+  and parsing transfer-encoding before content-encoding) and logging a warning
+  of the additional encodings found.
 
 ## 1.1.0 (2019-3-6)
 * _Error reform_: add `FutioError` enum and remove _failure_ crate dependency:
