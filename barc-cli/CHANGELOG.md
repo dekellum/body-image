@@ -1,4 +1,14 @@
 ## 1.2.0 (TBD)
+* Narrow various dependencies to avoid future MINOR versions, for reliability.
+  We may subsequently make PATCH releases which _broaden_ private or public
+  dependencies to include new MINOR releases found _compatible_. Rationale:
+  Cargo fails to consider MSRV for dependency resolution (rust-lang/rfcs#2495),
+  and MSRV bumps are common in MINOR releases, including as planned here.  Also
+  binary crates like barc-cli, can't yet ship and use their own Cargo.lock for
+  resolution (rust-lang/cargo#5654).
+
+* Add build.rs script to fail fast on an attempt to compile with a rustc below
+  MSRV, which remains 1.31.0.
 
 ## 1.1.0 (2019-3-6)
 * _Error reform_: Remove _failure_ crate dependency, internally replacing

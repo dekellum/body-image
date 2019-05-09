@@ -1,4 +1,12 @@
 ## 1.2.0 (TBD)
+* Narrow various dependencies to avoid future MINOR versions, for reliability.
+  We may subsequently make PATCH releases which _broaden_ private or public
+  dependencies to include new MINOR releases found _compatible_. Rationale:
+  Cargo fails to consider MSRV for dependency resolution (rust-lang/rfcs#2495),
+  and MSRV bumps are common in MINOR releases, including as planned here.
+
+* Add build.rs script to fail fast on an attempt to compile with a rustc below
+  MSRV, which remains 1.31.0.
 
 ## 1.1.0 (2019-3-6)
 * `BodyImage::write_to` and `BodyImage::read_from` are now generic over `Write`

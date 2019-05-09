@@ -1,4 +1,23 @@
 ## 1.2.0 (TBD)
+* Make existing `barc::TryFrom` and `TryInto` compatible with the
+  `std::convert` equivalents, as stabilized in rust 1.34.0. Furthermore, when
+  built with rust 1.34.0+, use the `std::convert` equivalent traits,
+  re-exported as `barc::TryFrom` and `TryInto`.  These re-exports are
+  (silently) deprecated. Use `std::convert` traits directly if your MSRV ≥
+  1.34.0. This is graded a MINOR-version compatibly hazard because existing
+  trait import paths and conversions should continue to work.
+
+* Narrow various dependencies to avoid future MINOR versions, for reliability.
+  We may subsequently make PATCH releases which _broaden_ private or public
+  dependencies to include new MINOR releases found _compatible_. Rationale:
+  Cargo fails to consider MSRV for dependency resolution (rust-lang/rfcs#2495),
+  and MSRV bumps are common in MINOR releases, including as planned here.
+
+* Increase minimum brotli version to 3.1.0, based on minimal version testing
+  with latest tests.
+
+* Add build.rs script to fail fast on an attempt to compile with a rustc below
+  MSRV, which remains 1.31.0.
 
 ## 1.1.0 (2019-3-6)
 * `GzipCompressStrategy` and `BrotliCompressStrategy` (_brotli_ feature) have

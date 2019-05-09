@@ -1,4 +1,19 @@
 ## 1.2.0 (TBD)
+* Upgrade to hyperx 0.15.0 and use new `TypedHeaders` extension to simplify
+  `find_chunked` and to improve content-length handling, which will now error
+  by design on the edge case of multiple, non-equal length values.
+
+* Narrow various dependencies to avoid future MINOR versions, for reliability.
+  We may subsequently make PATCH releases which _broaden_ private or public
+  dependencies to include new MINOR releases found _compatible_. Rationale:
+  Cargo fails to consider MSRV for dependency resolution (rust-lang/rfcs#2495),
+  and MSRV bumps are common in MINOR releases, including as planned here.
+
+* Increase minimum brotli version to 3.1.0, based on minimal version testing
+  with latest tests.
+
+* Add build.rs script to fail fast on an attempt to compile with a rustc below
+  MSRV, which remains 1.31.0.
 
 ## 1.1.1 (2019-5-8)
 * Previously functions `find_encodings` and `find_chunked` were sensitive to
