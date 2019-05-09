@@ -5,7 +5,7 @@
 use flate2::read::{DeflateDecoder, GzDecoder};
 use hyperx::header::{
     ContentEncoding, Encoding as HyEncoding,
-    Header, TransferEncoding
+    Header, TransferEncoding, TypedHeaders
 };
 use tao_log::{debug, warn};
 
@@ -74,16 +74,11 @@ fn parse_encodings<'a>(
 
 /// Return true if the chunked Transfer-Encoding can be found in the headers.
 pub fn find_chunked(headers: &http::HeaderMap) -> bool {
-    let encodings = headers.get_all(http::header::TRANSFER_ENCODING);
-
-    for v in encodings {
-        if let Ok(v) = TransferEncoding::parse_header(&v) {
-            for av in v.iter() {
-                if let HyEncoding::Chunked = *av { return true }
-            }
+    if let Ok(v) = headers.decode::<TransferEncoding>() {
+        for av in v.iter() {
+            if let HyEncoding::Chunked = *av { return true }
         }
     }
-
     false
 }
 
