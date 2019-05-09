@@ -64,8 +64,20 @@ use crate::compress::DecodeWrapper;
 #[cfg(feature = "brotli")]
 pub use crate::compress::BrotliCompressStrategy;
 
+#[cfg(not(barc_std_try_from))]
 mod try_conv;
+
+#[cfg(not(barc_std_try_from))]
 pub use crate::try_conv::{TryFrom, TryInto};
+
+// Public imports of std::convert equivalents to try_conv::*, as stabilized in
+// rustc 1.34.0.  We also deprecate these re-exports, as the `std::convert`
+// types should be used directly. However, re-export deprecations are currently
+// ignored by rustc, see https://github.com/rust-lang/rust/issues/47236.
+#[cfg(barc_std_try_from)]
+#[deprecated(since = "1.2.0", note="Use the std::convert traits directly")]
+#[doc(no_inline)]
+pub use std::convert::{TryFrom, TryInto};
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -312,7 +324,7 @@ impl MetaRecorded for Record {
 }
 
 impl TryFrom<Dialog> for Record {
-    type Err = BarcError;
+    type Error = BarcError;
 
     /// Attempt to convert `Dialog` to `Record`.  This derives meta headers
     /// from various `Dialog` fields, and could potentially fail, based on
@@ -321,7 +333,7 @@ impl TryFrom<Dialog> for Record {
     /// `http::Uri` validation complexity, but any conversion failure would
     /// suggest an *http* crate bug or breaking change—as currently stated,
     /// allowed `Uri` bytes are a subset of allowed `HeaderValue` bytes.
-    fn try_from(dialog: Dialog) -> Result<Self, Self::Err> {
+    fn try_from(dialog: Dialog) -> Result<Self, Self::Error> {
 
         let (prolog, epilog) = dialog.explode();
         let mut meta = http::HeaderMap::with_capacity(6);
@@ -462,14 +474,14 @@ impl StdError for DialogConvertError {
 }
 
 impl TryFrom<Record> for Dialog {
-    type Err = DialogConvertError;
+    type Error = DialogConvertError;
 
     /// Attempt to convert `Record` to `Dialog`. This parses various meta
     /// header values to produce `Dialog` equivalents such as
     /// `http::StatusCode` and `http::Method`, which could fail, if the
     /// `Record` was not originally produced from a `Dialog` or was otherwise
     /// modified in an unsupported way.
-    fn try_from(rec: Record) -> Result<Self, Self::Err> {
+    fn try_from(rec: Record) -> Result<Self, Self::Error> {
         let url = if let Some(uv) = rec.meta.get(hname_meta_url()) {
             http::Uri::from_shared(uv.as_bytes().into())
                 .map_err(DialogConvertError::InvalidUrl)
@@ -1158,6 +1170,9 @@ mod logger;
 
 #[cfg(test)]
 mod barc_tests {
+    #[cfg(barc_std_try_from)]
+    use std::convert::TryInto;
+
     use std::fs;
     use std::path::{Path, PathBuf};
     use http::header::{AGE, REFERER, VIA};
