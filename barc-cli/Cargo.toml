@@ -17,10 +17,10 @@ build         = "build.rs"
 travis-ci = { repository="dekellum/body-image" }
 
 [dependencies]
-barc       = { version=">=1.1.0, <2", default-features=false }
-body-image = { version=">=1.1.0, <2", default-features=false }
-body-image-futio = { version=">=1.1.0, <2", optional=true, default-features=false }
-clap       = { version=">=2.31.2, <3",default-features=false, features=["wrap_help"] }
+barc       = { version=">=1.2.0, <1.3", default-features=false }
+body-image = { version=">=1.2.0, <1.3", default-features=false }
+body-image-futio = { version=">=1.2.0, <1.3", optional=true, default-features=false }
+clap       = { version=">=2.31.2, <2.34", default-features=false, features=["wrap_help"] }
 fern       = { version=">=0.5.5, <0.6" }
 http       = { version=">=0.1.6, <0.2" }
 hyper      = { version=">=0.12.1, <0.13", optional=true }
