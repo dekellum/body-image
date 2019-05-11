@@ -151,7 +151,7 @@ impl CompressStrategy for NoCompressStrategy {
     fn wrap_encoder<'a>(&self, _rec: &dyn MetaRecorded, file: &'a File)
         -> Result<EncodeWrapper<'a>, BarcError>
     {
-        Ok(EncodeWrapper::Plain(file))
+        Ok(EncodeWrapper::plain(file))
     }
 }
 
@@ -208,11 +208,9 @@ impl CompressStrategy for GzipCompressStrategy {
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         if self.is_compressible(rec) {
-            Ok(EncodeWrapper::Gzip(Box::new(
-                GzEncoder::new(file, GzCompression::new(self.compression_level))
-            )))
+            Ok(EncodeWrapper::gzip(file, self.compression_level))
         } else {
-            Ok(EncodeWrapper::Plain(file))
+            Ok(EncodeWrapper::plain(file))
         }
     }
 
@@ -282,15 +280,9 @@ impl CompressStrategy for BrotliCompressStrategy {
         -> Result<EncodeWrapper<'a>, BarcError>
     {
         if self.is_compressible(rec) {
-            Ok(EncodeWrapper::Brotli(Box::new(
-                brotli::CompressorWriter::new(
-                    file,
-                    4096, //FIXME: tune?
-                    self.compression_level,
-                    21)
-            )))
+            Ok(EncodeWrapper::brotli(file, self.compression_level))
         } else {
-            Ok(EncodeWrapper::Plain(file))
+            Ok(EncodeWrapper::plain(file))
         }
     }
 
@@ -380,7 +372,9 @@ fn len_of_headers(headers: &http::HeaderMap) -> usize {
 
 /// Wrapper holding a potentially encoding `Write` reference for the
 /// underlying BARC `File` reference.
-pub enum EncodeWrapper<'a> {
+pub struct EncodeWrapper<'a>(Encoder<'a>);
+
+enum Encoder<'a> {
     Plain(&'a File),
     Gzip(Box<GzEncoder<&'a File>>),
     #[cfg(feature = "brotli")]
@@ -388,28 +382,59 @@ pub enum EncodeWrapper<'a> {
 }
 
 impl<'a> EncodeWrapper<'a> {
+
+    /// Return wrapper for `Plain` (no compression) output.
+    pub fn plain(file: &'a File) -> EncodeWrapper<'a> {
+        EncodeWrapper(Encoder::Plain(file))
+    }
+
+    /// Return wrapper for `Gzip` output.
+    pub fn gzip(file: &'a File, compression_level: u32)
+        -> EncodeWrapper<'a>
+    {
+        EncodeWrapper(Encoder::Gzip(Box::new(
+            GzEncoder::new(
+                file,
+                GzCompression::new(compression_level))
+        )))
+    }
+
+    /// Return wrapper for `Brotli` output.
+    #[cfg(feature = "brotli")]
+    pub fn brotli(file: &'a File, compression_level: u32)
+        -> EncodeWrapper<'a>
+    {
+        EncodeWrapper(Encoder::Brotli(Box::new(
+            brotli::CompressorWriter::new(
+                file,
+                4096, //FIXME: tune?
+                compression_level,
+                21)
+        )))
+    }
+
     /// Return the `Compression` flag variant in use.
     pub fn mode(&self) -> Compression {
-        match *self {
-            EncodeWrapper::Plain(_) => Compression::Plain,
-            EncodeWrapper::Gzip(_) => Compression::Gzip,
+        match self.0 {
+            Encoder::Plain(_) => Compression::Plain,
+            Encoder::Gzip(_) => Compression::Gzip,
             #[cfg(feature = "brotli")]
-            EncodeWrapper::Brotli(_) => Compression::Brotli,
+            Encoder::Brotli(_) => Compression::Brotli,
         }
     }
 
     /// Consume the wrapper, finishing any encoding and flushing the
     /// completed write.
     pub fn finish(self) -> Result<(), BarcError> {
-        match self {
-            EncodeWrapper::Plain(mut f) => {
+        match self.0 {
+            Encoder::Plain(mut f) => {
                 f.flush()?;
             }
-            EncodeWrapper::Gzip(gze) => {
+            Encoder::Gzip(gze) => {
                 gze.finish()?.flush()?;
             }
             #[cfg(feature = "brotli")]
-            EncodeWrapper::Brotli(mut bcw) => {
+            Encoder::Brotli(mut bcw) => {
                 bcw.flush()?;
             }
         }
@@ -419,20 +444,20 @@ impl<'a> EncodeWrapper<'a> {
 
 impl<'a> Write for EncodeWrapper<'a> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
-        match *self {
-            EncodeWrapper::Plain(ref mut w) => w.write(buf),
-            EncodeWrapper::Gzip(ref mut gze) => gze.write(buf),
+        match self.0 {
+            Encoder::Plain(ref mut w) => w.write(buf),
+            Encoder::Gzip(ref mut gze) => gze.write(buf),
             #[cfg(feature = "brotli")]
-            EncodeWrapper::Brotli(ref mut bcw) => bcw.write(buf),
+            Encoder::Brotli(ref mut bcw) => bcw.write(buf),
         }
     }
 
     fn flush(&mut self) -> Result<(), io::Error> {
-        match *self {
-            EncodeWrapper::Plain(ref mut f) => f.flush(),
-            EncodeWrapper::Gzip(ref mut gze) => gze.flush(),
+        match self.0 {
+            Encoder::Plain(ref mut f) => f.flush(),
+            Encoder::Gzip(ref mut gze) => gze.flush(),
             #[cfg(feature = "brotli")]
-            EncodeWrapper::Brotli(ref mut bcw) => bcw.flush(),
+            Encoder::Brotli(ref mut bcw) => bcw.flush(),
         }
     }
 }
