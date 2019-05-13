@@ -7,6 +7,14 @@
   1.34.0. This is graded a MINOR-version compatibly hazard because existing
   trait import paths and conversions should continue to work.
 
+* Convert enum `barc::EncodeWrapper` to a struct with private internals, making
+  the implementation dependencies _flate2_ and (optional) _brotli_ completely
+  private. Add public constructor functions (`EncodeWrapper::plain`, `gzip`,
+  `brotli`) to preserve the ability to implement `CompressStrategy`
+  externally. The public `EncodeWrapper` struct change is graded a
+  MINOR-version compatibility hazard, as implementing `CompressStrategy`
+  externally should be rare with older releases.
+
 * Narrow various dependencies to avoid future MINOR versions, for reliability.
   We may subsequently make PATCH releases which _broaden_ private or public
   dependencies to include new MINOR releases found _compatible_. Rationale:
