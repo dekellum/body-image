@@ -1,4 +1,4 @@
-## 1.2.0 (TBD)
+## 1.2.0 (2019-5-13)
 * Upgrade to hyperx 0.15.0 and use new `TypedHeaders` extension to simplify
   `find_chunked` and to improve content-length handling, which will now error
   by design on the edge case of multiple, non-equal length values.

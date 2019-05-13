@@ -1,4 +1,4 @@
-## 1.2.0 (TBD)
+## 1.2.0 (2019-5-13)
 * Narrow various dependencies to avoid future MINOR versions, for reliability.
   We may subsequently make PATCH releases which _broaden_ private or public
   dependencies to include new MINOR releases found _compatible_. Rationale:

@@ -1,4 +1,4 @@
-## 1.2.0 (TBD)
+## 1.2.0 (2019-5-13)
 * Make existing `barc::TryFrom` and `TryInto` compatible with the
   `std::convert` equivalents, as stabilized in rust 1.34.0. Furthermore, when
   built with rust 1.34.0+, use the `std::convert` equivalent traits,
