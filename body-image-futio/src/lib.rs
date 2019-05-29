@@ -46,10 +46,12 @@ use std::time::Duration;
 use bytes::Bytes;
 use futures::{future, Future, Stream};
 use futures::future::Either;
-use futures03::compat::Future01CompatExt;
-use futures03::future::Either as Either03;
-use futures03::future::FutureExt as _;
-use futures03::future::TryFutureExt;
+
+#[cfg(feature = "futures03")] use std::future::Future as Future03;
+#[cfg(feature = "futures03")] use futures03::compat::Future01CompatExt;
+#[cfg(feature = "futures03")] use futures03::future::Either as Either03;
+#[cfg(feature = "futures03")] use futures03::future::FutureExt as _;
+#[cfg(feature = "futures03")] use futures03::future::TryFutureExt;
 
 use http;
 use hyper;
@@ -227,33 +229,39 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)
         .map_err(|e| FutioError::Other(Box::new(e)))?;
     let client = hyper::Client::builder().build(connector);
-    rt.block_on(request_dialog_a(client, rr, tune.clone()).boxed().compat())
+
+    #[cfg(feature = "futures03")] {
+        rt.block_on(request_dialog_03(&client, rr, tune).boxed().compat())
+    }
+
+    #[cfg(not(feature = "futures03"))] {
+        rt.block_on(request_dialog(&client, rr, tune))
+    }
+
     // Drop of `rt`, here, is equivalent to shutdown_now and wait
 }
 
 /// Given a suitable `hyper::Client` and `RequestRecord`, return a
-/// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
-/// (initial response and complete body) and if the response `BodyImage` will
-/// be in `Ram` or `FsRead`.
-pub async fn request_dialog_a<CN, B>(
-    client: hyper::Client<CN, B>,
+/// `Future<Output=Result<Dialog, FutioError>>.  The provided `Tunables`
+/// governs timeout intervals (initial response and complete body) and if the
+/// response `BodyImage` will be in `Ram` or `FsRead`.
+#[cfg(feature = "futures03")]
+pub fn request_dialog_03<CN, B>(
+    client: &hyper::Client<CN, B>,
     rr: RequestRecord<B>,
-    tune: Tunables)
-    -> Result<Dialog, FutioError>
+    tune: &Tunables)
+    -> impl Future03<Output=Result<Dialog, FutioError>> + Send + 'static
     where CN: hyper::client::connect::Connect + Sync + 'static,
           B: hyper::body::Payload + Send
 {
     let prolog = rr.prolog;
-
-    let res_timeout = tune.res_timeout();
-    let body_timeout = tune.body_timeout();
 
     let futr = client
         .request(rr.request)
         .from_err::<FutioError>()
         .map(|response| Monolog { prolog, response });
 
-    let futr = if let Some(t) = res_timeout {
+    let futr = if let Some(t) = tune.res_timeout() {
         Either03::Left(futr
             .timeout(t)
             .map_err(move |te| {
@@ -265,24 +273,29 @@ pub async fn request_dialog_a<CN, B>(
         Either03::Right(futr.compat())
     };
 
-    let monolog = futr .await?;
+    let tune = tune.clone();
+    let body_timeout = tune.body_timeout();
 
-    let futr = resp_future_a(monolog, tune);
+    async move {
+        let monolog = futr .await?;
 
-    let futr = if let Some(t) = body_timeout {
-        Either03::Left(
-            futr.boxed().compat()
-                .timeout(t)
-                .map_err(move |te| {
-                    map_timeout(te, || FutioError::BodyTimeout(t))
-                })
-                .compat()
-        )
-    } else {
-        Either03::Right(futr)
-    };
+        let futr = resp_future_03(monolog, tune);
 
-    futr .await? .prepare()
+        let futr = if let Some(t) = body_timeout {
+            Either03::Left(
+                futr.boxed().compat()
+                    .timeout(t)
+                    .map_err(move |te| {
+                        map_timeout(te, || FutioError::BodyTimeout(t))
+                    })
+                    .compat()
+            )
+        } else {
+            Either03::Right(futr)
+        };
+
+        futr .await? .prepare()
+    }
 }
 
 /// Given a suitable `hyper::Client` and `RequestRecord`, return a
@@ -354,7 +367,8 @@ pub fn user_agent() -> String {
             VERSION)
 }
 
-async fn resp_future_a(monolog: Monolog, tune: Tunables)
+#[cfg(feature = "futures03")]
+async fn resp_future_03(monolog: Monolog, tune: Tunables)
     -> Result<InDialog, FutioError>
 {
     let (resp_parts, body) = monolog.response.into_parts();
@@ -372,32 +386,23 @@ async fn resp_future_a(monolog: Monolog, tune: Tunables)
         },
         Some(Err(e)) => Err(FutioError::Other(Box::new(e))),
         None => Ok(BodySink::with_ram(tune.max_body_ram()))
-    };
-
-    // Unwrap BodySink, returning any error as Future
-    let bsink = match bsink {
-        Ok(b) => b,
-        Err(e) => { return Err(e) }
-    };
+    }?;
 
     let async_body = AsyncBodySink::new(bsink, tune);
 
-    let mut in_dialog = InDialog {
+    let (_strm, async_body) = body
+        .from_err::<FutioError>()
+        .forward(async_body)
+        .compat()
+        .await?;
+
+    Ok(InDialog {
         prolog:      monolog.prolog,
         version:     resp_parts.version,
         status:      resp_parts.status,
         res_headers: resp_parts.headers,
-        res_body:    BodySink::empty() // tmp, swap'ed below.
-    };
-
-    body.from_err::<FutioError>()
-        .forward(async_body)
-        .and_then(|(_strm, mut async_body)| {
-            mem::swap(async_body.body_mut(), &mut in_dialog.res_body);
-            Ok(in_dialog)
-        })
-        .compat()
-        .await
+        res_body:    async_body.into_inner()
+    })
 }
 
 fn resp_future(monolog: Monolog, tune: Tunables)
