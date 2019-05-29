@@ -48,8 +48,8 @@ use futures::{future, Future, Stream};
 use futures::future::Either;
 use futures03::compat::Future01CompatExt;
 use futures03::future::Either as Either03;
-use futures_util03::try_future::TryFutureExt;
-use futures_util03::future::FutureExt as _;
+use futures03::future::FutureExt as _;
+use futures03::future::TryFutureExt;
 
 use http;
 use hyper;
