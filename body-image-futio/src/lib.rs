@@ -47,6 +47,7 @@ use bytes::Bytes;
 use futures::{future, Future, Stream};
 use futures::future::Either;
 use futures03::compat::Future01CompatExt;
+use futures03::future::Either as Either03;
 use futures_util03::try_future::TryFutureExt;
 use futures_util03::future::FutureExt as _;
 
@@ -254,32 +255,35 @@ pub async fn request_dialog_a<'a, CN, B>(
         .map(|response| Monolog { prolog, response });
 
     let futr = if let Some(t) = res_timeout {
-        Either::A(futr
+        Either03::Left(futr
             .timeout(t)
             .map_err(move |te| {
                 map_timeout(te, || FutioError::ResponseTimeout(t))
             })
+            .compat()
         )
     } else {
-       Either::B(futr)
+        Either03::Right(futr.compat())
     };
 
-    let monolog = futr.compat() .await?;
+    let monolog = futr .await?;
 
-    let futr = resp_future_a(monolog, tune).boxed().compat();
+    let futr = resp_future_a(monolog, tune);
 
     let futr = if let Some(t) = body_timeout {
-        Either::A(futr
-            .timeout(t)
-            .map_err(move |te| {
-                map_timeout(te, || FutioError::BodyTimeout(t))
-            })
+        Either03::Left(
+            futr.boxed().compat()
+                .timeout(t)
+                .map_err(move |te| {
+                    map_timeout(te, || FutioError::BodyTimeout(t))
+                })
+                .compat()
         )
     } else {
-        Either::B(futr)
+        Either03::Right(futr)
     };
 
-    futr.compat() .await? .prepare()
+    futr .await? .prepare()
 }
 
 /// Given a suitable `hyper::Client` and `RequestRecord`, return a
