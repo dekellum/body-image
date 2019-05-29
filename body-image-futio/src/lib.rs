@@ -262,28 +262,30 @@ pub fn request_dialog_03<CN, B>(
         .map(|response| Monolog { prolog, response });
 
     let futr = if let Some(t) = tune.res_timeout() {
-        Either03::Left(futr
-            .timeout(t)
-            .map_err(move |te| {
-                map_timeout(te, || FutioError::ResponseTimeout(t))
-            })
-            .compat()
+        Either03::Left(
+            futr.timeout(t)
+                .map_err(move |te| {
+                    map_timeout(te, || FutioError::ResponseTimeout(t))
+                })
+                .compat()
         )
     } else {
         Either03::Right(futr.compat())
     };
 
     let tune = tune.clone();
-    let body_timeout = tune.body_timeout();
 
     async move {
         let monolog = futr .await?;
+
+        let body_timeout = tune.body_timeout();
 
         let futr = resp_future_03(monolog, tune);
 
         let futr = if let Some(t) = body_timeout {
             Either03::Left(
-                futr.boxed().compat()
+                futr.boxed()
+                    .compat()
                     .timeout(t)
                     .map_err(move |te| {
                         map_timeout(te, || FutioError::BodyTimeout(t))
