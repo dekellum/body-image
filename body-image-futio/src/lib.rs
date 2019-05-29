@@ -35,6 +35,7 @@
 
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
+#![feature(async_await)]
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -45,6 +46,8 @@ use std::time::Duration;
 use bytes::Bytes;
 use futures::{future, Future, Stream};
 use futures::future::Either;
+use futures03::compat::Future01CompatExt;
+
 use http;
 use hyper;
 use hyper_tls;
@@ -229,6 +232,32 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
 /// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
 /// (initial response and complete body) and if the response `BodyImage` will
 /// be in `Ram` or `FsRead`.
+pub async fn request_dialog_a<'a, CN, B>(
+    client: &'a hyper::Client<CN, B>,
+    rr: RequestRecord<B>,
+    tune: &'a Tunables)
+    -> Result<Dialog, FutioError>
+    where CN: hyper::client::connect::Connect + Sync + 'static,
+          B: hyper::body::Payload + Send
+{
+    // FIXME: Removed timeouts support (see request_dialog) for now
+
+    let prolog = rr.prolog;
+    let tune = tune.clone();
+
+    let futr = client
+        .request(rr.request)
+        .from_err::<FutioError>()
+        .map(|response| Monolog { prolog, response })
+        .compat();
+
+    resp_future_a(futr.await?, tune).await?.prepare()
+}
+
+/// Given a suitable `hyper::Client` and `RequestRecord`, return a
+/// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
+/// (initial response and complete body) and if the response `BodyImage` will
+/// be in `Ram` or `FsRead`.
 pub fn request_dialog<CN, B>(
     client: &hyper::Client<CN, B>,
     rr: RequestRecord<B>,
@@ -292,6 +321,52 @@ pub fn user_agent() -> String {
     format!("Mozilla/5.0 (compatible; body-image {}; \
              +https://crates.io/crates/body-image)",
             VERSION)
+}
+
+async fn resp_future_a(monolog: Monolog, tune: Tunables)
+    -> Result<InDialog, FutioError>
+{
+    let (resp_parts, body) = monolog.response.into_parts();
+
+    // Result<BodySink> based on CONTENT_LENGTH header.
+    let bsink = match resp_parts.headers.try_decode::<ContentLength>() {
+        Some(Ok(ContentLength(l))) => {
+            if l > tune.max_body() {
+                Err(FutioError::ContentLengthTooLong(l))
+            } else if l > tune.max_body_ram() {
+                BodySink::with_fs(tune.temp_dir()).map_err(FutioError::from)
+            } else {
+                Ok(BodySink::with_ram(l))
+            }
+        },
+        Some(Err(e)) => Err(FutioError::Other(Box::new(e))),
+        None => Ok(BodySink::with_ram(tune.max_body_ram()))
+    };
+
+    // Unwrap BodySink, returning any error as Future
+    let bsink = match bsink {
+        Ok(b) => b,
+        Err(e) => { return Err(e) }
+    };
+
+    let async_body = AsyncBodySink::new(bsink, tune);
+
+    let mut in_dialog = InDialog {
+        prolog:      monolog.prolog,
+        version:     resp_parts.version,
+        status:      resp_parts.status,
+        res_headers: resp_parts.headers,
+        res_body:    BodySink::empty() // tmp, swap'ed below.
+    };
+
+    body.from_err::<FutioError>()
+        .forward(async_body)
+        .and_then(|(_strm, mut async_body)| {
+            mem::swap(async_body.body_mut(), &mut in_dialog.res_body);
+            Ok(in_dialog)
+        })
+        .compat()
+        .await
 }
 
 fn resp_future(monolog: Monolog, tune: Tunables)
