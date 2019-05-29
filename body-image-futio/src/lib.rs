@@ -47,6 +47,8 @@ use bytes::Bytes;
 use futures::{future, Future, Stream};
 use futures::future::Either;
 use futures03::compat::Future01CompatExt;
+use futures_util03::try_future::TryFutureExt;
+use futures_util03::future::FutureExt as _;
 
 use http;
 use hyper;
@@ -240,18 +242,44 @@ pub async fn request_dialog_a<'a, CN, B>(
     where CN: hyper::client::connect::Connect + Sync + 'static,
           B: hyper::body::Payload + Send
 {
-    // FIXME: Removed timeouts support (see request_dialog) for now
-
     let prolog = rr.prolog;
     let tune = tune.clone();
+
+    let res_timeout = tune.res_timeout();
+    let body_timeout = tune.body_timeout();
 
     let futr = client
         .request(rr.request)
         .from_err::<FutioError>()
-        .map(|response| Monolog { prolog, response })
-        .compat();
+        .map(|response| Monolog { prolog, response });
 
-    resp_future_a(futr.await?, tune).await?.prepare()
+    let futr = if let Some(t) = res_timeout {
+        Either::A(futr
+            .timeout(t)
+            .map_err(move |te| {
+                map_timeout(te, || FutioError::ResponseTimeout(t))
+            })
+        )
+    } else {
+       Either::B(futr)
+    };
+
+    let monolog = futr.compat() .await?;
+
+    let futr = resp_future_a(monolog, tune).boxed().compat();
+
+    let futr = if let Some(t) = body_timeout {
+        Either::A(futr
+            .timeout(t)
+            .map_err(move |te| {
+                map_timeout(te, || FutioError::BodyTimeout(t))
+            })
+        )
+    } else {
+        Either::B(futr)
+    };
+
+    futr.compat() .await? .prepare()
 }
 
 /// Given a suitable `hyper::Client` and `RequestRecord`, return a
