@@ -227,7 +227,7 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)
         .map_err(|e| FutioError::Other(Box::new(e)))?;
     let client = hyper::Client::builder().build(connector);
-    rt.block_on(request_dialog(&client, rr, tune))
+    rt.block_on(request_dialog_a(client, rr, tune.clone()).boxed().compat())
     // Drop of `rt`, here, is equivalent to shutdown_now and wait
 }
 
@@ -235,16 +235,15 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
 /// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
 /// (initial response and complete body) and if the response `BodyImage` will
 /// be in `Ram` or `FsRead`.
-pub async fn request_dialog_a<'a, CN, B>(
-    client: &'a hyper::Client<CN, B>,
+pub async fn request_dialog_a<CN, B>(
+    client: hyper::Client<CN, B>,
     rr: RequestRecord<B>,
-    tune: &'a Tunables)
+    tune: Tunables)
     -> Result<Dialog, FutioError>
     where CN: hyper::client::connect::Connect + Sync + 'static,
           B: hyper::body::Payload + Send
 {
     let prolog = rr.prolog;
-    let tune = tune.clone();
 
     let res_timeout = tune.res_timeout();
     let body_timeout = tune.body_timeout();
