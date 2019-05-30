@@ -35,7 +35,7 @@
 
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
-#![feature(async_await)]
+#![cfg_attr(feature = "futures03", feature(async_await))]
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -47,11 +47,13 @@ use bytes::Bytes;
 use futures::{future, Future, Stream};
 use futures::future::Either;
 
-#[cfg(feature = "futures03")] use std::future::Future as Future03;
-#[cfg(feature = "futures03")] use futures03::compat::Future01CompatExt;
-#[cfg(feature = "futures03")] use futures03::future::Either as Either03;
-#[cfg(feature = "futures03")] use futures03::future::FutureExt as _;
-#[cfg(feature = "futures03")] use futures03::future::TryFutureExt;
+#[cfg(feature = "futures03")] use {
+    std::future::Future as Future03,
+    futures03::{
+        compat::Future01CompatExt,
+        future::{Either as Either03, FutureExt as _, TryFutureExt},
+    }
+};
 
 use http;
 use hyper;
