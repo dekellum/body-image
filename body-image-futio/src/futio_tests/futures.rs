@@ -2,7 +2,6 @@ use futures::stream::Stream;
 
 #[cfg(feature = "futures03")] use {
     futures03::{
-        compat::Sink01CompatExt,
         future::{ready as ready_03, TryFutureExt},
         stream::{StreamExt, TryStreamExt},
     },
@@ -45,7 +44,7 @@ fn forward_03_to_sink_empty() {
     let asink = UniBodySink::new(BodySink::with_ram_buffers(0), tune.clone());
     let task = body
         .err_into::<FutioError>() // 0.3 specific
-        .forward(asink.sink_compat());
+        .forward(asink);
 
     let mut rt = CtRuntime::new().unwrap();
     let res: Result<(), FutioError> = rt.block_on(task.compat());
@@ -123,7 +122,7 @@ fn forward_03_to_sink_fs() {
     );
     let task = abody
         .err_into::<FutioError>() // 0.3 specific
-        .forward(asink.sink_compat())
+        .forward(asink)
         .and_then(|v: ()| { // also just `Ok(())` here. can't inspect
             ready_03(Ok(v))
         });
