@@ -16,7 +16,7 @@ use hyper;
 use tokio_threadpool;
 use futures::{Async, Poll, Stream};
 
-#[cfg(feature = "futures03")] use {
+#[cfg(feature = "futures_03")] use {
     std::pin::Pin,
     std::task::{Context, Poll as Poll03},
     futures03::stream::Stream as Stream03,
@@ -243,7 +243,7 @@ impl Stream for UniBodyImage {
     }
 }
 
-#[cfg(feature = "futures03")]
+#[cfg(feature = "futures_03")]
 fn unblock_03<F, T>(f: F) -> Poll03<Option<Result<T, io::Error>>>
     where F: FnOnce() -> io::Result<Option<T>>
 {
@@ -268,7 +268,7 @@ fn unblock_03<F, T>(f: F) -> Poll03<Option<Result<T, io::Error>>>
     }
 }
 
-#[cfg(feature = "futures03")]
+#[cfg(feature = "futures_03")]
 impl Stream03 for UniBodyImage {
     type Item = Result<UniBodyBuf, io::Error>;
 

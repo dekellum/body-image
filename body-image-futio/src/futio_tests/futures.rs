@@ -1,6 +1,6 @@
 use futures::stream::Stream;
 
-#[cfg(feature = "futures03")] use {
+#[cfg(feature = "futures_03")] use {
     futures03::{
         future::{ready as ready_03, TryFutureExt},
         stream::{StreamExt, TryStreamExt},
@@ -35,7 +35,7 @@ fn forward_to_sink_empty() {
     }
 }
 
-#[cfg(feature = "futures03")]
+#[cfg(feature = "futures_03")]
 #[test]
 fn forward_03_to_sink_empty() {
     assert!(test_logger());
@@ -107,7 +107,7 @@ fn forward_to_sink_fs() {
     }
 }
 
-#[cfg(feature = "futures03")]
+#[cfg(feature = "futures_03")]
 #[test]
 fn forward_03_to_sink_fs() {
     assert!(test_logger());

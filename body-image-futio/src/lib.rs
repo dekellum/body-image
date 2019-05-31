@@ -35,7 +35,7 @@
 
 #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
-#![cfg_attr(feature = "futures03", feature(async_await))]
+#![cfg_attr(feature = "futures_03", feature(async_await))]
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -47,7 +47,7 @@ use bytes::Bytes;
 use futures::{future, Future, Stream};
 use futures::future::Either;
 
-#[cfg(feature = "futures03")] use {
+#[cfg(feature = "futures_03")] use {
     std::future::Future as Future03,
     futures03::{
         compat::Future01CompatExt,
@@ -232,11 +232,11 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         .map_err(|e| FutioError::Other(Box::new(e)))?;
     let client = hyper::Client::builder().build(connector);
 
-    #[cfg(feature = "futures03")] {
+    #[cfg(feature = "futures_03")] {
         rt.block_on(request_dialog_03(&client, rr, tune).boxed().compat())
     }
 
-    #[cfg(not(feature = "futures03"))] {
+    #[cfg(not(feature = "futures_03"))] {
         rt.block_on(request_dialog(&client, rr, tune))
     }
 
@@ -247,7 +247,7 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
 /// `Future<Output=Result<Dialog, FutioError>>.  The provided `Tunables`
 /// governs timeout intervals (initial response and complete body) and if the
 /// response `BodyImage` will be in `Ram` or `FsRead`.
-#[cfg(feature = "futures03")]
+#[cfg(feature = "futures_03")]
 pub fn request_dialog_03<CN, B>(
     client: &hyper::Client<CN, B>,
     rr: RequestRecord<B>,
@@ -371,7 +371,7 @@ pub fn user_agent() -> String {
             VERSION)
 }
 
-#[cfg(feature = "futures03")]
+#[cfg(feature = "futures_03")]
 async fn resp_future_03(monolog: Monolog, tune: Tunables)
     -> Result<InDialog, FutioError>
 {
