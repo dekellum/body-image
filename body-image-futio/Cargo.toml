@@ -36,6 +36,7 @@ tokio-threadpool = { version=">=0.1.10, <0.2" }
 [features]
 default = ["mmap", "brotli"]
 mmap = ["memmap", "olio/mmap", "body-image/mmap"]
+futures_03 = ["futures03"]
 
 may_fail = [] # Tests which may fail
 

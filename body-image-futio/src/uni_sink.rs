@@ -5,7 +5,7 @@ use tokio_threadpool;
 
 use body_image::{BodyError, BodySink, Tunables};
 
-#[cfg(feature = "futures03")] use {
+#[cfg(feature = "futures_03")] use {
     std::pin::Pin,
     std::task::{Context, Poll as Poll03},
     futures03::sink::Sink as Sink03,
@@ -110,7 +110,7 @@ impl Sink for UniBodySink {
     }
 }
 
-#[cfg(feature = "futures03")]
+#[cfg(feature = "futures_03")]
 macro_rules! unblock_03 {
     ($c:ident, || $b:block) => (match tokio_threadpool::blocking(|| $b) {
         Ok(Async::Ready(Ok(_))) => (),
@@ -124,7 +124,7 @@ macro_rules! unblock_03 {
     })
 }
 
-#[cfg(feature = "futures03")]
+#[cfg(feature = "futures_03")]
 impl Sink03<UniBodyBuf> for UniBodySink {
     type SinkError = FutioError;
 
