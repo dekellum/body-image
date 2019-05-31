@@ -615,11 +615,17 @@ mod logger;
 
 #[cfg(test)]
 mod futio_tests {
-    #[cfg(feature = "mmap")]        mod futures;
-                                    mod server;
+    #[cfg(feature = "mmap")]
+    mod futures;
+
+    #[cfg(all(feature = "mmap", feature = "futures_03"))]
+    mod futures_03;
+
+    mod server;
 
     /// These tests may fail because they depend on public web servers
-    #[cfg(feature = "may_fail")]    mod live;
+    #[cfg(feature = "may_fail")]
+    mod live;
 
     use tao_log::debug;
     use super::{FutioError, Flaw};
