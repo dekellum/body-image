@@ -261,7 +261,7 @@ fn unblock_03<F, T>(f: F) -> Poll03<Option<Result<T, io::Error>>>
         Err(_) => {
             Poll03::Ready(Some(Err(io::Error::new(
                 io::ErrorKind::Other,
-                "UniBodyImage03 needs `blocking`, \
+                "UniBodyImage (Stream03) needs `blocking`, \
                  backup threads of Tokio threadpool"
             ))))
         }
