@@ -181,23 +181,21 @@ impl Sink03<UniBodyBuf> for UniBodySink {
         self.poll_flush(cx)
     }
 
-    fn start_send(self: Pin<&mut Self>, buf: UniBodyBuf)
+    fn start_send(mut self: Pin<&mut Self>, buf: UniBodyBuf)
         -> Result<(), FutioError>
     {
-        let this = self.get_mut();
-        assert!(this.buf.is_none());
-        this.buf = Some(buf);
+        assert!(self.buf.is_none());
+        self.buf = Some(buf);
         Ok(())
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>)
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll03<Result<(), FutioError>>
     {
-        let this = self.get_mut();
-        if let Some(buf) = this.buf.take() {
-            let (poll, back) = this.poll_send(cx, buf);
+        if let Some(buf) = self.buf.take() {
+            let (poll, back) = self.poll_send(cx, buf);
             if back.is_some() {
-                this.buf = back;
+                self.buf = back;
             }
             poll
         } else {
