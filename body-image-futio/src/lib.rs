@@ -50,8 +50,9 @@ use futures::future::Either;
 #[cfg(feature = "futures_03")] use {
     std::future::Future as Future03,
     futures03::{
-        compat::Future01CompatExt,
+        compat::{Future01CompatExt, Stream01CompatExt},
         future::{Either as Either03, FutureExt as _, TryFutureExt},
+        stream::{StreamExt, TryStreamExt},
     }
 };
 
@@ -392,12 +393,11 @@ async fn resp_future_03(monolog: Monolog, tune: Tunables)
         None => Ok(BodySink::with_ram(tune.max_body_ram()))
     }?;
 
-    let async_body = AsyncBodySink::new(bsink, tune);
+    let mut async_body = AsyncBodySink::new(bsink, tune);
 
-    let (_strm, async_body) = body
-        .from_err::<FutioError>()
-        .forward(async_body)
-        .compat()
+    body.compat()
+        .err_into::<FutioError>()
+        .forward(&mut async_body)
         .await?;
 
     Ok(InDialog {
