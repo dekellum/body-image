@@ -16,6 +16,12 @@ use hyper;
 use tokio_threadpool;
 use futures::{Async, Poll, Stream};
 
+#[cfg(feature = "futures_03")] use {
+    std::pin::Pin,
+    std::task::{Context, Poll as Poll03},
+    futures03::stream::Stream as Stream03,
+};
+
 use crate::{RequestRecord, RequestRecorder};
 
 #[cfg(feature = "mmap")] use memmap::Mmap;
@@ -233,6 +239,104 @@ impl hyper::body::Payload for AsyncBodyImage {
 
     fn is_end_stream(&self) -> bool {
         self.consumed >= self.len
+    }
+}
+
+#[cfg(feature = "futures_03")]
+fn unblock_03<F, T>(f: F) -> Poll03<Option<Result<T, io::Error>>>
+    where F: FnOnce() -> io::Result<Option<T>>
+{
+    match tokio_threadpool::blocking(f) {
+        Ok(Async::Ready(Ok(Some(v)))) => Poll03::Ready(Some(Ok(v))),
+        Ok(Async::Ready(Ok(None))) => Poll03::Ready(None),
+        Ok(Async::Ready(Err(e))) => {
+            if e.kind() == io::ErrorKind::Interrupted {
+                Poll03::Pending
+            } else {
+                Poll03::Ready(Some(Err(e)))
+            }
+        }
+        Ok(Async::NotReady) => Poll03::Pending,
+        Err(_) => {
+            Poll03::Ready(Some(Err(io::Error::new(
+                io::ErrorKind::Other,
+                "AsyncBodyImage (Stream03) needs `blocking`, \
+                 backup threads of Tokio threadpool"
+            ))))
+        }
+    }
+}
+
+#[cfg(feature = "futures_03")]
+impl Stream03 for AsyncBodyImage {
+    type Item = Result<Bytes, io::Error>;
+
+    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>)
+        -> Poll03<Option<Self::Item>>
+    {
+        let this = self.get_mut();
+
+        match this.state {
+            AsyncImageState::Ram(ref mut iter) => {
+                let n = iter.next();
+                if let Some(b) = n {
+                    this.consumed += b.len() as u64;
+                    Poll03::Ready(Some(Ok(b)))
+                } else {
+                    Poll03::Ready(None)
+                }
+            }
+            AsyncImageState::File { ref mut rs, bsize } => {
+                let avail = this.len - this.consumed;
+                if avail == 0 {
+                    return Poll03::Ready(None);
+                }
+                let res = unblock_03(|| {
+                    let bs = cmp::min(bsize, avail) as usize;
+                    let mut buf = BytesMut::with_capacity(bs);
+                    match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
+                        Ok(0) => Ok(None),
+                        Ok(len) => {
+                            unsafe { buf.advance_mut(len); }
+                            debug!("read chunk (blocking, len: {})", len);
+                            Ok(Some(buf.freeze()))
+                        }
+                        Err(e) => Err(e)
+                    }
+                });
+                if let Poll03::Ready(Some(Ok(ref b))) = res {
+                    this.consumed += b.len() as u64;
+                }
+                res
+            }
+            #[cfg(feature = "mmap")]
+            AsyncImageState::MemMap(ref mmap) => {
+                let avail = this.len - this.consumed;
+                if avail == 0 {
+                    return Poll03::Ready(None);
+                }
+                let res = unblock_03(|| {
+                    // This performs a copy via *bytes* crate
+                    // `copy_from_slice`. There is no apparent way to achieve
+                    // a 'static lifetime for `Bytes::from_static`, for
+                    // example. The silver lining is that the `blocking`
+                    // contract is guarunteed fullfilled here, unless of
+                    // course swap is enabled and the copy is so large as to
+                    // cause it to be swapped out before it is written!
+                    let b = mmap.tmp_advise(
+                        MemAdvice::Sequential, || -> Result<_, io::Error> {
+                            Ok(Bytes::from(&mmap[..]))
+                        }
+                    )?;
+                    debug!("MemMap copy to chunk (blocking, len: {})", b.len());
+                    Ok(Some(b))
+                });
+                if let Poll03::Ready(Some(Ok(ref b))) = res {
+                    this.consumed += b.len() as u64;
+                }
+                res
+            }
+        }
     }
 }
 

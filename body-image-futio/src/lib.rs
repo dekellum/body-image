@@ -618,8 +618,11 @@ mod futio_tests {
     #[cfg(feature = "mmap")]
     mod futures;
 
-    #[cfg(all(feature = "mmap", feature = "futures_03"))]
+    #[cfg(feature = "futures_03")]
     mod futures_03;
+
+    #[cfg(all(feature = "mmap", feature = "futures_03"))]
+    mod futures_03_uni;
 
     mod server;
 
