@@ -1,8 +1,13 @@
+use futures::future::Future;
+
 use futures03::{
     future::{FutureExt, TryFutureExt},
     stream::{StreamExt, TryStreamExt},
 };
 
+use tao_log::debug;
+
+use tokio::runtime;
 use tokio::runtime::current_thread::Runtime as CtRuntime;
 use tokio::runtime::Runtime as DefaultRuntime;
 
@@ -128,6 +133,58 @@ fn forward_to_sink_fs_back() {
     let mut rt = DefaultRuntime::new().unwrap();
     let res: Result<(), FutioError> = rt.block_on(task.boxed().compat());
     res.expect("task success");
+}
+
+#[test]
+fn forward_to_sink_fs_back_concurrent() {
+    assert!(test_logger());
+
+    let tune = Tuner::new()
+        .set_buffer_size_fs(173)
+        .set_max_body_ram(15_000)
+        .finish();
+    let mut rt = runtime::Builder::new()
+        .name_prefix("tpool-")
+        .core_threads(3)
+        .blocking_threads(1)
+        .build()
+        .expect("runtime build");
+
+    let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
+    in_body.write_all(vec![1; 24_000]).unwrap();
+    let in_body = in_body.prepare().unwrap();
+
+    for i in 1..20 {
+        let tune = tune.clone();
+        let in_body = in_body.clone();
+
+        let task = async move {
+            let body = UniBodyImage::new(in_body, &tune);
+
+            let mut asink = UniBodySink::new(
+                BodySink::with_ram_buffers(4),
+                tune
+            );
+
+            body.err_into::<FutioError>() // 0.3 specific
+                .forward(&mut asink)
+                .await?;
+
+            let bsink = asink.body();
+            assert!(!bsink.is_ram());
+            assert_eq!(bsink.len(), 24_000);
+
+            debug!("success {}", i);
+            Ok(())
+        };
+
+        rt.spawn(
+            task.map(|_r: Result<(),FutioError>| Ok(()) )
+                .boxed()
+                .compat()
+        );
+    }
+    rt.shutdown_on_idle().wait().expect("tasks success");
 }
 
 #[test]
