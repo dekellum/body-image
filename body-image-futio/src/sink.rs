@@ -1,4 +1,4 @@
-use tao_log::debug;
+use tao_log::{debug, warn};
 
 use body_image::{BodyError, BodySink, Tunables};
 
@@ -122,7 +122,7 @@ macro_rules! unblock_03 {
         Ok(Async::Ready(Ok(_))) => (),
         Ok(Async::Ready(Err(e))) => return Err(e.into()),
         Ok(Async::NotReady) => {
-            debug!("No blocking backup thread available -> NotReady");
+            warn!("AsyncBodySink (03): no blocking backup thread available");
             return Ok(Some($c));
         }
         Err(e) => return Err(FutioError::Other(Box::new(e)))
@@ -187,6 +187,11 @@ impl Sink03<hyper::Chunk> for AsyncBodySink {
                 Ok(None) => Poll03::Ready(Ok(())),
                 Ok(s @ Some(_)) => {
                     self.buf = s;
+
+                    // Might be needed, until Tokio offers to wake for us, as
+                    // part of `tokio_threadpool::blocking`
+                    cx.waker().wake_by_ref();
+
                     Poll03::Pending
                 }
                 Err(e) => Poll03::Ready(Err(e))
