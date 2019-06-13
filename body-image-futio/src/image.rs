@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use http;
 use olio::fs::rc::ReadSlice;
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
-use tao_log::{debug, warn};
+use tao_log::debug;
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
 
@@ -20,6 +20,7 @@ use futures::{Async, Poll, Stream};
     std::pin::Pin,
     std::task::{Context, Poll as Poll03},
     futures03::stream::Stream as Stream03,
+    tao_log::warn,
 };
 
 use crate::{RequestRecord, RequestRecorder};
