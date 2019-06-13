@@ -2,7 +2,7 @@ use std::fmt;
 
 use bytes::Buf;
 use futures::{Async, AsyncSink, Poll, Sink, StartSend};
-use tao_log::{debug, warn};
+use tao_log::debug;
 use tokio_threadpool;
 
 use body_image::{BodyError, BodySink, Tunables};
@@ -11,6 +11,7 @@ use body_image::{BodyError, BodySink, Tunables};
     std::pin::Pin,
     std::task::{Context, Poll as Poll03},
     futures03::sink::Sink as Sink03,
+    tao_log::warn,
 };
 
 use crate::{FutioError, UniBodyBuf};

@@ -7,7 +7,7 @@ use std::vec::IntoIter;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use http;
-use tao_log::{debug, warn};
+use tao_log::debug;
 use olio::fs::rc::ReadSlice;
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
@@ -20,6 +20,7 @@ use futures::{Async, Poll, Stream};
     std::pin::Pin,
     std::task::{Context, Poll as Poll03},
     futures03::stream::Stream as Stream03,
+    tao_log::warn,
 };
 
 use crate::{MemMapBuf, RequestRecord, RequestRecorder};
@@ -253,20 +254,20 @@ fn unblock_03<F, T>(cx: &mut Context<'_>, f: F)
         Ok(Async::Ready(Ok(None))) => Poll03::Ready(None),
         Ok(Async::Ready(Err(e))) => {
             if e.kind() == io::ErrorKind::Interrupted {
+                warn!("UniBodyImage (Stream03): write interrupted");
                 // Might be needed, until Tokio offers to wake for us, as part
                 // of `tokio_threadpool::blocking`
                 cx.waker().wake_by_ref();
-                warn!("UniBodyImage (Stream03): write interrupted");
                 Poll03::Pending
             } else {
                 Poll03::Ready(Some(Err(e)))
             }
         }
         Ok(Async::NotReady) => {
+            warn!("UniBodyImage (Stream03): no blocking backup thread available");
             // Might be needed, until Tokio offers to wake for us, as part
             // of `tokio_threadpool::blocking`
             cx.waker().wake_by_ref();
-            warn!("UniBodyImage (Stream03): no blocking backup thread available");
             Poll03::Pending
         }
         Err(_) => {
