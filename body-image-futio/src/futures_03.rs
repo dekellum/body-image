@@ -1,0 +1,112 @@
+use futures::Future as Future01;
+
+use std::future::Future as Future03;
+use futures03::{
+    compat::{Future01CompatExt, Stream01CompatExt},
+    future::{Either as Either03, FutureExt as _, TryFutureExt},
+    stream::{StreamExt, TryStreamExt},
+};
+
+use hyperx::header::{ContentLength, TypedHeaders};
+use tokio::util::FutureExt;
+
+use body_image::{BodySink, Dialog, Tunables};
+
+use crate::{
+    AsyncBodySink, InDialog, FutioError, Monolog, RequestRecord,
+    map_timeout,
+};
+
+/// Given a suitable `hyper::Client` and `RequestRecord`, return a
+/// `Future<Output=Result<Dialog, FutioError>>.  The provided `Tunables`
+/// governs timeout intervals (initial response and complete body) and if the
+/// response `BodyImage` will be in `Ram` or `FsRead`.
+pub fn request_dialog_03<CN, B>(
+    client: &hyper::Client<CN, B>,
+    rr: RequestRecord<B>,
+    tune: &Tunables)
+    -> impl Future03<Output=Result<Dialog, FutioError>> + Send + 'static
+    where CN: hyper::client::connect::Connect + Sync + 'static,
+          B: hyper::body::Payload + Send
+{
+    let prolog = rr.prolog;
+
+    let futr = client
+        .request(rr.request)
+        .from_err::<FutioError>()
+        .map(|response| Monolog { prolog, response });
+
+    let futr = if let Some(t) = tune.res_timeout() {
+        Either03::Left(
+            futr.timeout(t)
+                .map_err(move |te| {
+                    map_timeout(te, || FutioError::ResponseTimeout(t))
+                })
+                .compat()
+        )
+    } else {
+        Either03::Right(futr.compat())
+    };
+
+    let tune = tune.clone();
+
+    async move {
+        let monolog = futr .await?;
+
+        let body_timeout = tune.body_timeout();
+
+        let futr = resp_future_03(monolog, tune);
+
+        let futr = if let Some(t) = body_timeout {
+            Either03::Left(
+                futr.boxed()
+                    .compat()
+                    .timeout(t)
+                    .map_err(move |te| {
+                        map_timeout(te, || FutioError::BodyTimeout(t))
+                    })
+                    .compat()
+            )
+        } else {
+            Either03::Right(futr)
+        };
+
+        futr .await? .prepare()
+    }
+}
+
+async fn resp_future_03(monolog: Monolog, tune: Tunables)
+    -> Result<InDialog, FutioError>
+{
+    let (resp_parts, body) = monolog.response.into_parts();
+
+    // Result<BodySink> based on CONTENT_LENGTH header.
+    let bsink = match resp_parts.headers.try_decode::<ContentLength>() {
+        Some(Ok(ContentLength(l))) => {
+            if l > tune.max_body() {
+                Err(FutioError::ContentLengthTooLong(l))
+            } else if l > tune.max_body_ram() {
+                BodySink::with_fs(tune.temp_dir()).map_err(FutioError::from)
+            } else {
+                Ok(BodySink::with_ram(l))
+            }
+        },
+        Some(Err(e)) => Err(FutioError::Other(Box::new(e))),
+        None => Ok(BodySink::with_ram(tune.max_body_ram()))
+    }?;
+
+    let mut async_body = AsyncBodySink::new(bsink, tune);
+
+    body.compat()
+        .err_into::<FutioError>()
+        .forward(&mut async_body)
+        .await?;
+
+    Ok(InDialog {
+        prolog:      monolog.prolog,
+        version:     resp_parts.version,
+        status:      resp_parts.status,
+        res_headers: resp_parts.headers,
+        res_body:    async_body.into_inner()
+    })
+}
