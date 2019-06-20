@@ -506,9 +506,10 @@ mod futio_tests {
     /// These tests may fail because they depend on public web servers
     #[cfg(feature = "may_fail")]    mod live;
 
-    use tao_log::debug;
+    use tao_log::{debug, debugv};
     use super::{FutioError, Flaw};
     use crate::logger::test_logger;
+    use std::mem::size_of;
 
     fn is_flaw(f: Flaw) -> bool {
         debug!("Flaw Debug: {:?}, Display: \"{}\"", f, f);
@@ -520,6 +521,12 @@ mod futio_tests {
         assert!(test_logger());
         assert!(is_flaw(FutioError::ContentLengthTooLong(42).into()));
         assert!(is_flaw(FutioError::Other("one off".into()).into()));
+    }
+
+    #[test]
+    fn test_error_size() {
+        assert!(test_logger());
+        assert!(debugv!(size_of::<FutioError>()) <= 32);
     }
 
     #[test]

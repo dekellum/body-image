@@ -1192,6 +1192,7 @@ impl Default for Tuner {
 
 #[cfg(test)]
 mod body_tests {
+    use std::mem::size_of;
     use super::*;
 
     fn is_send<T: Send>() -> bool { true }
@@ -1214,6 +1215,11 @@ mod body_tests {
 
         assert!(is_send::<BodyReader<'_>>());
         assert!(is_sync::<BodyReader<'_>>());
+    }
+
+    #[test]
+    fn test_body_error_size() {
+        assert!(size_of::<BodyError>() <= 24);
     }
 
     #[cfg(not(feature = "mmap"))]

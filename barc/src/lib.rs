@@ -1174,6 +1174,7 @@ mod barc_tests {
     use std::convert::TryInto;
 
     use std::fs;
+    use std::mem::size_of;
     use std::path::{Path, PathBuf};
     use http::header::{AGE, REFERER, VIA};
     use super::*;
@@ -1204,6 +1205,13 @@ mod barc_tests {
     fn test_barc_error_as_flaw() {
         assert!(is_barc_error(BarcError::ReadInvalidRecHead));
         assert!(is_barc_error(DialogConvertError::NoMetaUrl.into()));
+    }
+
+    #[test]
+    fn test_barc_error_sizes() {
+        assert!(test_logger());
+        assert!(debugv!(size_of::<BarcError>()) <= 40);
+        assert!(debugv!(size_of::<DialogConvertError>()) <= 32);
     }
 
     #[test]
