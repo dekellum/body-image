@@ -1,7 +1,7 @@
 ## 1.2.0 (2019-5-13)
 * Make existing `barc::TryFrom` and `TryInto` compatible with the
   `std::convert` equivalents, as stabilized in rust 1.34.0. Furthermore, when
-  built with rust 1.34.0+, use the `std::convert` equivalent traits,
+  built with rust 1.34.0+, uses the `std::convert` equivalent traits,
   re-exported as `barc::TryFrom` and `TryInto`.  These re-exports are
   (silently) deprecated. Use `std::convert` traits directly if your MSRV ≥
   1.34.0. This is graded a MINOR-version compatibly hazard because existing
