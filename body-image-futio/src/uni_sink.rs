@@ -174,7 +174,7 @@ impl UniBodySink {
 
 #[cfg(feature = "futures_03")]
 impl Sink03<UniBodyBuf> for UniBodySink {
-    type SinkError = FutioError;
+    type Error = FutioError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll03<Result<(), FutioError>>

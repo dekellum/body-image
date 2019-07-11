@@ -164,7 +164,7 @@ impl AsyncBodySink {
 
 #[cfg(feature = "futures_03")]
 impl Sink03<hyper::Chunk> for AsyncBodySink {
-    type SinkError = FutioError;
+    type Error = FutioError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll03<Result<(), FutioError>>
