@@ -13,6 +13,13 @@ without risk of exhausting RAM.
 
 See the top-level (project workspace) README for additional rationale.
 
+## Minimum supported rust version
+
+MSRV := 1.31.0
+
+The crate will fail fast on any lower rustc (via a build.rs version
+check) and is also CI tested on this version.
+
 ## License
 
 This project is dual licensed under either of following:

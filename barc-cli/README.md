@@ -7,6 +7,13 @@
 A command line tool for printing, recording, de-/compressing and copying BARC
 records (format defined by the *barc* library crate).
 
+## Minimum supported rust version
+
+MSRV := 1.31.0
+
+The crate will fail fast on any lower rustc (via a build.rs version
+check) and is also CI tested on this version.
+
 ## License
 
 This project is dual licensed under either of following:

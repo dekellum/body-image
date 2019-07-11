@@ -8,6 +8,13 @@
 The _body-image-futio_ crate integrates the _body-image_ crate with _futures_,
 _http_, _hyper_ 0.12.x., and _tokio_ crates for both client and server use.
 
+## Minimum supported rust version
+
+MSRV := 1.31.0
+
+The crate will fail fast on any lower rustc (via a build.rs version
+check) and is also CI tested on this version.
+
 ## License
 
 This project is dual licensed under either of following:

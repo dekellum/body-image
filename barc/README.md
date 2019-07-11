@@ -13,6 +13,16 @@ command line tool is also available, via the *barc-cli* crate.
 
 See the rustdoc for more details.
 
+## Minimum supported rust version
+
+MSRV := 1.31.0
+
+The crate will fail fast on any lower rustc (via a build.rs version
+check) and is also CI tested on this version.
+
+With rust 1.34.0+, custom `TryFrom` and `TryInto` traits are replaced with
+those from `std::convert`.
+
 ## License
 
 This project is dual licensed under either of following:
