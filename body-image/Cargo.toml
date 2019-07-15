@@ -21,7 +21,7 @@ http       = { version=">=0.1.6, <0.2" }
 log        = { version=">=0.4.4, <0.5" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }
 olio       = { version=">=1.0.0, <1.2", default-features=false }
-tempfile   = { version=">=2.2.0, <3.1" }
+tempfile   = { version=">=3.1.0, <3.2" }
 
 [features]
 default = ["mmap"]
