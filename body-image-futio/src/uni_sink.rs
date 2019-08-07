@@ -29,7 +29,7 @@ use crate::{FutioError, UniBodyBuf};
 /// tokio threadpool. If the `max_blocking` number of backup threads is
 /// reached, and a blocking operation is required, then this implementation
 /// will appear *full*, with `start_send` returning
-/// `Ok(AsyncSink::NotReady(chunk)`, until a backup thread becomes available
+/// `Ok(AsyncSink::NotReady(chunk))`, until a backup thread becomes available
 /// or any timeout occurs.
 pub struct UniBodySink {
     body: BodySink,
