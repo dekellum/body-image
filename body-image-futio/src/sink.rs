@@ -1,14 +1,12 @@
-use tao_log::debug;
-
-use body_image::{BodyError, BodySink, Tunables};
-
-use hyper;
-use tokio_executor::threadpool as tokio_threadpool; // FIXME
-
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
 use futures::sink::Sink;
-use tao_log::warn;
+use hyper;
+use tao_log::{debug, warn};
+use tokio_executor::threadpool as tokio_threadpool;
+
+use body_image::{BodyError, BodySink, Tunables};
 
 use crate::FutioError;
 

@@ -1,24 +1,20 @@
 use std::cmp;
 use std::fmt;
-use std::io;
 use std::io::{Cursor, Read};
-
-use std::vec::IntoIter;
-
-use http;
-use olio::fs::rc::ReadSlice;
-use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
-use tao_log::debug;
-
-use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
-
-use hyper;
-use tokio_executor::threadpool as tokio_threadpool;
-
+use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::vec::IntoIter;
+
+use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use futures::stream::Stream;
-use tao_log::warn;
+use http;
+use hyper;
+use olio::fs::rc::ReadSlice;
+use tao_log::{debug, warn};
+use tokio_executor::threadpool as tokio_threadpool;
+
+use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 use crate::{RequestRecord, RequestRecorder};
 

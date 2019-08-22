@@ -3,6 +3,7 @@ use std::sync::Once;
 
 use fern;
 use tao_log::log;
+
 use crate::Flaw;
 
 pub fn test_logger() -> bool {

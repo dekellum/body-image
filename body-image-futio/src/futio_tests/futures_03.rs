@@ -2,9 +2,8 @@ use futures::{
     future::FutureExt,
     stream::{StreamExt, TryStreamExt},
 };
-
-use tokio::runtime::current_thread::Runtime as CtRuntime;
 use tokio::runtime::Runtime as DefaultRuntime;
+use tokio::runtime::current_thread::Runtime as CtRuntime;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 

@@ -1,15 +1,13 @@
 use std::fmt;
-
-use bytes::Buf;
-use tao_log::debug;
-use tokio_executor::threadpool as tokio_threadpool; // FIXME
-
-use body_image::{BodyError, BodySink, Tunables};
-
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
+use bytes::Buf;
 use futures::sink::Sink;
-use tao_log::warn;
+use tao_log::{debug, warn};
+use tokio_executor::threadpool as tokio_threadpool;
+
+use body_image::{BodyError, BodySink, Tunables};
 
 use crate::{FutioError, UniBodyBuf};
 

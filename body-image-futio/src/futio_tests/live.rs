@@ -1,8 +1,10 @@
+use tao_log::debugv;
+
 use body_image::{Recorded, Tunables};
+
 use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
             RequestRecord, RequestRecorder, user_agent};
 use crate::logger::test_logger;
-use tao_log::debugv;
 
 fn get_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, http::Error>

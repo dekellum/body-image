@@ -4,12 +4,10 @@ use futures::{
     future::{Either, FutureExt as _, TryFutureExt},
     stream::{StreamExt, TryStreamExt},
 };
-
 use hyperx::header::{ContentLength, TypedHeaders};
+use tokio::future::FutureExt;
 
 use body_image::{BodySink, Dialog, Tunables};
-
-use tokio::future::FutureExt;
 
 use crate::{
     AsyncBodySink, InDialog, FutioError, Monolog, RequestRecord

@@ -2,12 +2,10 @@ use futures::{
     future::FutureExt,
     stream::{StreamExt, TryStreamExt},
 };
-
 use tao_log::debug;
-
 use tokio::runtime;
-use tokio::runtime::current_thread::Runtime as CtRuntime;
 use tokio::runtime::Runtime as DefaultRuntime;
+use tokio::runtime::current_thread::Runtime as CtRuntime;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 
