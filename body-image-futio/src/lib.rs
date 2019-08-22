@@ -393,9 +393,6 @@ mod logger;
 
 #[cfg(test)]
 mod futio_tests {
-    // #[cfg(feature = "mmap")]
-    // mod futures;
-
     mod futures_03;
 
     #[cfg(all(feature = "mmap"))]
