@@ -34,7 +34,7 @@ tokio-executor = { version=">=0.2.0-alpha.1, <0.3", features=["threadpool"] }
 blocking-permit = { version=">=0.1.0, <0.2" }
 
 [features]
-default = [] # FIXME: "mmap", "brotli"
+default = ["mmap", "brotli"]
 mmap = ["memmap", "olio/mmap", "body-image/mmap"]
 may_fail = [] # Tests which may fail
 

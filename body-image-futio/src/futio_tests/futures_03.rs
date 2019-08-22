@@ -166,7 +166,7 @@ fn forward_to_sink_fs_map() {
         Ok(())
     };
 
-    let mut rt = DefaultRuntime::new().unwrap();
-    let res: Result<(), FutioError> = rt.block_on(task);
-    res.expect("task success");
+    let rt = DefaultRuntime::new().unwrap();
+    rt.spawn(task.map(|_r: Result<(),FutioError>| ()));
+    rt.shutdown_on_idle();
 }

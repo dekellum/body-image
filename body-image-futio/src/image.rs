@@ -161,7 +161,7 @@ fn unblock<F, T>(cx: &mut Context<'_>, f: F)
             // Might be needed, until Tokio offers to wake for us, as part
             // of `tokio_threadpool::blocking`
             cx.waker().wake_by_ref();
-            warn!("AsyncBodyImage (Stream): no blocking backup thread available");
+            warn!("AsyncBodyImage: no blocking backup thread available");
             Poll::Pending
         }
         Poll::Ready(Ok(Ok(Some(v)))) => Poll::Ready(Some(Ok(v))),
@@ -171,17 +171,16 @@ fn unblock<F, T>(cx: &mut Context<'_>, f: F)
                 // Might be needed, until Tokio offers to wake for us, as part
                 // of `tokio_threadpool::blocking`
                 cx.waker().wake_by_ref();
-                warn!("AsyncBodyImage (Stream): write interrupted");
+                warn!("AsyncBodyImage: write interrupted");
                 Poll::Pending
             } else {
                 Poll::Ready(Some(Err(e)))
             }
         }
-        Poll::Ready(Err(_e)) => {
-            eprintln!("original error: {}", _e);
+        Poll::Ready(Err(_)) => {
             Poll::Ready(Some(Err(io::Error::new(
                 io::ErrorKind::Other,
-                "AsyncBodyImage (Stream) needs `blocking`, \
+                "AsyncBodyImage needs `blocking`, \
                  backup threads of Tokio threadpool"
             ))))
         }

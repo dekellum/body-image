@@ -13,15 +13,12 @@ use olio::fs::rc::ReadSlice;
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 use hyper;
-use tokio_threadpool;
-use futures::{Async, Poll, Stream};
+use tokio_executor::threadpool as tokio_threadpool;
 
-#[cfg(feature = "futures_03")] use {
-    std::pin::Pin,
-    std::task::{Context, Poll as Poll03},
-    futures03::stream::Stream as Stream03,
-    tao_log::warn,
-};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use futures::stream::Stream;
+use tao_log::warn;
 
 use crate::{MemMapBuf, RequestRecord, RequestRecorder};
 
@@ -159,133 +156,46 @@ impl fmt::Debug for UniBodyState {
     }
 }
 
-fn unblock<F, T>(f: F) -> Poll<T, io::Error>
-    where F: FnOnce() -> io::Result<T>
-{
-    match tokio_threadpool::blocking(f) {
-        Ok(Async::Ready(Ok(v))) => Ok(v.into()),
-        Ok(Async::Ready(Err(e))) => {
-            if e.kind() == io::ErrorKind::Interrupted {
-                Ok(Async::NotReady)
-            } else {
-                Err(e)
-            }
-        }
-        Ok(Async::NotReady) => Ok(Async::NotReady),
-        Err(_) => {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "UniBodyImage needs `blocking`, \
-                 backup threads of Tokio threadpool"
-            ))
-        }
-    }
-}
-
-impl Stream for UniBodyImage {
-    type Item = UniBodyBuf;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Option<UniBodyBuf>, io::Error> {
-        match self.state {
-            UniBodyState::Ram(ref mut iter) => {
-                let n = iter.next();
-                if let Some(b) = n {
-                    self.consumed += b.len() as u64;
-                    Ok(Async::Ready(Some(UniBodyBuf {
-                        buf: BufState::Bytes(b.into_buf())
-                    })))
-                } else {
-                    Ok(Async::Ready(None))
-                }
-            }
-            UniBodyState::File { ref mut rs, bsize } => {
-                let avail = self.len - self.consumed;
-                if avail == 0 {
-                    return Ok(Async::Ready(None));
-                }
-                let res = unblock(|| {
-                    let bs = cmp::min(bsize, avail) as usize;
-                    let mut buf = BytesMut::with_capacity(bs);
-                    match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
-                        Ok(0) => Ok(None),
-                        Ok(len) => {
-                            unsafe { buf.advance_mut(len); }
-                            let b = buf.freeze().into_buf();
-                            debug!("read chunk (blocking, len: {})", len);
-                            Ok(Some(UniBodyBuf { buf: BufState::Bytes(b) }))
-                        }
-                        Err(e) => Err(e)
-                    }
-                });
-                if let Ok(Async::Ready(Some(ref b))) = res {
-                    self.consumed += b.len() as u64;
-                }
-                res
-            }
-            UniBodyState::MemMap(ref mut ob) => {
-                let d = ob.take();
-                if let Some(mb) = d {
-                    let res = unblock(|| {
-                        mb.advise_sequential()?;
-                        let _b = mb.bytes()[0];
-                        debug!("prepared MemMap (blocking, len: {})", mb.len());
-                        Ok(Some(UniBodyBuf { buf: BufState::MemMap(mb) }))
-                    });
-                    if let Ok(Async::Ready(Some(ref b))) = res {
-                        self.consumed += b.len() as u64;
-                    }
-                    res
-                } else {
-                    Ok(Async::Ready(None))
-                }
-            }
-        }
-    }
-}
-
-#[cfg(feature = "futures_03")]
-fn unblock_03<F, T>(cx: &mut Context<'_>, f: F)
-    -> Poll03<Option<Result<T, io::Error>>>
+fn unblock<F, T>(cx: &mut Context<'_>, f: F)
+    -> Poll<Option<Result<T, io::Error>>>
     where F: FnOnce() -> io::Result<Option<T>>
 {
     match tokio_threadpool::blocking(f) {
-        Ok(Async::Ready(Ok(Some(v)))) => Poll03::Ready(Some(Ok(v))),
-        Ok(Async::Ready(Ok(None))) => Poll03::Ready(None),
-        Ok(Async::Ready(Err(e))) => {
-            if e.kind() == io::ErrorKind::Interrupted {
-                warn!("UniBodyImage (Stream03): write interrupted");
-                // Might be needed, until Tokio offers to wake for us, as part
-                // of `tokio_threadpool::blocking`
-                cx.waker().wake_by_ref();
-                Poll03::Pending
-            } else {
-                Poll03::Ready(Some(Err(e)))
-            }
-        }
-        Ok(Async::NotReady) => {
-            warn!("UniBodyImage (Stream03): no blocking backup thread available");
+        Poll::Pending => {
+            warn!("UniBodyImage: no blocking backup thread available");
             // Might be needed, until Tokio offers to wake for us, as part
             // of `tokio_threadpool::blocking`
             cx.waker().wake_by_ref();
-            Poll03::Pending
+            Poll::Pending
         }
-        Err(_) => {
-            Poll03::Ready(Some(Err(io::Error::new(
+        Poll::Ready(Ok(Ok(Some(v)))) => Poll::Ready(Some(Ok(v))),
+        Poll::Ready(Ok(Ok(None))) => Poll::Ready(None),
+        Poll::Ready(Ok(Err(e))) => {
+            if e.kind() == io::ErrorKind::Interrupted {
+                warn!("UniBodyImage: write interrupted");
+                // Might be needed, until Tokio offers to wake for us, as part
+                // of `tokio_threadpool::blocking`
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            } else {
+                Poll::Ready(Some(Err(e)))
+            }
+        }
+        Poll::Ready(Err(_)) => {
+            Poll::Ready(Some(Err(io::Error::new(
                 io::ErrorKind::Other,
-                "UniBodyImage (Stream03) needs `blocking`, \
+                "UniBodyImage needs `blocking`, \
                  backup threads of Tokio threadpool"
             ))))
         }
     }
 }
 
-#[cfg(feature = "futures_03")]
-impl Stream03 for UniBodyImage {
+impl Stream for UniBodyImage {
     type Item = Result<UniBodyBuf, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll03<Option<Self::Item>>
+        -> Poll<Option<Self::Item>>
     {
         let this = self.get_mut();
 
@@ -294,19 +204,19 @@ impl Stream03 for UniBodyImage {
                 let n = iter.next();
                 if let Some(b) = n {
                     this.consumed += b.len() as u64;
-                    Poll03::Ready(Some(Ok(
+                    Poll::Ready(Some(Ok(
                         UniBodyBuf { buf: BufState::Bytes(b.into_buf()) }
                     )))
                 } else {
-                    Poll03::Ready(None)
+                    Poll::Ready(None)
                 }
             }
             UniBodyState::File { ref mut rs, bsize } => {
                 let avail = this.len - this.consumed;
                 if avail == 0 {
-                    return Poll03::Ready(None);
+                    return Poll::Ready(None);
                 }
-                let res = unblock_03(cx, || {
+                let res = unblock(cx, || {
                     let bs = cmp::min(bsize, avail) as usize;
                     let mut buf = BytesMut::with_capacity(bs);
                     match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
@@ -320,7 +230,7 @@ impl Stream03 for UniBodyImage {
                         Err(e) => Err(e)
                     }
                 });
-                if let Poll03::Ready(Some(Ok(ref b))) = res {
+                if let Poll::Ready(Some(Ok(ref b))) = res {
                     this.consumed += b.len() as u64;
                 }
                 res
@@ -328,18 +238,18 @@ impl Stream03 for UniBodyImage {
             UniBodyState::MemMap(ref mut ob) => {
                 let d = ob.take();
                 if let Some(mb) = d {
-                    let res = unblock_03(cx, || {
+                    let res = unblock(cx, || {
                         mb.advise_sequential()?;
                         let _b = mb.bytes()[0];
                         debug!("prepared MemMap (blocking, len: {})", mb.len());
                         Ok(Some(UniBodyBuf { buf: BufState::MemMap(mb) }))
                     });
-                    if let Poll03::Ready(Some(Ok(ref b))) = res {
+                    if let Poll::Ready(Some(Ok(ref b))) = res {
                         this.consumed += b.len() as u64;
                     }
                     res
                 } else {
-                    Poll03::Ready(None)
+                    Poll::Ready(None)
                 }
             }
         }
@@ -350,8 +260,10 @@ impl hyper::body::Payload for UniBodyImage {
     type Data = UniBodyBuf;
     type Error = io::Error;
 
-    fn poll_data(&mut self) -> Poll<Option<UniBodyBuf>, io::Error> {
-        self.poll()
+    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Option<Result<Self::Data, Self::Error>>>
+    {
+        self.poll_next(cx)
     }
 
     fn content_length(&self) -> Option<u64> {
