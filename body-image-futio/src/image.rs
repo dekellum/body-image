@@ -13,15 +13,12 @@ use tao_log::debug;
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 use hyper;
-use tokio_threadpool;
-use futures::{Async, Poll, Stream};
+use tokio_executor::threadpool as tokio_threadpool;
 
-#[cfg(feature = "futures_03")] use {
-    std::pin::Pin,
-    std::task::{Context, Poll as Poll03},
-    futures03::stream::Stream as Stream03,
-    tao_log::warn,
-};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use futures::stream::Stream;
+use tao_log::warn;
 
 use crate::{RequestRecord, RequestRecorder};
 
@@ -131,106 +128,18 @@ impl fmt::Debug for AsyncImageState {
     }
 }
 
-fn unblock<F, T>(f: F) -> Poll<T, io::Error>
-    where F: FnOnce() -> io::Result<T>
-{
-    match tokio_threadpool::blocking(f) {
-        Ok(Async::Ready(Ok(v))) => Ok(v.into()),
-        Ok(Async::Ready(Err(e))) => {
-            if e.kind() == io::ErrorKind::Interrupted {
-                Ok(Async::NotReady)
-            } else {
-                Err(e)
-            }
-        }
-        Ok(Async::NotReady) => Ok(Async::NotReady),
-        Err(_) => {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "AsyncBodyImage needs `blocking`, \
-                 backup threads of Tokio threadpool"
-            ))
-        }
-    }
-}
-
-impl Stream for AsyncBodyImage {
-    type Item = Bytes;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Option<Bytes>, io::Error> {
-        match self.state {
-            AsyncImageState::Ram(ref mut iter) => {
-                let n = iter.next();
-                if let Some(ref b) = n {
-                    self.consumed += b.len() as u64;
-                }
-                Ok(Async::Ready(n))
-            }
-            AsyncImageState::File { ref mut rs, bsize } => {
-                let avail = self.len - self.consumed;
-                if avail == 0 {
-                    return Ok(Async::Ready(None));
-                }
-                let res = unblock(|| {
-                    let bs = cmp::min(bsize, avail) as usize;
-                    let mut buf = BytesMut::with_capacity(bs);
-                    match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
-                        Ok(0) => Ok(None),
-                        Ok(len) => {
-                            unsafe { buf.advance_mut(len); }
-                            debug!("read chunk (blocking, len: {})", len);
-                            Ok(Some(buf.freeze()))
-                        }
-                        Err(e) => Err(e)
-                    }
-                });
-                if let Ok(Async::Ready(Some(ref b))) = res {
-                    self.consumed += b.len() as u64;
-                }
-                res
-            }
-            #[cfg(feature = "mmap")]
-            AsyncImageState::MemMap(ref mmap) => {
-                let avail = self.len - self.consumed;
-                if avail == 0 {
-                    return Ok(Async::Ready(None));
-                }
-                let res = unblock(|| {
-                    // This performs a copy via *bytes* crate
-                    // `copy_from_slice`. There is no apparent way to achieve
-                    // a 'static lifetime for `Bytes::from_static`, for
-                    // example. The silver lining is that the `blocking`
-                    // contract is guarunteed fullfilled here, unless of
-                    // course swap is enabled and the copy is so large as to
-                    // cause it to be swapped out before it is written!
-                    let b = mmap.tmp_advise(
-                        MemAdvice::Sequential, || -> Result<_, io::Error> {
-                            Ok(Bytes::from(&mmap[..]))
-                        }
-                    )?;
-                    debug!("MemMap copy to chunk (blocking, len: {})", b.len());
-                    Ok(Some(b))
-                });
-                if let Ok(Async::Ready(Some(ref b))) = res {
-                    self.consumed += b.len() as u64;
-                }
-                res
-            }
-        }
-    }
-}
-
 impl hyper::body::Payload for AsyncBodyImage {
     type Data = Cursor<Bytes>;
     type Error = io::Error;
 
-    fn poll_data(&mut self) -> Poll<Option<Self::Data>, io::Error> {
-        match self.poll() {
-            Ok(Async::Ready(Some(b))) => Ok(Async::Ready(Some(b.into_buf()))),
-            Ok(Async::Ready(None))    => Ok(Async::Ready(None)),
-            Ok(Async::NotReady)       => Ok(Async::NotReady),
-            Err(e)                    => Err(e)
+    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Option<Result<Self::Data, Self::Error>>>
+    {
+        match self.poll_next(cx) {
+            Poll::Pending              => Poll::Pending,
+            Poll::Ready(Some(Ok(b)))   => Poll::Ready(Some(Ok(b.into_buf()))),
+            Poll::Ready(Some(Err(e)))  => Poll::Ready(Some(Err(e))),
+            Poll::Ready(None)          => Poll::Ready(None)
         }
     }
 
@@ -243,48 +152,47 @@ impl hyper::body::Payload for AsyncBodyImage {
     }
 }
 
-#[cfg(feature = "futures_03")]
-fn unblock_03<F, T>(cx: &mut Context<'_>, f: F)
-    -> Poll03<Option<Result<T, io::Error>>>
+fn unblock<F, T>(cx: &mut Context<'_>, f: F)
+    -> Poll<Option<Result<T, io::Error>>>
     where F: FnOnce() -> io::Result<Option<T>>
 {
     match tokio_threadpool::blocking(f) {
-        Ok(Async::Ready(Ok(Some(v)))) => Poll03::Ready(Some(Ok(v))),
-        Ok(Async::Ready(Ok(None))) => Poll03::Ready(None),
-        Ok(Async::Ready(Err(e))) => {
+        Poll::Pending => {
+            // Might be needed, until Tokio offers to wake for us, as part
+            // of `tokio_threadpool::blocking`
+            cx.waker().wake_by_ref();
+            warn!("AsyncBodyImage (Stream): no blocking backup thread available");
+            Poll::Pending
+        }
+        Poll::Ready(Ok(Ok(Some(v)))) => Poll::Ready(Some(Ok(v))),
+        Poll::Ready(Ok(Ok(None))) => Poll::Ready(None),
+        Poll::Ready(Ok(Err(e))) => {
             if e.kind() == io::ErrorKind::Interrupted {
                 // Might be needed, until Tokio offers to wake for us, as part
                 // of `tokio_threadpool::blocking`
                 cx.waker().wake_by_ref();
-                warn!("AsyncBodyImage (Stream03): write interrupted");
-                Poll03::Pending
+                warn!("AsyncBodyImage (Stream): write interrupted");
+                Poll::Pending
             } else {
-                Poll03::Ready(Some(Err(e)))
+                Poll::Ready(Some(Err(e)))
             }
         }
-        Ok(Async::NotReady) => {
-            // Might be needed, until Tokio offers to wake for us, as part
-            // of `tokio_threadpool::blocking`
-            cx.waker().wake_by_ref();
-            warn!("AsyncBodyImage (Stream03): no blocking backup thread available");
-            Poll03::Pending
-        }
-        Err(_) => {
-            Poll03::Ready(Some(Err(io::Error::new(
+        Poll::Ready(Err(_e)) => {
+            eprintln!("original error: {}", _e);
+            Poll::Ready(Some(Err(io::Error::new(
                 io::ErrorKind::Other,
-                "AsyncBodyImage (Stream03) needs `blocking`, \
+                "AsyncBodyImage (Stream) needs `blocking`, \
                  backup threads of Tokio threadpool"
             ))))
         }
     }
 }
 
-#[cfg(feature = "futures_03")]
-impl Stream03 for AsyncBodyImage {
+impl Stream for AsyncBodyImage {
     type Item = Result<Bytes, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll03<Option<Self::Item>>
+        -> Poll<Option<Self::Item>>
     {
         let this = self.get_mut();
 
@@ -293,17 +201,17 @@ impl Stream03 for AsyncBodyImage {
                 let n = iter.next();
                 if let Some(b) = n {
                     this.consumed += b.len() as u64;
-                    Poll03::Ready(Some(Ok(b)))
+                    Poll::Ready(Some(Ok(b)))
                 } else {
-                    Poll03::Ready(None)
+                    Poll::Ready(None)
                 }
             }
             AsyncImageState::File { ref mut rs, bsize } => {
                 let avail = this.len - this.consumed;
                 if avail == 0 {
-                    return Poll03::Ready(None);
+                    return Poll::Ready(None);
                 }
-                let res = unblock_03(cx, || {
+                let res = unblock(cx, || {
                     let bs = cmp::min(bsize, avail) as usize;
                     let mut buf = BytesMut::with_capacity(bs);
                     match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
@@ -316,7 +224,7 @@ impl Stream03 for AsyncBodyImage {
                         Err(e) => Err(e)
                     }
                 });
-                if let Poll03::Ready(Some(Ok(ref b))) = res {
+                if let Poll::Ready(Some(Ok(ref b))) = res {
                     this.consumed += b.len() as u64;
                 }
                 res
@@ -325,9 +233,9 @@ impl Stream03 for AsyncBodyImage {
             AsyncImageState::MemMap(ref mmap) => {
                 let avail = this.len - this.consumed;
                 if avail == 0 {
-                    return Poll03::Ready(None);
+                    return Poll::Ready(None);
                 }
-                let res = unblock_03(cx, || {
+                let res = unblock(cx, || {
                     // This performs a copy via *bytes* crate
                     // `copy_from_slice`. There is no apparent way to achieve
                     // a 'static lifetime for `Bytes::from_static`, for
@@ -343,7 +251,7 @@ impl Stream03 for AsyncBodyImage {
                     debug!("MemMap copy to chunk (blocking, len: {})", b.len());
                     Ok(Some(b))
                 });
-                if let Poll03::Ready(Some(Ok(ref b))) = res {
+                if let Poll::Ready(Some(Ok(ref b))) = res {
                     this.consumed += b.len() as u64;
                 }
                 res

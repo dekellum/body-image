@@ -3,15 +3,12 @@ use tao_log::debug;
 use body_image::{BodyError, BodySink, Tunables};
 
 use hyper;
-use tokio_threadpool;
-use futures::{Async, AsyncSink, Poll, Sink, StartSend};
+use tokio_executor::threadpool as tokio_threadpool; // FIXME
 
-#[cfg(feature = "futures_03")] use {
-    std::pin::Pin,
-    std::task::{Context, Poll as Poll03},
-    futures03::sink::Sink as Sink03,
-    tao_log::warn,
-};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use futures::sink::Sink;
+use tao_log::warn;
 
 use crate::FutioError;
 
@@ -34,7 +31,7 @@ use crate::FutioError;
 pub struct AsyncBodySink {
     body: BodySink,
     tune: Tunables,
-    #[cfg(feature = "futures_03")] buf: Option<hyper::Chunk>
+    buf: Option<hyper::Chunk>
 }
 
 impl AsyncBodySink {
@@ -46,7 +43,7 @@ impl AsyncBodySink {
         AsyncBodySink {
             body,
             tune,
-            #[cfg(feature = "futures_03")] buf: None
+            buf: None
         }
     }
 
@@ -68,69 +65,16 @@ impl AsyncBodySink {
 
 macro_rules! unblock {
     ($c:ident, || $b:block) => (match tokio_threadpool::blocking(|| $b) {
-        Ok(Async::Ready(Ok(_))) => (),
-        Ok(Async::Ready(Err(e))) => return Err(e.into()),
-        Ok(Async::NotReady) => {
-            debug!("No blocking backup thread available -> NotReady");
-            return Ok(AsyncSink::NotReady($c));
-        }
-        Err(e) => return Err(FutioError::Other(Box::new(e)))
-    })
-}
-
-impl Sink for AsyncBodySink {
-    type SinkItem = hyper::Chunk;
-    type SinkError = FutioError;
-
-    fn start_send(&mut self, chunk: hyper::Chunk)
-        -> StartSend<hyper::Chunk, FutioError>
-    {
-        let new_len = self.body.len() + (chunk.len() as u64);
-        if new_len > self.tune.max_body() {
-            return Err(BodyError::BodyTooLong(new_len).into());
-        }
-        if self.body.is_ram() && new_len > self.tune.max_body_ram() {
-            unblock!(chunk, || {
-                debug!("to write back file (blocking, len: {})", new_len);
-                self.body.write_back(self.tune.temp_dir())
-            })
-        }
-        if self.body.is_ram() {
-            debug!("to save chunk (len: {})", chunk.len());
-            self.body.save(chunk).map_err(FutioError::from)?;
-        } else {
-            unblock!(chunk, || {
-                debug!("to write chunk (blocking, len: {})", chunk.len());
-                self.body.write_all(&chunk)
-            })
-        }
-
-        Ok(AsyncSink::Ready)
-    }
-
-    fn poll_complete(&mut self) -> Poll<(), FutioError> {
-        Ok(Async::Ready(()))
-    }
-
-    fn close(&mut self) -> Poll<(), FutioError> {
-        Ok(Async::Ready(()))
-    }
-}
-
-#[cfg(feature = "futures_03")]
-macro_rules! unblock_03 {
-    ($c:ident, || $b:block) => (match tokio_threadpool::blocking(|| $b) {
-        Ok(Async::Ready(Ok(_))) => (),
-        Ok(Async::Ready(Err(e))) => return Err(e.into()),
-        Ok(Async::NotReady) => {
-            warn!("AsyncBodySink (03): no blocking backup thread available");
+        Poll::Pending => {
+            warn!("AsyncBodySink: no blocking backup thread available");
             return Ok(Some($c));
         }
-        Err(e) => return Err(FutioError::Other(Box::new(e)))
+        Poll::Ready(Ok(Ok(_))) => (),
+        Poll::Ready(Ok(Err(e))) => return Err(e.into()),
+        Poll::Ready(Err(e)) => return Err(FutioError::Other(Box::new(e)))
     })
 }
 
-#[cfg(feature = "futures_03")]
 impl AsyncBodySink {
     // This logically combines `Sink::poll_ready` and `Sink::start_send` into
     // one operation. If the item is returned, this is equivelent to
@@ -143,7 +87,7 @@ impl AsyncBodySink {
             return Err(BodyError::BodyTooLong(new_len).into());
         }
         if self.body.is_ram() && new_len > self.tune.max_body_ram() {
-            unblock_03!(buf, || {
+            unblock!(buf, || {
                 debug!("to write back file (blocking, len: {})", new_len);
                 self.body.write_back(self.tune.temp_dir())
             })
@@ -152,7 +96,7 @@ impl AsyncBodySink {
             debug!("to save buf (len: {})", buf.len());
             self.body.write_all(&buf).map_err(FutioError::from)?
         } else {
-            unblock_03!(buf, || {
+            unblock!(buf, || {
                 debug!("to write buf (blocking, len: {})", buf.len());
                 self.body.write_all(&buf)
             })
@@ -162,12 +106,11 @@ impl AsyncBodySink {
     }
 }
 
-#[cfg(feature = "futures_03")]
-impl Sink03<hyper::Chunk> for AsyncBodySink {
+impl Sink<hyper::Chunk> for AsyncBodySink {
     type Error = FutioError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll03<Result<(), FutioError>>
+        -> Poll<Result<(), FutioError>>
     {
         self.poll_flush(cx)
     }
@@ -181,11 +124,11 @@ impl Sink03<hyper::Chunk> for AsyncBodySink {
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll03<Result<(), FutioError>>
+        -> Poll<Result<(), FutioError>>
     {
         if let Some(buf) = self.buf.take() {
             match self.poll_send(cx, buf) {
-                Ok(None) => Poll03::Ready(Ok(())),
+                Ok(None) => Poll::Ready(Ok(())),
                 Ok(s @ Some(_)) => {
                     self.buf = s;
 
@@ -193,17 +136,17 @@ impl Sink03<hyper::Chunk> for AsyncBodySink {
                     // part of `tokio_threadpool::blocking`
                     cx.waker().wake_by_ref();
 
-                    Poll03::Pending
+                    Poll::Pending
                 }
-                Err(e) => Poll03::Ready(Err(e))
+                Err(e) => Poll::Ready(Err(e))
             }
         } else {
-            Poll03::Ready(Ok(()))
+            Poll::Ready(Ok(()))
         }
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll03<Result<(), FutioError>>
+        -> Poll<Result<(), FutioError>>
     {
         self.poll_flush(cx)
     }

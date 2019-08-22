@@ -33,31 +33,21 @@
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
 
-#![deny(dead_code, unused_imports)]
+// FIXME #![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
-#![cfg_attr(feature = "futures_03", feature(async_await))]
 
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
-use std::mem;
 use std::time::Duration;
 
 use bytes::Bytes;
-use futures::{future, Future, Stream};
-use futures::future::Either;
-
-#[cfg(feature = "futures_03")]
-use futures03::future::{FutureExt as _, TryFutureExt};
 
 use http;
 use hyper;
 use hyper_tls;
-use hyperx::header::{ContentLength, TypedHeaders};
 use tao_log::warn;
 use tokio;
-use tokio::timer::timeout;
-use tokio::util::FutureExt;
 
 use body_image::{
     BodyImage, BodySink, BodyError, Encoding,
@@ -87,8 +77,8 @@ pub use sink::AsyncBodySink;
 #[cfg(feature = "mmap")] mod uni_sink;
 #[cfg(feature = "mmap")] pub use uni_sink::UniBodySink;
 
-#[cfg(feature = "futures_03")] mod futures_03;
-#[cfg(feature = "futures_03")] pub use self::futures_03::request_dialog_03;
+mod futures_03;
+pub use self::futures_03::request_dialog;
 
 /// The crate version string.
 pub static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -218,9 +208,10 @@ impl From<io::Error> for FutioError {
 /// internally, waiting with timeout, and dropping these on completion.
 pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     -> Result<Dialog, FutioError>
-    where B: hyper::body::Payload + Send
+    where B: hyper::body::Payload + Send + Unpin,
+          <B as hyper::body::Payload>::Data: Unpin
 {
-    let mut rt = tokio::runtime::Builder::new()
+    let rt = tokio::runtime::Builder::new()
         .name_prefix("tpool-")
         .core_threads(2)
         .blocking_threads(2)
@@ -230,77 +221,9 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         .map_err(|e| FutioError::Other(Box::new(e)))?;
     let client = hyper::Client::builder().build(connector);
 
-    #[cfg(feature = "futures_03")] {
-        rt.block_on(request_dialog_03(&client, rr, tune).boxed().compat())
-    }
-
-    #[cfg(not(feature = "futures_03"))] {
-        rt.block_on(request_dialog(&client, rr, tune))
-    }
+    rt.block_on(request_dialog(&client, rr, tune))
 
     // Drop of `rt`, here, is equivalent to shutdown_now and wait
-}
-
-/// Given a suitable `hyper::Client` and `RequestRecord`, return a
-/// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
-/// (initial response and complete body) and if the response `BodyImage` will
-/// be in `Ram` or `FsRead`.
-pub fn request_dialog<CN, B>(
-    client: &hyper::Client<CN, B>,
-    rr: RequestRecord<B>,
-    tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=FutioError> + Send
-    where CN: hyper::client::connect::Connect + Sync + 'static,
-          B: hyper::body::Payload + Send
-{
-    let prolog = rr.prolog;
-    let tune = tune.clone();
-
-    let res_timeout = tune.res_timeout();
-    let body_timeout = tune.body_timeout();
-
-    let futr = client
-        .request(rr.request)
-        .from_err::<FutioError>()
-        .map(|response| Monolog { prolog, response });
-
-    let futr = if let Some(t) = res_timeout {
-        Either::A(futr
-            .timeout(t)
-            .map_err(move |te| {
-                map_timeout(te, || FutioError::ResponseTimeout(t))
-            })
-        )
-    } else {
-        Either::B(futr)
-    };
-
-    let futr = futr.and_then(|monolog| resp_future(monolog, tune));
-
-    let futr = if let Some(t) = body_timeout {
-        Either::A(futr
-            .timeout(t)
-            .map_err(move |te| {
-                map_timeout(te, || FutioError::BodyTimeout(t))
-            })
-        )
-    } else {
-        Either::B(futr)
-    };
-
-    futr.and_then(InDialog::prepare)
-}
-
-fn map_timeout<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
-    where F: FnOnce() -> FutioError
-{
-    if te.is_elapsed() {
-        on_elapsed()
-    } else if te.is_timer() {
-        FutioError::Other(te.into_timer().unwrap().into())
-    } else {
-        te.into_inner().expect("inner")
-    }
 }
 
 /// Return a generic HTTP user-agent header value for the crate, with version
@@ -308,52 +231,6 @@ pub fn user_agent() -> String {
     format!("Mozilla/5.0 (compatible; body-image {}; \
              +https://crates.io/crates/body-image)",
             VERSION)
-}
-
-fn resp_future(monolog: Monolog, tune: Tunables)
-    -> impl Future<Item=InDialog, Error=FutioError> + Send
-{
-    let (resp_parts, body) = monolog.response.into_parts();
-
-    // Result<BodySink> based on CONTENT_LENGTH header.
-    let bsink = match resp_parts.headers.try_decode::<ContentLength>() {
-        Some(Ok(ContentLength(l))) => {
-            if l > tune.max_body() {
-                Err(FutioError::ContentLengthTooLong(l))
-            } else if l > tune.max_body_ram() {
-                BodySink::with_fs(tune.temp_dir()).map_err(FutioError::from)
-            } else {
-                Ok(BodySink::with_ram(l))
-            }
-        },
-        Some(Err(e)) => Err(FutioError::Other(Box::new(e))),
-        None => Ok(BodySink::with_ram(tune.max_body_ram()))
-    };
-
-    // Unwrap BodySink, returning any error as Future
-    let bsink = match bsink {
-        Ok(b) => b,
-        Err(e) => { return Either::A(future::err(e)); }
-    };
-
-    let async_body = AsyncBodySink::new(bsink, tune);
-
-    let mut in_dialog = InDialog {
-        prolog:      monolog.prolog,
-        version:     resp_parts.version,
-        status:      resp_parts.status,
-        res_headers: resp_parts.headers,
-        res_body:    BodySink::empty() // tmp, swap'ed below.
-    };
-
-    Either::B(
-        body.from_err::<FutioError>()
-            .forward(async_body)
-            .and_then(|(_strm, mut async_body)| {
-                mem::swap(async_body.body_mut(), &mut in_dialog.res_body);
-                Ok(in_dialog)
-            })
-    )
 }
 
 /// An `http::Request` and recording. Note that other important getter
@@ -516,20 +393,19 @@ mod logger;
 
 #[cfg(test)]
 mod futio_tests {
-    #[cfg(feature = "mmap")]
-    mod futures;
+    // #[cfg(feature = "mmap")]
+    // mod futures;
 
-    #[cfg(feature = "futures_03")]
     mod futures_03;
 
-    #[cfg(all(feature = "mmap", feature = "futures_03"))]
+    #[cfg(all(feature = "mmap"))]
     mod futures_03_uni;
 
-    mod server;
+    // mod server;
 
     /// These tests may fail because they depend on public web servers
-    #[cfg(feature = "may_fail")]
-    mod live;
+    // #[cfg(feature = "may_fail")]
+    // mod live;
 
     use tao_log::{debug, debugv};
     use super::{FutioError, Flaw};

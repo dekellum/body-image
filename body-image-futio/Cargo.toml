@@ -20,23 +20,22 @@ body-image = { version=">=1.4.0, <1.5", default-features=false }
 brotli     = { version=">=3.1.0, <3.4", optional=true }
 bytes      = { version=">=0.4.6, <0.5" }
 flate2     = { version=">=1.0.1, <1.1" }
-futures03  = { version=">=0.3.0-alpha.17, <0.4", package="futures-preview", features=["compat"], optional=true }
+futures    = { version=">=0.3.0-alpha.18, <0.4", package="futures-preview" }
 http       = { version=">=0.1.6, <0.2" }
 httparse   = { version=">=1.2.4, <1.4" }
-hyper      = { version=">=0.12.1, <0.13" }
-hyper-tls  = { version=">=0.3.0, <0.4" }
+hyper      = { version=">=0.13.0-a.0, <0.14" }
+hyper-tls  = { version=">=0.3.2, <0.5" }
 hyperx     = { version=">=0.15.0, <0.16" }
 tao-log    = { version=">=0.1.0, <0.3" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }
 olio       = { version=">=1.2.0, <1.3", default-features=false }
 tokio      = { version=">=0.2.0-alpha.1, <0.3", default-features=false, features=["rt-full"] }
-tokio-threadpool = { version=">=0.2.0-alpha.1, <0.3" }
+tokio-executor = { version=">=0.2.0-alpha.1, <0.3", features=["threadpool"] }
+blocking-permit = { version=">=0.1.0, <0.2" }
 
 [features]
-default = ["mmap", "brotli"]
+default = [] # FIXME: "mmap", "brotli"
 mmap = ["memmap", "olio/mmap", "body-image/mmap"]
-futures_03 = ["futures03"]
-
 may_fail = [] # Tests which may fail
 
 [lib]
@@ -46,4 +45,4 @@ bench = false
 [dev-dependencies]
 fern        = { version=">=0.5.5, <0.6" }
 rand        = { version=">=0.7.0, <0.8" }
-tokio-tcp   = { version=">=0.1.3, <0.2" }
+# tokio-tcp   = { version=">=0.1.3, <0.2" }

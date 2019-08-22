@@ -1,5 +1,5 @@
-use futures03::{
-    future::{FutureExt, TryFutureExt},
+use futures::{
+    future::FutureExt,
     stream::{StreamExt, TryStreamExt},
 };
 
@@ -23,7 +23,7 @@ fn forward_to_sink_empty() {
             tune
         );
 
-        body.err_into::<FutioError>() // 0.3 specific
+        body.err_into::<FutioError>()
             .map_ok(hyper::Chunk::from)
             .forward(&mut asink)
             .await?;
@@ -35,7 +35,7 @@ fn forward_to_sink_empty() {
     };
 
     let mut rt = CtRuntime::new().unwrap();
-    let res: Result<(), FutioError> = rt.block_on(task.boxed().compat());
+    let res: Result<(), FutioError> = rt.block_on(task);
     res.expect("task success");
 }
 
@@ -51,7 +51,7 @@ fn forward_to_sink_small() {
             tune
         );
 
-        body.err_into::<FutioError>() // 0.3 specific
+        body.err_into::<FutioError>()
             .map_ok(hyper::Chunk::from)
             .forward(&mut asink)
             .await?;
@@ -63,7 +63,7 @@ fn forward_to_sink_small() {
     };
 
     let mut rt = CtRuntime::new().unwrap();
-    let res: Result<(), FutioError> = rt.block_on(task.boxed().compat());
+    let res: Result<(), FutioError> = rt.block_on(task);
     res.expect("task success");
 }
 
@@ -83,7 +83,7 @@ fn forward_to_sink_fs() {
             tune
         );
 
-        body.err_into::<FutioError>() // 0.3 specific
+        body.err_into::<FutioError>()
             .map_ok(hyper::Chunk::from)
             .forward(&mut asink)
             .await?;
@@ -94,9 +94,9 @@ fn forward_to_sink_fs() {
         Ok(())
     };
 
-    let mut rt = DefaultRuntime::new().unwrap();
-    let res: Result<(), FutioError> = rt.block_on(task.boxed().compat());
-    res.expect("task success");
+    let rt = DefaultRuntime::new().unwrap();
+    rt.spawn(task.map(|_r: Result<(),FutioError>| ()));
+    rt.shutdown_on_idle();
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn forward_to_sink_fs_back() {
             tune
         );
 
-        body.err_into::<FutioError>() // 0.3 specific
+        body.err_into::<FutioError>()
             .map_ok(hyper::Chunk::from)
             .forward(&mut asink)
             .await?;
@@ -129,9 +129,9 @@ fn forward_to_sink_fs_back() {
         Ok(())
     };
 
-    let mut rt = DefaultRuntime::new().unwrap();
-    let res: Result<(), FutioError> = rt.block_on(task.boxed().compat());
-    res.expect("task success");
+    let rt = DefaultRuntime::new().unwrap();
+    rt.spawn(task.map(|_r: Result<(),FutioError>| ()));
+    rt.shutdown_on_idle();
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn forward_to_sink_fs_map() {
             tune
         );
 
-        body.err_into::<FutioError>() // 0.3 specific
+        body.err_into::<FutioError>()
             .map_ok(hyper::Chunk::from)
             .forward(&mut asink)
             .await?;
@@ -167,6 +167,6 @@ fn forward_to_sink_fs_map() {
     };
 
     let mut rt = DefaultRuntime::new().unwrap();
-    let res: Result<(), FutioError> = rt.block_on(task.boxed().compat());
+    let res: Result<(), FutioError> = rt.block_on(task);
     res.expect("task success");
 }
