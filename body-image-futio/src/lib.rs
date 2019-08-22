@@ -401,8 +401,8 @@ mod futio_tests {
     // mod server;
 
     /// These tests may fail because they depend on public web servers
-    // #[cfg(feature = "may_fail")]
-    // mod live;
+    #[cfg(feature = "may_fail")]
+    mod live;
 
     use tao_log::{debug, debugv};
     use super::{FutioError, Flaw};
