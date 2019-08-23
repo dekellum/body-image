@@ -148,15 +148,12 @@ impl hyper::body::Payload for AsyncBodyImage {
     }
 }
 
-fn unblock<F, T>(cx: &mut Context<'_>, f: F)
+fn unblock<F, T>(_cx: &mut Context<'_>, f: F)
     -> Poll<Option<Result<T, io::Error>>>
     where F: FnOnce() -> io::Result<Option<T>>
 {
     match tokio_threadpool::blocking(f) {
         Poll::Pending => {
-            // Might be needed, until Tokio offers to wake for us, as part
-            // of `tokio_threadpool::blocking`
-            cx.waker().wake_by_ref();
             warn!("AsyncBodyImage: no blocking backup thread available");
             Poll::Pending
         }
@@ -164,9 +161,6 @@ fn unblock<F, T>(cx: &mut Context<'_>, f: F)
         Poll::Ready(Ok(Ok(None))) => Poll::Ready(None),
         Poll::Ready(Ok(Err(e))) => {
             if e.kind() == io::ErrorKind::Interrupted {
-                // Might be needed, until Tokio offers to wake for us, as part
-                // of `tokio_threadpool::blocking`
-                cx.waker().wake_by_ref();
                 warn!("AsyncBodyImage: write interrupted");
                 Poll::Pending
             } else {

@@ -153,16 +153,13 @@ impl fmt::Debug for UniBodyState {
     }
 }
 
-fn unblock<F, T>(cx: &mut Context<'_>, f: F)
+fn unblock<F, T>(_cx: &mut Context<'_>, f: F)
     -> Poll<Option<Result<T, io::Error>>>
     where F: FnOnce() -> io::Result<Option<T>>
 {
     match tokio_threadpool::blocking(f) {
         Poll::Pending => {
             warn!("UniBodyImage: no blocking backup thread available");
-            // Might be needed, until Tokio offers to wake for us, as part
-            // of `tokio_threadpool::blocking`
-            cx.waker().wake_by_ref();
             Poll::Pending
         }
         Poll::Ready(Ok(Ok(Some(v)))) => Poll::Ready(Some(Ok(v))),
@@ -170,9 +167,6 @@ fn unblock<F, T>(cx: &mut Context<'_>, f: F)
         Poll::Ready(Ok(Err(e))) => {
             if e.kind() == io::ErrorKind::Interrupted {
                 warn!("UniBodyImage: write interrupted");
-                // Might be needed, until Tokio offers to wake for us, as part
-                // of `tokio_threadpool::blocking`
-                cx.waker().wake_by_ref();
                 Poll::Pending
             } else {
                 Poll::Ready(Some(Err(e)))

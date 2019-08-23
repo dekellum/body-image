@@ -139,11 +139,6 @@ impl Sink<UniBodyBuf> for UniBodySink {
                 Ok(None) => Poll::Ready(Ok(())),
                 Ok(s @ Some(_)) => {
                     self.buf = s;
-
-                    // Might be needed, until Tokio offers to wake for us, as part
-                    // of `tokio_threadpool::blocking`
-                    cx.waker().wake_by_ref();
-
                     Poll::Pending
                 }
                 Err(e) => Poll::Ready(Err(e))
