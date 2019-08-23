@@ -226,46 +226,56 @@ impl Stream for AsyncBodyImage {
                     res
                 } else {
                     match blocking_permit_future(&BLOCKING_SET) {
-                        Err(_) => {
-                            unimplemented!("Can't dispatch yet");
-                        }
-                        Ok(f) => {
-                            this.delegate = Delegate::Permit(f);
-                        }
+                        Ok(f) => this.delegate = Delegate::Permit(f),
+                        Err(_) => unimplemented!("Can't dispatch yet"),
                     }
                     Pin::new(this).poll_next(cx) // recurse with delegate in place
                                                  // (needed for correct waking)
                 }
             }
-            /*
             #[cfg(feature = "mmap")]
             AsyncImageState::MemMap(ref mmap) => {
                 let avail = this.len - this.consumed;
                 if avail == 0 {
                     return Poll::Ready(None);
                 }
-                let res = unblock(cx, || {
-                    // This performs a copy via *bytes* crate
-                    // `copy_from_slice`. There is no apparent way to achieve
-                    // a 'static lifetime for `Bytes::from_static`, for
-                    // example. The silver lining is that the `blocking`
-                    // contract is guarunteed fullfilled here, unless of
-                    // course swap is enabled and the copy is so large as to
-                    // cause it to be swapped out before it is written!
-                    let b = mmap.tmp_advise(
-                        MemAdvice::Sequential, || -> Result<_, io::Error> {
-                            Ok(Bytes::from(&mmap[..]))
+                if let Some(p) = permit {
+                    let res = p.run_unwrap(|| {
+                        // This performs a copy via *bytes* crate
+                        // `copy_from_slice`. There is no apparent way to
+                        // achieve a 'static lifetime for `Bytes::from_static`,
+                        // for example. The silver lining is that the
+                        // `blocking` contract is guarunteed fullfilled here,
+                        // unless of course swap is enabled and the copy is so
+                        // large as to cause it to be swapped out before it is
+                        // written!
+                        match mmap.tmp_advise(
+                            MemAdvice::Sequential,
+                            || -> Result<_, io::Error> {
+                                Ok(Bytes::from(&mmap[..]))
+                            }
+                        ) {
+                            Ok(b) => {
+                                debug!("MemMap copy to chunk (blocking, len: {})",
+                                       b.len());
+                                Poll::Ready(Some(Ok(b)))
+                            }
+                            Err(e) => Poll::Ready(Some(Err(e))),
                         }
-                    )?;
-                    debug!("MemMap copy to chunk (blocking, len: {})", b.len());
-                    Ok(Some(b))
-                });
-                if let Poll::Ready(Some(Ok(ref b))) = res {
-                    this.consumed += b.len() as u64;
+                    });
+                    if let Poll::Ready(Some(Ok(ref b))) = res {
+                        this.consumed += b.len() as u64;
+                    }
+                    res
+                } else {
+                    match blocking_permit_future(&BLOCKING_SET) {
+                        Ok(f) => this.delegate = Delegate::Permit(f),
+                        Err(_) => unimplemented!("Can't dispatch yet"),
+                    }
+                    Pin::new(this).poll_next(cx) // recurse with delegate in place
+                                                 // (needed for correct waking)
                 }
-                res
             }
-            */
         }
     }
 }
