@@ -7,14 +7,17 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::vec::IntoIter;
 
-use blocking_permit::{blocking_permit_future,
-                      BlockingPermitFuture, DispatchBlocking};
+use blocking_permit::{
+    blocking_permit_future,
+    BlockingPermitFuture,
+    // DispatchBlocking
+};
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use futures::stream::Stream;
 use http;
 use hyper;
 use olio::fs::rc::ReadSlice;
-use tao_log::{debug, info};
+use tao_log::debug;
 use lazy_static::lazy_static;
 use tokio_sync::semaphore::Semaphore;
 
@@ -68,7 +71,7 @@ pub struct AsyncBodyImage {
 
 #[derive(Debug)]
 enum Delegate {
-    Dispatch(DispatchBlocking<Option<Result<Bytes,io::Error>>>),
+    //Dispatch(DispatchBlocking<Option<Result<Bytes,io::Error>>>),
     Permit(BlockingPermitFuture<'static>),
     None
 }
@@ -175,17 +178,6 @@ impl Stream for AsyncBodyImage {
     {
         let this = self.get_mut();
         let permit = match this.delegate {
-            Delegate::Dispatch(ref mut db) => {
-                info!("delegate poll to DispatchBlocking");
-                match Pin::new(&mut *db).poll(cx) {
-                    Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
-                    Poll::Ready(Ok(ov)) => {
-                        this.delegate = Delegate::None;
-                        return Poll::Ready(ov);
-                    }
-                }
-            }
             Delegate::Permit(ref mut pf) => {
                 match Pin::new(&mut *pf).poll(cx) {
                     Poll::Pending => return Poll::Pending,
@@ -235,7 +227,7 @@ impl Stream for AsyncBodyImage {
                 } else {
                     match blocking_permit_future(&BLOCKING_SET) {
                         Err(_) => {
-                            unimplemented!();
+                            unimplemented!("Can't dispatch yet");
                         }
                         Ok(f) => {
                             this.delegate = Delegate::Permit(f);
