@@ -5,10 +5,11 @@ extern crate test; // Still required, see rust-lang/rust#55133
 
 use std::cmp;
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
-use futures::Stream;
+use futures::future;
+use futures::future::FutureExt;
+use futures::stream::{Stream, StreamExt};
 use rand::seq::SliceRandom;
 use test::Bencher;
 use tokio;
@@ -196,11 +197,15 @@ fn stream_22_mmap_copy(b: &mut Bencher) {
     })
 }
 
-fn summarize_stream<S>(stream: S, rt: &mut tokio::runtime::Runtime)
-    where S: Stream<Error=io::Error> + Send + 'static,
-          S::Item: AsRef<[u8]>
+fn summarize_stream<S, T, E>(stream: S, rt: &mut tokio::runtime::Runtime)
+    where S: Stream<Item = Result<T, E>> + StreamExt + Send + 'static,
+          T: AsRef<[u8]>,
+          E: std::fmt::Debug
 {
-    let task = stream.fold((0u8,0), |(mut ml, len), item| -> Result<_,io::Error> {
+    let (tx, rx) = crossbeam_channel::bounded(0);
+
+    let task = stream.fold((0u8, 0), |(mut ml, len), item| {
+        let item = item.unwrap();
         let item = item.as_ref();
         let mut i = 0;
         let e = item.len();
@@ -208,15 +213,14 @@ fn summarize_stream<S>(stream: S, rt: &mut tokio::runtime::Runtime)
             ml = cmp::max(ml, item[i]);
             i += 1973; // prime < (0x1000/2)
         }
-        Ok((ml, len + item.len()))
+        future::ready((ml, len + item.len()))
+    }).map(move |r| {
+        tx.send(r).unwrap();
     });
-    let res = rt.block_on(task);
-    if let Ok((mlast, len)) = res {
-        assert_eq!(mlast, 255);
-        assert_eq!(len, 8192 * 1024);
-    } else {
-        panic!("Failed {:?}", res);
-    }
+    rt.spawn(task);
+    let (mlast, len) = rx.recv().unwrap();
+    assert_eq!(mlast, 255);
+    assert_eq!(len, 8192 * 1024);
 }
 
 fn sink_data(mut body: BodySink) -> Result<BodyImage, BodyError> {
