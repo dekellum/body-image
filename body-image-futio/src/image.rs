@@ -177,9 +177,11 @@ impl Stream for AsyncBodyImage {
         -> Poll<Option<Self::Item>>
     {
         let this = self.get_mut();
+
+        // Handle any delegating (new permit or early exit)
         let permit = match this.delegate {
             Delegate::Permit(ref mut pf) => {
-                match Pin::new(&mut *pf).poll(cx) {
+                match Pin::new(pf).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Ok(p)) => {
                         this.delegate = Delegate::None;
@@ -191,47 +193,48 @@ impl Stream for AsyncBodyImage {
             Delegate::None => None
         };
 
-        match this.state {
-            AsyncImageState::Ram(ref mut iter) => {
-                let n = iter.next();
-                if let Some(b) = n {
-                    this.consumed += b.len() as u64;
-                    Poll::Ready(Some(Ok(b)))
-                } else {
-                    Poll::Ready(None)
-                }
+        // Ram doesn't need blocking permit (early exit)
+        if let AsyncImageState::Ram(ref mut iter) = this.state {
+            let n = iter.next();
+            if let Some(b) = n {
+                this.consumed += b.len() as u64;
+                return Poll::Ready(Some(Ok(b)))
+            } else {
+                return Poll::Ready(None)
             }
+        }
+
+        // Early exit if nothing available
+        let avail = this.len - this.consumed;
+        if avail == 0 {
+            return Poll::Ready(None);
+        }
+
+        // Otherwise we'll need a permit (early exit)
+        if permit.is_none() {
+            match blocking_permit_future(&BLOCKING_SET) {
+                Ok(f) => this.delegate = Delegate::Permit(f),
+                Err(_) => unimplemented!("Can't dispatch yet"),
+            }
+            // recurse with delegate in place (needed for correct waking)
+            return Pin::new(this).poll_next(cx);
+        }
+
+        let res = match this.state {
             AsyncImageState::File { ref mut rs, bsize } => {
-                let avail = this.len - this.consumed;
-                if avail == 0 {
-                    return Poll::Ready(None);
-                }
-                if let Some(p) = permit {
-                    let res = p.run_unwrap(|| {
-                        let bs = cmp::min(bsize, avail) as usize;
-                        let mut buf = BytesMut::with_capacity(bs);
-                        match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
-                            Ok(0) => Poll::Ready(None),
-                            Ok(len) => {
-                                unsafe { buf.advance_mut(len); }
-                                debug!("read chunk (blocking, len: {})", len);
-                                Poll::Ready(Some(Ok(buf.freeze())))
-                            }
-                            Err(e) => Poll::Ready(Some(Err(e)))
+                permit.unwrap().run_unwrap(|| {
+                    let bs = cmp::min(bsize, avail) as usize;
+                    let mut buf = BytesMut::with_capacity(bs);
+                    match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
+                        Ok(0) => Poll::Ready(None),
+                        Ok(len) => {
+                            unsafe { buf.advance_mut(len); }
+                            debug!("read chunk (blocking, len: {})", len);
+                            Poll::Ready(Some(Ok(buf.freeze())))
                         }
-                    });
-                    if let Poll::Ready(Some(Ok(ref b))) = res {
-                        this.consumed += b.len() as u64;
+                        Err(e) => Poll::Ready(Some(Err(e)))
                     }
-                    res
-                } else {
-                    match blocking_permit_future(&BLOCKING_SET) {
-                        Ok(f) => this.delegate = Delegate::Permit(f),
-                        Err(_) => unimplemented!("Can't dispatch yet"),
-                    }
-                    Pin::new(this).poll_next(cx) // recurse with delegate in place
-                                                 // (needed for correct waking)
-                }
+                })
             }
             #[cfg(feature = "mmap")]
             AsyncImageState::MemMap(ref mmap) => {
@@ -239,44 +242,35 @@ impl Stream for AsyncBodyImage {
                 if avail == 0 {
                     return Poll::Ready(None);
                 }
-                if let Some(p) = permit {
-                    let res = p.run_unwrap(|| {
-                        // This performs a copy via *bytes* crate
-                        // `copy_from_slice`. There is no apparent way to
-                        // achieve a 'static lifetime for `Bytes::from_static`,
-                        // for example. The silver lining is that the
-                        // `blocking` contract is guarunteed fullfilled here,
-                        // unless of course swap is enabled and the copy is so
-                        // large as to cause it to be swapped out before it is
-                        // written!
-                        match mmap.tmp_advise(
-                            MemAdvice::Sequential,
-                            || -> Result<_, io::Error> {
-                                Ok(Bytes::from(&mmap[..]))
-                            }
-                        ) {
-                            Ok(b) => {
-                                debug!("MemMap copy to chunk (blocking, len: {})",
-                                       b.len());
-                                Poll::Ready(Some(Ok(b)))
-                            }
-                            Err(e) => Poll::Ready(Some(Err(e))),
+                permit.unwrap().run_unwrap(|| {
+                    // This performs a copy via *bytes* crate
+                    // `copy_from_slice`. There is no apparent way to achieve a
+                    // 'static lifetime for `Bytes::from_static`, for
+                    // example. The silver lining is that the `blocking`
+                    // contract is guarunteed fullfilled here, unless of course
+                    // swap is enabled and the copy is so large as to cause it
+                    // to be swapped out before it is written!
+                    match mmap.tmp_advise(
+                        MemAdvice::Sequential,
+                        || -> Result<_, io::Error> {
+                            Ok(Bytes::from(&mmap[..]))
                         }
-                    });
-                    if let Poll::Ready(Some(Ok(ref b))) = res {
-                        this.consumed += b.len() as u64;
+                    ) {
+                        Ok(b) => {
+                            debug!("MemMap copy to chunk (blocking, len: {})",
+                                   b.len());
+                            Poll::Ready(Some(Ok(b)))
+                        }
+                        Err(e) => Poll::Ready(Some(Err(e))),
                     }
-                    res
-                } else {
-                    match blocking_permit_future(&BLOCKING_SET) {
-                        Ok(f) => this.delegate = Delegate::Permit(f),
-                        Err(_) => unimplemented!("Can't dispatch yet"),
-                    }
-                    Pin::new(this).poll_next(cx) // recurse with delegate in place
-                                                 // (needed for correct waking)
-                }
+                })
             }
+            AsyncImageState::Ram(_) => unreachable!(), //covered earlier
+        };
+        if let Poll::Ready(Some(Ok(ref b))) = res {
+            this.consumed += b.len() as u64;
         }
+        res
     }
 }
 
