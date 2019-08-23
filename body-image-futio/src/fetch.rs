@@ -1,3 +1,4 @@
+use std::fmt;
 use std::future::Future;
 
 use futures::{
@@ -12,6 +13,54 @@ use body_image::{BodySink, Dialog, Tunables};
 use crate::{
     AsyncBodySink, InDialog, FutioError, Monolog, RequestRecord
 };
+
+pub trait RuntimeExt {
+    /// Like Runtime::block_on but blocks on a oneshot receiver, with the
+    /// original future spawned, to ensure it actually runs on a worker thread.
+    fn block_on_pool<F>(&self, futr: F) -> F::Output
+        where F: Future + Send + 'static,
+              F::Output: fmt::Debug + Send;
+}
+
+impl RuntimeExt for tokio::runtime::Runtime {
+    // FIXME: Not sure if this is intended behavior for tokio 0.2 Runtime
+    fn block_on_pool<F>(&self, futr: F) -> F::Output
+        where F: Future + Send + 'static,
+              F::Output: fmt::Debug + Send
+    {
+        let (tx, rx) = futures::channel::oneshot::channel();
+        self.spawn(futr.map(move |o| tx.send(o).expect("send")));
+        self.block_on(rx).expect("recv")
+    }
+}
+
+/// Run an HTTP request to completion, returning the full `Dialog`. This
+/// function constructs a tokio `Runtime` (ThreadPool),
+/// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
+/// internally, waiting with timeout, and dropping these on completion.
+pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
+    -> Result<Dialog, FutioError>
+    where B: hyper::body::Payload + Send + Unpin,
+          <B as hyper::body::Payload>::Data: Unpin
+{
+    let rt = tokio::runtime::Builder::new()
+        .name_prefix("tpool-")
+        .core_threads(2)
+        .blocking_threads(2)
+        .build()
+        .unwrap();
+
+    let res = {
+        let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)
+            .map_err(|e| FutioError::Other(Box::new(e)))?;
+        let client = hyper::Client::builder().build(connector);
+
+        rt.block_on_pool(request_dialog(&client, rr, tune))
+    };
+
+    rt.shutdown_on_idle();
+    res
+}
 
 /// Given a suitable `hyper::Client` and `RequestRecord`, return a
 /// `Future<Output=Result<Dialog, FutioError>>.  The provided `Tunables`
