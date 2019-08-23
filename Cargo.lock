@@ -79,15 +79,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "blocking-permit"
 version = "0.1.0"
-source = "git+https://github.com/dekellum/blocking-permit#a695d5a55291dc10423d846ce28f0294f136d278"
 dependencies = [
  "crossbeam-channel 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-preview 0.3.0-alpha.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "tokio-executor 0.2.0-alpha.2 (git+https://github.com/tokio-rs/tokio)",
- "tokio-sync 0.2.0-alpha.2 (git+https://github.com/tokio-rs/tokio)",
+ "tokio-executor 0.2.0-alpha.2 (git+https://github.com/tokio-rs/tokio?rev=357df388)",
+ "tokio-sync 0.2.0-alpha.2 (git+https://github.com/tokio-rs/tokio?rev=357df388)",
 ]
 
 [[package]]
@@ -1201,7 +1200,6 @@ dependencies = [
 "checksum autocfg 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "b671c8fb71b457dd4ae18c4ba1e59aa81793daacc361d82fcd410cef0d491875"
 "checksum base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = "0b25d992356d2eb0ed82172f5248873db5560c4721f564b13cb5193bda5e668e"
 "checksum bitflags 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3d155346769a6855b86399e9bc3814ab343cd3d62c7e985113d46a0ec3c281fd"
-"checksum blocking-permit 0.1.0 (git+https://github.com/dekellum/blocking-permit)" = "<none>"
 "checksum brotli 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7f29919120f08613aadcd4383764e00526fc9f18b6c0895814faeed0dd78613e"
 "checksum brotli-decompressor 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2a9f2b517b96b19d8f91c1ff5b1cf498e688850b32eae5d58e02d15c4d4fdc0c"
 "checksum byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "a7c3dd8985a7111efc5c80b44e23ecdd8c007de8ade3b96595387e812b957cf5"
