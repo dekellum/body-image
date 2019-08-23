@@ -419,11 +419,11 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
 mod logger;
 
 #[cfg(test)]
-mod futio_tests {
-    mod futures_03;
+mod tests {
+    mod forward;
 
     #[cfg(all(feature = "mmap"))]
-    mod futures_03_uni;
+    mod uni_forward;
 
     // FIXME: mod server;
 
