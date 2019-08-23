@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::cmp;
 use std::fmt;
 use std::io::{Cursor, Read};
@@ -6,17 +7,24 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::vec::IntoIter;
 
+use blocking_permit::{blocking_permit_future,
+                      BlockingPermitFuture, DispatchBlocking};
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use futures::stream::Stream;
 use http;
 use hyper;
 use olio::fs::rc::ReadSlice;
-use tao_log::{debug, warn};
-use tokio_executor::threadpool as tokio_threadpool;
+use tao_log::{debug, info};
+use lazy_static::lazy_static;
+use tokio_sync::semaphore::Semaphore;
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
 
 use crate::{RequestRecord, RequestRecorder};
+
+lazy_static! {
+    static ref BLOCKING_SET: Semaphore = Semaphore::new(5);
+}
 
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
@@ -55,6 +63,14 @@ pub struct AsyncBodyImage {
     state: AsyncImageState,
     len: u64,
     consumed: u64,
+    delegate: Delegate
+}
+
+#[derive(Debug)]
+enum Delegate {
+    Dispatch(DispatchBlocking<Option<Result<Bytes,io::Error>>>),
+    Permit(BlockingPermitFuture<'static>),
+    None
 }
 
 impl AsyncBodyImage {
@@ -70,6 +86,7 @@ impl AsyncBodyImage {
                     state: AsyncImageState::Ram(v.into_iter()),
                     len,
                     consumed: 0,
+                    delegate: Delegate::None,
                 }
             }
             ExplodedImage::FsRead(rs) => {
@@ -80,6 +97,7 @@ impl AsyncBodyImage {
                     },
                     len,
                     consumed: 0,
+                    delegate: Delegate::None,
                 }
             }
             #[cfg(feature = "mmap")]
@@ -88,6 +106,7 @@ impl AsyncBodyImage {
                     state: AsyncImageState::MemMap(mmap),
                     len,
                     consumed: 0,
+                    delegate: Delegate::None,
                 }
             }
         }
@@ -148,11 +167,12 @@ impl hyper::body::Payload for AsyncBodyImage {
     }
 }
 
+/*
 fn unblock<F, T>(_cx: &mut Context<'_>, f: F)
     -> Poll<Option<Result<T, io::Error>>>
     where F: FnOnce() -> io::Result<Option<T>>
 {
-    match tokio_threadpool::blocking(f) {
+    match blocking_permit_future(&BLOCKING_SET) {
         Poll::Pending => {
             warn!("AsyncBodyImage: no blocking backup thread available");
             Poll::Pending
@@ -176,6 +196,7 @@ fn unblock<F, T>(_cx: &mut Context<'_>, f: F)
         }
     }
 }
+ */
 
 impl Stream for AsyncBodyImage {
     type Item = Result<Bytes, io::Error>;
@@ -184,6 +205,30 @@ impl Stream for AsyncBodyImage {
         -> Poll<Option<Self::Item>>
     {
         let this = self.get_mut();
+        let permit = match this.delegate {
+            Delegate::Dispatch(ref mut db) => {
+                info!("delegate poll to DispatchBlocking");
+                match Pin::new(&mut *db).poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
+                    Poll::Ready(Ok(ov)) => {
+                        this.delegate = Delegate::None;
+                        return Poll::Ready(ov);
+                    }
+                }
+            }
+            Delegate::Permit(ref mut pf) => {
+                match Pin::new(&mut *pf).poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Ok(p)) => {
+                        this.delegate = Delegate::None;
+                        Some(p)
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
+                }
+            }
+            Delegate::None => None
+        };
 
         match this.state {
             AsyncImageState::Ram(ref mut iter) => {
@@ -200,24 +245,38 @@ impl Stream for AsyncBodyImage {
                 if avail == 0 {
                     return Poll::Ready(None);
                 }
-                let res = unblock(cx, || {
-                    let bs = cmp::min(bsize, avail) as usize;
-                    let mut buf = BytesMut::with_capacity(bs);
-                    match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
-                        Ok(0) => Ok(None),
-                        Ok(len) => {
-                            unsafe { buf.advance_mut(len); }
-                            debug!("read chunk (blocking, len: {})", len);
-                            Ok(Some(buf.freeze()))
+                if let Some(p) = permit {
+                    let res = p.run_unwrap(|| {
+                        let bs = cmp::min(bsize, avail) as usize;
+                        let mut buf = BytesMut::with_capacity(bs);
+                        match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
+                            Ok(0) => Poll::Ready(None),
+                            Ok(len) => {
+                                unsafe { buf.advance_mut(len); }
+                                debug!("read chunk (blocking, len: {})", len);
+                                Poll::Ready(Some(Ok(buf.freeze())))
+                            }
+                            Err(e) => Poll::Ready(Some(Err(e)))
                         }
-                        Err(e) => Err(e)
+                    });
+                    if let Poll::Ready(Some(Ok(ref b))) = res {
+                        this.consumed += b.len() as u64;
                     }
-                });
-                if let Poll::Ready(Some(Ok(ref b))) = res {
-                    this.consumed += b.len() as u64;
+                    res
+                } else {
+                    match blocking_permit_future(&BLOCKING_SET) {
+                        Err(_) => {
+                            unimplemented!();
+                        }
+                        Ok(f) => {
+                            this.delegate = Delegate::Permit(f);
+                        }
+                    }
+                    Pin::new(this).poll_next(cx) // recurse with delegate in place
+                                                 // (needed for correct waking)
                 }
-                res
             }
+            /*
             #[cfg(feature = "mmap")]
             AsyncImageState::MemMap(ref mmap) => {
                 let avail = this.len - this.consumed;
@@ -245,6 +304,7 @@ impl Stream for AsyncBodyImage {
                 }
                 res
             }
+            */
         }
     }
 }
