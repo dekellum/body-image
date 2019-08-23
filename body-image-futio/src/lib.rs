@@ -398,7 +398,7 @@ mod futio_tests {
     #[cfg(all(feature = "mmap"))]
     mod futures_03_uni;
 
-    // mod server;
+    // FIXME: mod server;
 
     /// These tests may fail because they depend on public web servers
     #[cfg(feature = "may_fail")]
