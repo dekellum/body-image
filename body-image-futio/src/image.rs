@@ -10,7 +10,8 @@ use std::vec::IntoIter;
 use blocking_permit::{
     blocking_permit_future,
     BlockingPermitFuture,
-    // DispatchBlocking
+    // DispatchBlocking,
+    IsReactorThread,
 };
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use futures::stream::Stream;
@@ -214,7 +215,7 @@ impl Stream for AsyncBodyImage {
         if permit.is_none() {
             match blocking_permit_future(&BLOCKING_SET) {
                 Ok(f) => this.delegate = Delegate::Permit(f),
-                Err(_) => unimplemented!("Can't dispatch yet"),
+                Err(IsReactorThread) => unimplemented!("Can't dispatch yet"),
             }
             // recurse with delegate in place (needed for correct waking)
             return Pin::new(this).poll_next(cx);
