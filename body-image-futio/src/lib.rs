@@ -43,6 +43,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 
+use futures::FutureExt;
 use http;
 use hyper;
 use hyper_tls;
@@ -198,12 +199,34 @@ impl From<io::Error> for FutioError {
     }
 }
 
+use std::future::Future;
+
+pub trait RuntimeExt {
+    /// Like Runtime::block_on but blocks on a oneshot receiver, with the
+    /// original future spawned, to ensure it actually runs on a worker thread.
+    fn block_on_pool<F>(&self, futr: F) -> F::Output
+        where F: Future + Send + 'static,
+              F::Output: fmt::Debug + Send;
+}
+
+impl RuntimeExt for tokio::runtime::Runtime {
+    // FIXME: Not sure if this is intended behavior for tokio 0.2 Runtime
+    fn block_on_pool<F>(&self, futr: F) -> F::Output
+        where F: Future + Send + 'static,
+              F::Output: fmt::Debug + Send
+    {
+        let (tx, rx) = futures::channel::oneshot::channel();
+        self.spawn(futr.map(move |o| tx.send(o).expect("send")));
+        self.block_on(rx).expect("recv")
+    }
+}
+
 // Note: There is intentionally no `From` implementation for `Flaw` to
 // `FutioError::Other`, as that could easily lead to misclassification.
 // Instead it should be manually constructed.
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
-/// function constructs a default *tokio* `Runtime`,
+/// function constructs a tokio `Runtime` (ThreadPool),
 /// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
 /// internally, waiting with timeout, and dropping these on completion.
 pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
@@ -217,13 +240,17 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         .blocking_threads(2)
         .build()
         .unwrap();
-    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)
-        .map_err(|e| FutioError::Other(Box::new(e)))?;
-    let client = hyper::Client::builder().build(connector);
 
-    rt.block_on(request_dialog(&client, rr, tune))
+    let res = {
+        let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)
+            .map_err(|e| FutioError::Other(Box::new(e)))?;
+        let client = hyper::Client::builder().build(connector);
 
-    // Drop of `rt`, here, is equivalent to shutdown_now and wait
+        rt.block_on_pool(request_dialog(&client, rr, tune))
+    };
+
+    rt.shutdown_on_idle();
+    res
 }
 
 /// Return a generic HTTP user-agent header value for the crate, with version

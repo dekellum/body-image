@@ -8,7 +8,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use futures::future;
-use futures::future::FutureExt;
 use futures::stream::{Stream, StreamExt};
 use rand::seq::SliceRandom;
 use test::Bencher;
@@ -29,7 +28,8 @@ fn stream_01_ram_pregather(b: &mut Bencher) {
     b.iter(|| {
         let stream = AsyncBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `AsyncBodyImage` in `Ram`, scattered state
@@ -42,7 +42,8 @@ fn stream_02_ram(b: &mut Bencher) {
     b.iter(|| {
         let stream = AsyncBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 #[bench]
@@ -55,7 +56,8 @@ fn stream_03_ram_uni(b: &mut Bencher) {
     b.iter(|| {
         let stream = UniBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `AsyncBodyImage` in `Ram`, gathered (single, contiguous buffer) in each
@@ -71,7 +73,8 @@ fn stream_04_ram_gather(b: &mut Bencher) {
         body.gather();
         let stream = AsyncBodyImage::new(body, &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `AsyncBodyImage` in `FsRead`, default buffer size (64K)
@@ -84,7 +87,8 @@ fn stream_10_fsread(b: &mut Bencher) {
     b.iter(|| {
         let stream = AsyncBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `UniBodyImage` in `FsRead`, default buffer size (64K)
@@ -97,7 +101,8 @@ fn stream_11_fsread_uni(b: &mut Bencher) {
     b.iter(|| {
         let stream = UniBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `AsyncBodyImage` in `FsRead`, 8KiB buffer size
@@ -110,7 +115,8 @@ fn stream_12_fsread_8k(b: &mut Bencher) {
     b.iter(|| {
         let stream = AsyncBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `AsyncBodyImage` in `FsRead`, 128KiB buffer size
@@ -123,7 +129,8 @@ fn stream_13_fsread_128k(b: &mut Bencher) {
     b.iter(|| {
         let stream = AsyncBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `AsyncBodyImage` in `FsRead`, 1MiB buffer size
@@ -136,7 +143,8 @@ fn stream_14_fsread_1m(b: &mut Bencher) {
     b.iter(|| {
         let stream = AsyncBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `AsyncBodyImage` in `FsRead`, 4MiB buffer size
@@ -149,7 +157,8 @@ fn stream_15_fsread_4m(b: &mut Bencher) {
     b.iter(|| {
         let stream = AsyncBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 #[bench]
@@ -163,7 +172,8 @@ fn stream_20_mmap_uni_pre(b: &mut Bencher) {
     b.iter(|| {
         let stream = UniBodyImage::new(body.clone(), &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `UniBodyImage` in `MemMap`, new mmap on each iteration, zero-copy
@@ -178,7 +188,8 @@ fn stream_21_mmap_uni(b: &mut Bencher) {
         body.mem_map().unwrap();
         let stream = UniBodyImage::new(body, &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
 // `AsyncBodyImage` in `MemMap`, new mmap on each iteration, and with costly
@@ -194,16 +205,15 @@ fn stream_22_mmap_copy(b: &mut Bencher) {
         body.mem_map().unwrap();
         let stream = AsyncBodyImage::new(body, &tune);
         summarize_stream(stream, &mut rt);
-    })
+    });
+    rt.shutdown_on_idle();
 }
 
-fn summarize_stream<S, T, E>(stream: S, rt: &mut tokio::runtime::Runtime)
+fn summarize_stream<S, T, E>(stream: S, rt: &tokio::runtime::Runtime)
     where S: Stream<Item = Result<T, E>> + StreamExt + Send + 'static,
           T: AsRef<[u8]>,
           E: std::fmt::Debug
 {
-    let (tx, rx) = crossbeam_channel::bounded(0);
-
     let task = stream.fold((0u8, 0), |(mut ml, len), item| {
         let item = item.unwrap();
         let item = item.as_ref();
@@ -214,11 +224,8 @@ fn summarize_stream<S, T, E>(stream: S, rt: &mut tokio::runtime::Runtime)
             i += 1973; // prime < (0x1000/2)
         }
         future::ready((ml, len + item.len()))
-    }).map(move |r| {
-        tx.send(r).unwrap();
     });
-    rt.spawn(task);
-    let (mlast, len) = rx.recv().unwrap();
+    let (mlast, len) = rt.block_on_pool(task);
     assert_eq!(mlast, 255);
     assert_eq!(len, 8192 * 1024);
 }
