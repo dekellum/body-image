@@ -3,14 +3,16 @@ use std::cmp;
 use std::fmt;
 use std::io::{Cursor, Read};
 use std::io;
+use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::vec::IntoIter;
 
 use blocking_permit::{
     blocking_permit_future,
+    dispatch_rx,
     BlockingPermitFuture,
-    // DispatchBlocking,
+    DispatchBlocking,
     IsReactorThread,
 };
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
@@ -18,7 +20,7 @@ use futures::stream::Stream;
 use http;
 use hyper;
 use olio::fs::rc::ReadSlice;
-use tao_log::debug;
+use tao_log::{debug, info, warn};
 use lazy_static::lazy_static;
 use tokio_sync::semaphore::Semaphore;
 
@@ -72,9 +74,17 @@ pub struct AsyncBodyImage {
 
 #[derive(Debug)]
 enum Delegate {
-    //Dispatch(DispatchBlocking<Option<Result<Bytes,io::Error>>>),
+    Dispatch(DispatchBlocking<Poll<Option<Result<Bytes,io::Error>>>>),
     Permit(BlockingPermitFuture<'static>),
     None
+}
+
+enum AsyncImageState {
+    Ram(IntoIter<Bytes>),
+    File { rs: ReadSlice, bsize: u64 },
+    FileDelegated,
+    #[cfg(feature = "mmap")]
+    MemMap(MemHandle<Mmap>),
 }
 
 impl AsyncBodyImage {
@@ -117,13 +127,6 @@ impl AsyncBodyImage {
     }
 }
 
-enum AsyncImageState {
-    Ram(IntoIter<Bytes>),
-    File { rs: ReadSlice, bsize: u64 },
-    #[cfg(feature = "mmap")]
-    MemMap(MemHandle<Mmap>),
-}
-
 impl fmt::Debug for AsyncImageState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -135,6 +138,10 @@ impl fmt::Debug for AsyncImageState {
                 f.debug_struct("File")
                     .field("rs", rs)
                     .field("bsize", bsize)
+                    .finish()
+            }
+            AsyncImageState::FileDelegated => {
+                f.debug_struct("FileDelegated")
                     .finish()
             }
             #[cfg(feature = "mmap")]
@@ -181,6 +188,17 @@ impl Stream for AsyncBodyImage {
 
         // Handle any delegating (new permit or early exit)
         let permit = match this.delegate {
+            Delegate::Dispatch(ref mut db) => {
+                info!("delegate poll to DispatchBlocking");
+                match Pin::new(&mut *db).poll(cx) {
+                    Poll::Pending | Poll::Ready(Ok(Poll::Pending)) => return Poll::Pending,
+                    Poll::Ready(Ok(p)) => {
+                        this.delegate = Delegate::None;
+                        return p;
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
+                }
+            }
             Delegate::Permit(ref mut pf) => {
                 match Pin::new(pf).poll(cx) {
                     Poll::Pending => return Poll::Pending,
@@ -214,11 +232,41 @@ impl Stream for AsyncBodyImage {
         // Otherwise we'll need a permit (early exit)
         if permit.is_none() {
             match blocking_permit_future(&BLOCKING_SET) {
-                Ok(f) => this.delegate = Delegate::Permit(f),
-                Err(IsReactorThread) => unimplemented!("Can't dispatch yet"),
+                Ok(f) => {
+                    this.delegate = Delegate::Permit(f);
+                    // recurse once (needed for correct waking)
+                    return Pin::new(this).poll_next(cx);
+                }
+                Err(IsReactorThread) => {},
             }
-            // recurse with delegate in place (needed for correct waking)
-            return Pin::new(this).poll_next(cx);
+        }
+
+        if permit.is_none() {
+            match mem::replace(&mut this.state, AsyncImageState::FileDelegated) {
+                AsyncImageState::File { mut rs, bsize } => {
+                    this.delegate = Delegate::Dispatch(dispatch_rx(move || -> Poll<Option<Result<Bytes,io::Error>>> {
+                        let bs = cmp::min(bsize, avail) as usize;
+                        let mut buf = BytesMut::with_capacity(bs);
+                        match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
+                            Ok(0) => Poll::Ready(None),
+                            Ok(len) => {
+                                unsafe { buf.advance_mut(len); }
+                                debug!("read chunk (blocking, len: {})", len);
+                                Poll::Ready(Some(Ok(buf.freeze())))
+                            }
+                            Err(e) => {
+                                if e.kind() == io::ErrorKind::Interrupted {
+                                    warn!("AsyncBodyImage: write interrupted");
+                                    Poll::Pending
+                                } else {
+                                    Poll::Ready(Some(Err(e)))
+                                }
+                            }
+                        }
+                    }));
+                }
+                _ => unimplemented!(),
+            }
         }
 
         let res = match this.state {
@@ -233,7 +281,14 @@ impl Stream for AsyncBodyImage {
                             debug!("read chunk (blocking, len: {})", len);
                             Poll::Ready(Some(Ok(buf.freeze())))
                         }
-                        Err(e) => Poll::Ready(Some(Err(e)))
+                        Err(e) => {
+                            if e.kind() == io::ErrorKind::Interrupted {
+                                warn!("AsyncBodyImage: write interrupted");
+                                Poll::Pending
+                            } else {
+                                Poll::Ready(Some(Err(e)))
+                            }
+                        }
                     }
                 })
             }
@@ -266,7 +321,8 @@ impl Stream for AsyncBodyImage {
                     }
                 })
             }
-            AsyncImageState::Ram(_) => unreachable!(), //covered earlier
+            AsyncImageState::Ram(_) |
+            AsyncImageState::FileDelegated => unreachable!(), //covered earlier
         };
         if let Poll::Ready(Some(Ok(ref b))) = res {
             this.consumed += b.len() as u64;
