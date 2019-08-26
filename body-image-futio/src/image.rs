@@ -21,16 +21,10 @@ use http;
 use hyper;
 use olio::fs::rc::ReadSlice;
 use tao_log::{debug, info, warn};
-use lazy_static::lazy_static;
-use tokio_sync::semaphore::Semaphore;
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
 
-use crate::{RequestRecord, RequestRecorder};
-
-lazy_static! {
-    static ref BLOCKING_SET: Semaphore = Semaphore::new(5);
-}
+use crate::{BLOCKING_SET, RequestRecord, RequestRecorder};
 
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
@@ -226,7 +220,7 @@ impl Stream for AsyncBodyImage {
     {
         let this = self.get_mut();
 
-        // Handle any delegating (new permit or early exit)
+        // Handle any delegate futures (new permit or early exit)
         let permit = match this.delegate {
             Delegate::Dispatch(ref mut db) => {
                 info!("delegate poll to DispatchBlocking");

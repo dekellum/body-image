@@ -44,7 +44,9 @@ use std::time::Duration;
 use bytes::Bytes;
 use http;
 use hyper;
+use lazy_static::lazy_static;
 use tao_log::warn;
+use tokio_sync::semaphore::Semaphore;
 
 use body_image::{
     BodyImage, BodySink, BodyError, Encoding,
@@ -96,6 +98,10 @@ pub static BROWSE_ACCEPT: &str =
     "text/html, application/xhtml+xml, \
      application/xml;q=0.9, \
      */*;q=0.8";
+
+lazy_static! {
+    static ref BLOCKING_SET: Semaphore = Semaphore::new(5);
+}
 
 /// Error enumeration for body-image-futio origin errors. This may be
 /// extended in the future so exhaustive matching is gently discouraged with
