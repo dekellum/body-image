@@ -1,14 +1,19 @@
+use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use blocking_permit::{
+    blocking_permit_future,
+    BlockingPermitFuture,
+    IsReactorThread,
+};
 use futures::sink::Sink;
 use hyper;
-use tao_log::{debug, warn};
-use tokio_executor::threadpool as tokio_threadpool;
+use tao_log::debug;
 
 use body_image::{BodyError, BodySink, Tunables};
 
-use crate::FutioError;
+use crate::{BLOCKING_SET, FutioError};
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `hyper::Body` (`hyper::Chunk` item) stream to be forwarded
@@ -28,8 +33,15 @@ use crate::FutioError;
 #[derive(Debug)]
 pub struct AsyncBodySink {
     body: BodySink,
+    delegate: Delegate,
     tune: Tunables,
     buf: Option<hyper::Chunk>
+}
+
+#[derive(Debug)]
+enum Delegate {
+    Permit(BlockingPermitFuture<'static>),
+    None
 }
 
 impl AsyncBodySink {
@@ -40,6 +52,7 @@ impl AsyncBodySink {
     pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
         AsyncBodySink {
             body,
+            delegate: Delegate::None,
             tune,
             buf: None
         }
@@ -61,45 +74,70 @@ impl AsyncBodySink {
     }
 }
 
-macro_rules! unblock {
-    ($c:ident, || $b:block) => (match tokio_threadpool::blocking(|| $b) {
-        Poll::Pending => {
-            warn!("AsyncBodySink: no blocking backup thread available");
-            return Ok(Some($c));
-        }
-        Poll::Ready(Ok(Ok(_))) => (),
-        Poll::Ready(Ok(Err(e))) => return Err(e.into()),
-        Poll::Ready(Err(e)) => return Err(FutioError::Other(Box::new(e)))
-    })
-}
-
 impl AsyncBodySink {
     // This logically combines `Sink::poll_ready` and `Sink::start_send` into
     // one operation. If the item is returned, this is equivelent to
     // `Poll::Pending`, and the item will be later retried.
-    fn poll_send(&mut self, _cx: &mut Context<'_>, buf: hyper::Chunk)
+    fn poll_send(&mut self, cx: &mut Context<'_>, buf: hyper::Chunk)
         -> Result<Option<hyper::Chunk>, FutioError>
     {
+        // Handle any delegate futures (new permit or early exit)
+        let permit = match self.delegate {
+            Delegate::Permit(ref mut pf) => {
+                match Pin::new(pf).poll(cx) {
+                    Poll::Pending => return Ok(Some(buf)),
+                    Poll::Ready(Ok(p)) => {
+                        self.delegate = Delegate::None;
+                        Some(p)
+                    }
+                    Poll::Ready(Err(e)) => {
+                        // TODO: Better error?
+                        return Err(FutioError::Other(Box::new(e)));
+                    }
+                }
+            }
+            Delegate::None => None
+        };
+
+        // Early exit if too long
         let new_len = self.body.len() + (buf.len() as u64);
         if new_len > self.tune.max_body() {
             return Err(BodyError::BodyTooLong(new_len).into());
         }
-        if self.body.is_ram() && new_len > self.tune.max_body_ram() {
-            unblock!(buf, || {
-                debug!("to write back file (blocking, len: {})", new_len);
-                self.body.write_back(self.tune.temp_dir())
-            })
-        }
-        if self.body.is_ram() {
+
+        // Ram doesn't need blocking permit (early exit)
+        if self.body.is_ram() && new_len <= self.tune.max_body_ram() {
             debug!("to save buf (len: {})", buf.len());
-            self.body.write_all(&buf).map_err(FutioError::from)?
-        } else {
-            unblock!(buf, || {
-                debug!("to write buf (blocking, len: {})", buf.len());
-                self.body.write_all(&buf)
-            })
+            self.body.write_all(&buf).map_err(FutioError::from)?;
+            return Ok(None)
+        };
+
+        // Otherwise we'll need a permit or to dispatch (and exit early)
+        if permit.is_none() {
+            match blocking_permit_future(&BLOCKING_SET) {
+                Ok(f) => {
+                    self.delegate = Delegate::Permit(f);
+                }
+                Err(IsReactorThread) => unimplemented!(),
+            }
+            // recurse once (needed for correct waking)
+            return Pin::new(self).poll_send(cx, buf);
         }
 
+        // If still Ram at this point, needs to be written back (blocking)
+        if self.body.is_ram() {
+            permit.unwrap().run_unwrap(|| {
+                debug!("to write back file (blocking, len: {})", new_len);
+                self.body.write_back(self.tune.temp_dir())?;
+                debug!("to write buf (blocking, len: {})", buf.len());
+                self.body.write_all(&buf)
+            })?;
+        } else {
+            permit.unwrap().run_unwrap(|| {
+                debug!("to write buf (blocking, len: {})", buf.len());
+                self.body.write_all(&buf)
+            })?;
+        }
         Ok(None)
     }
 }
