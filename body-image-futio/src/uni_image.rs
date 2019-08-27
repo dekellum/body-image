@@ -1,23 +1,32 @@
 use std::cmp;
 use std::fmt;
+use std::future::Future;
 use std::io::{Cursor, Read};
 use std::io;
+use std::mem;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::vec::IntoIter;
 
+use blocking_permit::{
+    blocking_permit_future, BlockingPermitFuture,
+    dispatch_rx, DispatchBlocking,
+    IsReactorThread,
+};
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use futures::stream::Stream;
 use http;
 use hyper;
 use olio::fs::rc::ReadSlice;
-use tao_log::{debug, warn};
-use tokio_executor::threadpool as tokio_threadpool;
+use tao_log::{debug, info, warn};
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
 
-use crate::{MemMapBuf, RequestRecord, RequestRecorder, StreamWrapper};
+use crate::{
+    BLOCKING_SET,
+    MemMapBuf, RequestRecord, RequestRecorder, StreamWrapper
+};
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits, using the custom
@@ -36,8 +45,19 @@ use crate::{MemMapBuf, RequestRecord, RequestRecorder, StreamWrapper};
 #[derive(Debug)]
 pub struct UniBodyImage {
     state: UniBodyState,
+    delegate: Delegate,
     len: u64,
     consumed: u64,
+}
+
+#[derive(Debug)]
+enum Delegate {
+    Dispatch(DispatchBlocking<(
+        Result<Option<UniBodyBuf>, io::Error>,
+        UniBodyState
+    )>),
+    Permit(BlockingPermitFuture<'static>),
+    None
 }
 
 impl StreamWrapper for UniBodyImage {
@@ -47,6 +67,7 @@ impl StreamWrapper for UniBodyImage {
             ExplodedImage::Ram(v) => {
                 UniBodyImage {
                     state: UniBodyState::Ram(v.into_iter()),
+                    delegate: Delegate::None,
                     len,
                     consumed: 0,
                 }
@@ -57,6 +78,7 @@ impl StreamWrapper for UniBodyImage {
                         rs,
                         bsize: tune.buffer_size_fs() as u64
                     },
+                    delegate: Delegate::None,
                     len,
                     consumed: 0,
                 }
@@ -64,6 +86,7 @@ impl StreamWrapper for UniBodyImage {
             ExplodedImage::MemMap(mmap) => {
                 UniBodyImage {
                     state: UniBodyState::MemMap(Some(MemMapBuf::new(mmap))),
+                    delegate: Delegate::None,
                     len,
                     consumed: 0,
                 }
@@ -74,14 +97,18 @@ impl StreamWrapper for UniBodyImage {
 
 /// Provides zero-copy read access to both `Bytes` and `Mmap` memory
 /// regions. Implements `bytes::Buf` (*mmap* feature only).
+#[derive(Debug)]
 pub struct UniBodyBuf {
     buf: BufState
 }
 
+#[derive(Debug)]
 enum BufState {
     Bytes(Cursor<Bytes>),
     MemMap(MemMapBuf),
 }
+
+// FIXME: Above may require manual Debug to avoid too many Bytes displayed
 
 impl Buf for UniBodyBuf {
     fn remaining(&self) -> usize {
@@ -124,6 +151,7 @@ enum UniBodyState {
     Ram(IntoIter<Bytes>),
     File { rs: ReadSlice, bsize: u64 },
     MemMap(Option<MemMapBuf>),
+    Delegated,
 }
 
 impl fmt::Debug for UniBodyState {
@@ -145,35 +173,44 @@ impl fmt::Debug for UniBodyState {
                     .field(ob)
                     .finish()
             }
+            UniBodyState::Delegated => {
+                f.debug_struct("Delegated")
+                    .finish()
+            }
+
         }
     }
 }
 
-fn unblock<F, T>(_cx: &mut Context<'_>, f: F)
-    -> Poll<Option<Result<T, io::Error>>>
-    where F: FnOnce() -> io::Result<Option<T>>
-{
-    match tokio_threadpool::blocking(f) {
-        Poll::Pending => {
-            warn!("UniBodyImage: no blocking backup thread available");
-            Poll::Pending
-        }
-        Poll::Ready(Ok(Ok(Some(v)))) => Poll::Ready(Some(Ok(v))),
-        Poll::Ready(Ok(Ok(None))) => Poll::Ready(None),
-        Poll::Ready(Ok(Err(e))) => {
-            if e.kind() == io::ErrorKind::Interrupted {
-                warn!("UniBodyImage: write interrupted");
-                Poll::Pending
-            } else {
-                Poll::Ready(Some(Err(e)))
+impl UniBodyState {
+    fn read_next(&mut self, avail: u64) -> Result<Option<UniBodyBuf>, io::Error> {
+        match *self {
+            UniBodyState::File { ref mut rs, bsize } => {
+                let bs = cmp::min(bsize, avail) as usize;
+                let mut buf = BytesMut::with_capacity(bs);
+                match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
+                    Ok(0) => Ok(None),
+                    Ok(len) => {
+                        unsafe { buf.advance_mut(len); }
+                        let b = buf.freeze().into_buf();
+                        debug!("read chunk (len: {})", len);
+                        Ok(Some(UniBodyBuf { buf: BufState::Bytes(b) }))
+                    }
+                    Err(e) => Err(e)
+                }
             }
-        }
-        Poll::Ready(Err(_)) => {
-            Poll::Ready(Some(Err(io::Error::new(
-                io::ErrorKind::Other,
-                "UniBodyImage needs `blocking`, \
-                 backup threads of Tokio threadpool"
-            ))))
+            UniBodyState::MemMap(ref mut ob) => {
+                if let Some(mb) = ob.take() {
+                    mb.advise_sequential()?;
+                    let _b = mb.bytes()[0];
+                    debug!("prepared MemMap (len: {})", mb.len());
+                    Ok(Some(UniBodyBuf { buf: BufState::MemMap(mb) }))
+                } else {
+                    Ok(None)
+                }
+            }
+            UniBodyState::Ram(_) => unimplemented!(),
+            UniBodyState::Delegated => unimplemented!(),
         }
     }
 }
@@ -186,60 +223,104 @@ impl Stream for UniBodyImage {
     {
         let this = self.get_mut();
 
-        match this.state {
-            UniBodyState::Ram(ref mut iter) => {
-                let n = iter.next();
-                if let Some(b) = n {
+        // Handle any delegate futures (new permit or early exit)
+        let permit = match this.delegate {
+            Delegate::Dispatch(ref mut db) => {
+                info!("delegate poll to DispatchBlocking");
+                let (poll_res, rstate) = match Pin::new(&mut *db).poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
+                    Poll::Ready(Ok((Ok(None), st))) => (Poll::Ready(None), st),
+                    Poll::Ready(Ok((Ok(Some(b)), st))) => (Poll::Ready(Some(Ok(b))), st),
+                    Poll::Ready(Ok((Err(e), st))) => {
+                        if e.kind() == io::ErrorKind::Interrupted {
+                            warn!("UniBodyImage: write interrupted");
+                            (Poll::Pending, st)
+                        } else {
+                            (Poll::Ready(Some(Err(e))), st)
+                        }
+                    }
+                };
+                this.delegate = Delegate::None;
+                this.state = rstate;
+
+                if let Poll::Ready(Some(Ok(ref b))) = poll_res {
+                    this.consumed += b.len() as u64;
+                }
+                return poll_res;
+            }
+            Delegate::Permit(ref mut pf) => {
+                match Pin::new(pf).poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Ok(p)) => {
+                        this.delegate = Delegate::None;
+                        Some(p)
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
+                }
+            }
+            Delegate::None => None
+        };
+
+        // Ram doesn't need blocking permit (early exit)
+        if let UniBodyState::Ram(ref mut iter) = this.state {
+            return match iter.next() {
+                Some(b) => {
                     this.consumed += b.len() as u64;
                     Poll::Ready(Some(Ok(
                         UniBodyBuf { buf: BufState::Bytes(b.into_buf()) }
                     )))
-                } else {
-                    Poll::Ready(None)
                 }
-            }
-            UniBodyState::File { ref mut rs, bsize } => {
-                let avail = this.len - this.consumed;
-                if avail == 0 {
-                    return Poll::Ready(None);
-                }
-                let res = unblock(cx, || {
-                    let bs = cmp::min(bsize, avail) as usize;
-                    let mut buf = BytesMut::with_capacity(bs);
-                    match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
-                        Ok(0) => Ok(None),
-                        Ok(len) => {
-                            unsafe { buf.advance_mut(len); }
-                            let b = buf.freeze().into_buf();
-                            debug!("read chunk (blocking, len: {})", len);
-                            Ok(Some(UniBodyBuf { buf: BufState::Bytes(b) }))
-                        }
-                        Err(e) => Err(e)
-                    }
-                });
-                if let Poll::Ready(Some(Ok(ref b))) = res {
-                    this.consumed += b.len() as u64;
-                }
-                res
-            }
-            UniBodyState::MemMap(ref mut ob) => {
-                let d = ob.take();
-                if let Some(mb) = d {
-                    let res = unblock(cx, || {
-                        mb.advise_sequential()?;
-                        let _b = mb.bytes()[0];
-                        debug!("prepared MemMap (blocking, len: {})", mb.len());
-                        Ok(Some(UniBodyBuf { buf: BufState::MemMap(mb) }))
-                    });
-                    if let Poll::Ready(Some(Ok(ref b))) = res {
-                        this.consumed += b.len() as u64;
-                    }
-                    res
-                } else {
-                    Poll::Ready(None)
-                }
+                None => Poll::Ready(None),
             }
         }
+
+        // Early exit if nothing available
+        let avail = this.len - this.consumed;
+        if avail == 0 {
+            return Poll::Ready(None);
+        }
+
+        // Otherwise we'll need a permit or to dispatch (and exit early)
+        if permit.is_none() {
+            match blocking_permit_future(&BLOCKING_SET) {
+                Ok(f) => {
+                    this.delegate = Delegate::Permit(f);
+                }
+                Err(IsReactorThread) => {
+                    let mut st = mem::replace(
+                        &mut this.state,
+                        UniBodyState::Delegated
+                    );
+                    this.delegate = Delegate::Dispatch(dispatch_rx(move || {
+                        (st.read_next(avail), st)
+                    }));
+                },
+            }
+            // recurse once (needed for correct waking)
+            return Pin::new(this).poll_next(cx);
+        }
+
+        // Use permit to run the blocking operation on thread
+        let res = permit.unwrap().run_unwrap(|| {
+            match this.state.read_next(avail) {
+                Ok(Some(b)) => Poll::Ready(Some(Ok(b))),
+                Ok(None) => Poll::Ready(None),
+                Err(e) => {
+                    if e.kind() == io::ErrorKind::Interrupted {
+                        warn!("UniBodyImage: write interrupted");
+                        Poll::Pending
+                    } else {
+                        Poll::Ready(Some(Err(e)))
+                    }
+                }
+            }
+        });
+
+        if let Poll::Ready(Some(Ok(ref b))) = res {
+            this.consumed += b.len() as u64;
+        }
+        res
     }
 }
 
