@@ -17,7 +17,7 @@ use tokio_executor::threadpool as tokio_threadpool;
 
 use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
 
-use crate::{MemMapBuf, RequestRecord, RequestRecorder};
+use crate::{MemMapBuf, RequestRecord, RequestRecorder, StreamWrapper};
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits, using the custom
@@ -40,12 +40,8 @@ pub struct UniBodyImage {
     consumed: u64,
 }
 
-impl UniBodyImage {
-    /// Wrap by consuming the `BodyImage` instance.
-    ///
-    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
-    /// beforehand to preserve an owned copy.
-    pub fn new(body: BodyImage, tune: &Tunables) -> UniBodyImage {
+impl StreamWrapper for UniBodyImage {
+    fn new(body: BodyImage, tune: &Tunables) -> UniBodyImage {
         let len = body.len();
         match body.explode() {
             ExplodedImage::Ram(v) => {

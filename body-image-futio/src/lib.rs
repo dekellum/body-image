@@ -62,10 +62,10 @@ mod decode;
 pub use decode::{decode_res_body, find_encodings, find_chunked};
 
 mod image;
-pub use image::AsyncBodyImage;
+pub use image::{AsyncBodyImage, StreamWrapper};
 
 mod sink;
-pub use sink::AsyncBodySink;
+pub use sink::{AsyncBodySink, SinkWrapper};
 
 #[cfg(feature = "mmap")] mod mem_map_buf;
 #[cfg(feature = "mmap")] use mem_map_buf::MemMapBuf;
@@ -100,7 +100,7 @@ pub static BROWSE_ACCEPT: &str =
      */*;q=0.8";
 
 lazy_static! {
-    static ref BLOCKING_SET: Semaphore = Semaphore::new(5);
+    static ref BLOCKING_SET: Semaphore = Semaphore::new(2);
 }
 
 /// Error enumeration for body-image-futio origin errors. This may be
@@ -373,9 +373,6 @@ mod logger;
 #[cfg(test)]
 mod tests {
     mod forward;
-
-    #[cfg(all(feature = "mmap"))]
-    mod uni_forward;
 
     // FIXME: mod server;
 

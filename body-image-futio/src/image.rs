@@ -30,6 +30,15 @@ use crate::{BLOCKING_SET, RequestRecord, RequestRecorder};
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
 #[cfg(feature = "mmap")] use body_image::_mem_handle_ext::MemHandleExt;
 
+/// Trait construction of `Stream` wrapper types.
+pub trait StreamWrapper: Stream {
+    /// Wrap by consuming the `BodyImage` instance.
+    ///
+    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
+    /// beforehand to preserve an owned copy.
+    fn new(body: BodyImage, tune: &Tunables) -> Self;
+}
+
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `hyper::body::Payload` traits.
 ///
@@ -81,12 +90,8 @@ enum AsyncImageState {
     Delegated,
 }
 
-impl AsyncBodyImage {
-    /// Wrap by consuming the `BodyImage` instance.
-    ///
-    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
-    /// beforehand to preserve an owned copy.
-    pub fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
+impl StreamWrapper for AsyncBodyImage {
+    fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
         let len = body.len();
         match body.explode() {
             ExplodedImage::Ram(v) => {

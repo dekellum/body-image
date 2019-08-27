@@ -17,6 +17,23 @@ use body_image::{BodyError, BodySink, Tunables};
 
 use crate::{BLOCKING_SET, FutioError};
 
+/// Trait construction of `Sink` wrapper types.
+pub trait SinkWrapper<T>: Sink<T> {
+    /// Wrap by consuming a `BodySink` and `Tunables` instances.
+    ///
+    /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
+    /// that can be done beforehand to preserve owned copies.
+    fn new(body: BodySink, tune: Tunables) -> Self;
+
+    /// Unwrap and return the `BodySink`.
+    ///
+    /// ## Panics
+    ///
+    /// If called after a non-successful poll completion or before
+    /// `poll_close`. (FIXME: clarify)
+    fn into_inner(self) -> BodySink;
+}
+
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `hyper::Body` (`hyper::Chunk` item) stream to be forwarded
 /// (e.g. via `futures::Stream::forward`) to a `BodySink`, in a fully
@@ -47,12 +64,8 @@ enum Delegate {
     None
 }
 
-impl AsyncBodySink {
-    /// Wrap by consuming a `BodySink` and `Tunables` instances.
-    ///
-    /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
-    /// that can be done beforehand to preserve owned copies.
-    pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
+impl SinkWrapper<hyper::Chunk> for AsyncBodySink {
+    fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
         AsyncBodySink {
             body: Some(body),
             delegate: Delegate::None,
@@ -61,22 +74,6 @@ impl AsyncBodySink {
         }
     }
 
-    /// The inner `BodySink` as constructed.
-    pub fn body(&self) -> &BodySink {
-        &self.body
-    }
-
-    /// A mutable reference to the inner `BodySink`.
-    pub fn body_mut(&mut self) -> &mut BodySink {
-        &mut self.body
-    }
-
-    /// Unwrap and return the `BodySink`.
-    ///
-    /// ## Panics
-    ///
-    /// If called after a non-successful poll completion or before
-    /// `poll_close`. (FIXME: clarify)
     fn into_inner(self) -> BodySink {
         self.body.expect("AsyncBodySink::into_inner called in incomplete state")
     }

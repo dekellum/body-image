@@ -11,7 +11,7 @@ use tokio::future::FutureExt;
 use body_image::{BodySink, Dialog, Tunables};
 
 use crate::{
-    AsyncBodySink, InDialog, FutioError, Monolog, RequestRecord
+    AsyncBodySink, InDialog, FutioError, Monolog, RequestRecord, SinkWrapper,
 };
 
 pub trait RuntimeExt {

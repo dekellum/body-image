@@ -1,107 +1,256 @@
+use std::future::Future;
+
+use blocking_permit::DispatchPool;
 use futures::{
     future::FutureExt,
-    stream::{StreamExt, TryStreamExt},
+    sink::Sink,
+    stream::{StreamExt, TryStream, TryStreamExt},
 };
-use tokio::runtime::Runtime as DefaultRuntime;
+use tokio::runtime::{Runtime as ThRuntime, Builder as ThBuilder};
 use tokio::runtime::current_thread::Runtime as CtRuntime;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 
-use crate::{FutioError, AsyncBodyImage, AsyncBodySink};
+use crate::{FutioError, AsyncBodyImage, AsyncBodySink, SinkWrapper, StreamWrapper};
 use crate::logger::test_logger;
 
-#[test]
-fn forward_to_sink_empty() {
-    assert!(test_logger());
-    let tune = Tunables::default();
-    let body = AsyncBodyImage::new(BodyImage::empty(), &tune);
+#[cfg(feature = "mmap")]
+use crate::{UniBodyBuf, UniBodyImage, UniBodySink};
 
-    let task = async move {
-        let mut asink = AsyncBodySink::new(
+fn register_dispatch() {
+    let pool = DispatchPool::builder().pool_size(2).create();
+    DispatchPool::register_thread_local(pool);
+}
+
+fn deregister_dispatch() {
+    DispatchPool::deregister();
+}
+
+fn th_runtime() -> ThRuntime {
+    ThBuilder::new()
+        .name_prefix("tpool-")
+        .core_threads(3)
+        .blocking_threads(1024)
+        .build()
+        .expect("ThRuntime build")
+}
+
+fn empty_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
+    where St: StreamWrapper + TryStream + StreamExt,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
+          B: From<<St as TryStream>::Ok>,
+          St::Error: Into<FutioError>
+{
+    let tune = Tunables::default();
+    let body = St::new(BodyImage::empty(), &tune);
+
+    async move {
+        let mut asink = Sk::new(
             BodySink::with_ram_buffers(0),
             tune
         );
 
         body.err_into::<FutioError>()
-            .map_ok(hyper::Chunk::from)
+            .map_ok(B::from)
             .forward(&mut asink)
             .await?;
 
-        let bsink = asink.body();
+        let bsink = asink.into_inner();
         assert!(bsink.is_ram());
         assert!(bsink.is_empty());
         Ok(())
-    };
+    }
+}
 
+#[test]
+fn transfer_empty_ct() {
+    assert!(test_logger());
+    register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
+    let task = empty_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
     let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
     res.expect("task success");
 }
 
 #[test]
-fn forward_to_sink_small() {
+fn transfer_empty_th() {
     assert!(test_logger());
-    let tune = Tunables::default();
-    let body = AsyncBodyImage::new(BodyImage::from_slice("body"), &tune);
+    let task = empty_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    rt.shutdown_on_idle();
+}
 
-    let task = async move {
-        let mut asink = AsyncBodySink::new(
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_uni_empty_ct() {
+    assert!(test_logger());
+    register_dispatch();
+    let mut rt = CtRuntime::new().unwrap();
+    let task = empty_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
+    res.expect("task success");
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_uni_empty_th() {
+    assert!(test_logger());
+    let task = empty_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    rt.shutdown_on_idle();
+}
+
+fn small_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
+    where St: StreamWrapper + TryStream + StreamExt,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
+          B: From<<St as TryStream>::Ok>,
+          St::Error: Into<FutioError>
+{
+    let tune = Tunables::default();
+    let body = St::new(BodyImage::from_slice("body"), &tune);
+
+    async move {
+        let mut asink = Sk::new(
             BodySink::with_ram_buffers(1),
             tune
         );
 
         body.err_into::<FutioError>()
-            .map_ok(hyper::Chunk::from)
+            .map_ok(B::from)
             .forward(&mut asink)
             .await?;
 
-        let bsink = asink.body();
+        let bsink = asink.into_inner();
         assert!(bsink.is_ram());
         assert_eq!(bsink.len(), 4);
         Ok(())
-    };
+    }
+}
 
+#[test]
+fn transfer_small_ct() {
+    assert!(test_logger());
+    register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
+    let task = small_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
     let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
     res.expect("task success");
 }
 
 #[test]
-fn forward_to_sink_fs() {
+fn transfer_small_th() {
     assert!(test_logger());
+    let task = small_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    rt.shutdown_on_idle();
+}
 
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_uni_small_ct() {
+    assert!(test_logger());
+    register_dispatch();
+    let mut rt = CtRuntime::new().unwrap();
+    let task = small_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
+    res.expect("task success");
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_uni_small_th() {
+    assert!(test_logger());
+    let task = small_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    rt.shutdown_on_idle();
+}
+
+fn fs_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
+    where St: StreamWrapper + TryStream + StreamExt,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
+          B: From<<St as TryStream>::Ok>,
+          St::Error: Into<FutioError>
+{
     let tune = Tuner::new().set_buffer_size_fs(173).finish();
     let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
     let in_body = in_body.prepare().unwrap();
-    let body = AsyncBodyImage::new(in_body, &tune);
+    let body = St::new(in_body, &tune);
 
-    let task = async move {
-        let mut asink = AsyncBodySink::new(
+    async move {
+        let mut asink = Sk::new(
             BodySink::with_fs(tune.temp_dir()).unwrap(),
             tune
         );
 
         body.err_into::<FutioError>()
-            .map_ok(hyper::Chunk::from)
+            .map_ok(B::from)
             .forward(&mut asink)
             .await?;
 
-        let bsink = asink.body();
+        let bsink = asink.into_inner();
         assert!(!bsink.is_ram());
         assert_eq!(bsink.len(), 24_000);
         Ok(())
-    };
+    }
+}
 
-    let rt = DefaultRuntime::new().unwrap();
-    rt.spawn(task.map(|_r: Result<(),FutioError>| ()));
+#[test]
+fn transfer_fs_ct() {
+    assert!(test_logger());
+    register_dispatch();
+    let mut rt = CtRuntime::new().unwrap();
+    let task = fs_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
+    let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
+    res.expect("task success");
+}
+
+#[test]
+fn transfer_fs_th() {
+    assert!(test_logger());
+    let task = fs_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
     rt.shutdown_on_idle();
 }
 
 #[test]
-fn forward_to_sink_fs_back() {
+#[cfg(feature = "mmap")]
+fn transfer_uni_fs_ct() {
     assert!(test_logger());
+    register_dispatch();
+    let mut rt = CtRuntime::new().unwrap();
+    let task = fs_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
+    res.expect("task success");
+}
 
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_uni_fs_th() {
+    assert!(test_logger());
+    let task = fs_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    rt.shutdown_on_idle();
+}
+
+fn fs_back_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
+    where St: StreamWrapper + TryStream + StreamExt,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
+          B: From<<St as TryStream>::Ok>,
+          St::Error: Into<FutioError>
+{
     let tune = Tuner::new()
         .set_buffer_size_fs(173)
         .set_max_body_ram(15_000)
@@ -109,35 +258,98 @@ fn forward_to_sink_fs_back() {
     let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
     let in_body = in_body.prepare().unwrap();
-    let body = AsyncBodyImage::new(in_body, &tune);
+    let body = St::new(in_body, &tune);
 
-    let task = async move {
-        let mut asink = AsyncBodySink::new(
+    async move {
+        let mut asink = Sk::new(
             BodySink::with_ram_buffers(4),
             tune
         );
 
         body.err_into::<FutioError>()
-            .map_ok(hyper::Chunk::from)
+            .map_ok(B::from)
             .forward(&mut asink)
             .await?;
 
-        let bsink = asink.body();
+        let bsink = asink.into_inner();
         assert!(!bsink.is_ram());
         assert_eq!(bsink.len(), 24_000);
         Ok(())
-    };
+    }
+}
 
-    let rt = DefaultRuntime::new().unwrap();
-    rt.spawn(task.map(|_r: Result<(),FutioError>| ()));
+#[test]
+fn transfer_fs_back_ct() {
+    assert!(test_logger());
+    register_dispatch();
+    let mut rt = CtRuntime::new().unwrap();
+    let task = fs_back_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
+    let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
+    res.expect("task success");
+}
+
+#[test]
+fn transfer_fs_back_th() {
+    assert!(test_logger());
+    let task = fs_back_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    rt.shutdown_on_idle();
+}
+
+#[test]
+fn transfer_fs_back_th_multi() {
+    assert!(test_logger());
+    let rt = th_runtime();
+    for _ in 1..20 {
+        let task = fs_back_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
+        rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    }
     rt.shutdown_on_idle();
 }
 
 #[test]
 #[cfg(feature = "mmap")]
-fn forward_to_sink_fs_map() {
+fn transfer_uni_fs_back_ct() {
     assert!(test_logger());
+    register_dispatch();
+    let mut rt = CtRuntime::new().unwrap();
+    let task = fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
+    res.expect("task success");
+}
 
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_uni_fs_back_th() {
+    assert!(test_logger());
+    let task = fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    rt.shutdown_on_idle();
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_uni_fs_back_th_multi() {
+    assert!(test_logger());
+    let rt = th_runtime();
+    for _ in 1..20 {
+        let task = fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+        rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    }
+    rt.shutdown_on_idle();
+}
+
+#[cfg(feature = "mmap")]
+fn fs_map_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
+    where St: StreamWrapper + TryStream + StreamExt,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
+          B: From<<St as TryStream>::Ok>,
+          St::Error: Into<FutioError>
+{
     let tune = Tuner::new()
         .set_buffer_size_fs(173)
         .set_max_body_ram(15_000)
@@ -146,26 +358,66 @@ fn forward_to_sink_fs_map() {
     in_body.write_all(vec![1; 24_000]).unwrap();
     let mut in_body = in_body.prepare().unwrap();
     in_body.mem_map().unwrap();
-    let body = AsyncBodyImage::new(in_body, &tune);
+    let body = St::new(in_body, &tune);
 
-    let task = async move {
-        let mut asink = AsyncBodySink::new(
+    async move {
+        let mut asink = Sk::new(
             BodySink::with_ram_buffers(4),
             tune
         );
 
         body.err_into::<FutioError>()
-            .map_ok(hyper::Chunk::from)
+            .map_ok(B::from)
             .forward(&mut asink)
             .await?;
 
-        let bsink = asink.body();
+        let bsink = asink.into_inner();
         assert!(!bsink.is_ram());
         assert_eq!(bsink.len(), 24_000);
         Ok(())
-    };
+    }
+}
 
-    let rt = DefaultRuntime::new().unwrap();
-    rt.spawn(task.map(|_r: Result<(),FutioError>| ()));
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_fs_map_ct() {
+    assert!(test_logger());
+    register_dispatch();
+    let mut rt = CtRuntime::new().unwrap();
+    let task = fs_map_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
+    let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
+    res.expect("task success");
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_fs_map_th() {
+    assert!(test_logger());
+    let task = fs_map_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
+    rt.shutdown_on_idle();
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_uni_fs_map_ct() {
+    assert!(test_logger());
+    register_dispatch();
+    let mut rt = CtRuntime::new().unwrap();
+    let task = fs_map_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let res: Result<(), FutioError> = rt.block_on(task);
+    deregister_dispatch();
+    res.expect("task success");
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn transfer_uni_fs_map_th() {
+    assert!(test_logger());
+    let task = fs_map_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let rt = th_runtime();
+    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
     rt.shutdown_on_idle();
 }

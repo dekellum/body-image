@@ -9,7 +9,7 @@ use tokio_executor::threadpool as tokio_threadpool;
 
 use body_image::{BodyError, BodySink, Tunables};
 
-use crate::{FutioError, UniBodyBuf};
+use crate::{FutioError, UniBodyBuf, SinkWrapper};
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `Stream<Item=UniBodyBuf>` to be forwarded (e.g. via
@@ -42,18 +42,22 @@ impl fmt::Debug for UniBodySink {
     }
 }
 
-impl UniBodySink {
-    /// Wrap by consuming a `BodySink` and `Tunables` instances.
-    ///
-    /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
-    /// that can be done beforehand to preserve owned copies.
-    pub fn new(body: BodySink, tune: Tunables) -> UniBodySink {
+impl SinkWrapper<UniBodyBuf> for UniBodySink {
+    fn new(body: BodySink, tune: Tunables) -> UniBodySink {
         UniBodySink {
             body,
             tune,
             buf: None
         }
     }
+
+    fn into_inner(self) -> BodySink {
+        self.body
+    }
+}
+
+// FIXME: likely drop these?
+impl UniBodySink {
 
     /// The inner `BodySink` as constructed.
     pub fn body(&self) -> &BodySink {
@@ -65,10 +69,6 @@ impl UniBodySink {
         &mut self.body
     }
 
-    /// Unwrap and return the `BodySink`.
-    pub fn into_inner(self) -> BodySink {
-        self.body
-    }
 }
 
 macro_rules! unblock {
