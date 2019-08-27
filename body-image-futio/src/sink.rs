@@ -4,7 +4,9 @@ use std::task::{Context, Poll};
 
 use blocking_permit::{
     blocking_permit_future,
+    dispatch_rx,
     BlockingPermitFuture,
+    DispatchBlocking,
     IsReactorThread,
 };
 use futures::sink::Sink;
@@ -32,7 +34,7 @@ use crate::{BLOCKING_SET, FutioError};
 /// or any timeout occurs.
 #[derive(Debug)]
 pub struct AsyncBodySink {
-    body: BodySink,
+    body: Option<BodySink>,
     delegate: Delegate,
     tune: Tunables,
     buf: Option<hyper::Chunk>
@@ -40,6 +42,7 @@ pub struct AsyncBodySink {
 
 #[derive(Debug)]
 enum Delegate {
+    Dispatch(DispatchBlocking<(Result<(), BodyError>, BodySink)>),
     Permit(BlockingPermitFuture<'static>),
     None
 }
@@ -51,7 +54,7 @@ impl AsyncBodySink {
     /// that can be done beforehand to preserve owned copies.
     pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
         AsyncBodySink {
-            body,
+            body: Some(body),
             delegate: Delegate::None,
             tune,
             buf: None
@@ -69,8 +72,13 @@ impl AsyncBodySink {
     }
 
     /// Unwrap and return the `BodySink`.
-    pub fn into_inner(self) -> BodySink {
-        self.body
+    ///
+    /// ## Panics
+    ///
+    /// If called after a non-successful poll completion or before
+    /// `poll_close`. (FIXME: clarify)
+    fn into_inner(self) -> BodySink {
+        self.body.expect("AsyncBodySink::into_inner called in incomplete state")
     }
 }
 
@@ -83,6 +91,22 @@ impl AsyncBodySink {
     {
         // Handle any delegate futures (new permit or early exit)
         let permit = match self.delegate {
+            Delegate::Dispatch(ref mut db) => {
+                match Pin::new(&mut *db).poll(cx) {
+                    Poll::Pending => return Ok(Some(buf)),
+                    Poll::Ready(Err(e)) => return Err(FutioError::Other(Box::new(e))),
+                    Poll::Ready(Ok((Ok(()), body))) => {
+                        self.delegate = Delegate::None;
+                        self.body = Some(body);
+                        return Ok(None);
+                    }
+                    Poll::Ready(Ok((Err(e), body))) => {
+                        // Same delegate should repeat error forever
+                        self.body = Some(body);
+                        return Err(e.into());
+                    }
+                }
+            }
             Delegate::Permit(ref mut pf) => {
                 match Pin::new(pf).poll(cx) {
                     Poll::Pending => return Ok(Some(buf)),
@@ -99,16 +123,21 @@ impl AsyncBodySink {
             Delegate::None => None
         };
 
+        // Nothing to do for an empty buffer (as used for re-poll, below)
+        if buf.is_empty() {
+            return Ok(None)
+        }
+
         // Early exit if too long
-        let new_len = self.body.len() + (buf.len() as u64);
+        let new_len = self.body.as_ref().unwrap().len() + (buf.len() as u64);
         if new_len > self.tune.max_body() {
             return Err(BodyError::BodyTooLong(new_len).into());
         }
 
         // Ram doesn't need blocking permit (early exit)
-        if self.body.is_ram() && new_len <= self.tune.max_body_ram() {
+        if self.body.as_ref().unwrap().is_ram() && new_len <= self.tune.max_body_ram() {
             debug!("to save buf (len: {})", buf.len());
-            self.body.write_all(&buf).map_err(FutioError::from)?;
+            self.body.as_mut().unwrap().write_all(&buf).map_err(FutioError::from)?;
             return Ok(None)
         };
 
@@ -117,25 +146,43 @@ impl AsyncBodySink {
             match blocking_permit_future(&BLOCKING_SET) {
                 Ok(f) => {
                     self.delegate = Delegate::Permit(f);
+                    // Ensure re-poll with same chunk
+                    cx.waker().wake_by_ref();
+                    return Ok(Some(buf));
                 }
-                Err(IsReactorThread) => unimplemented!(),
+                Err(IsReactorThread) => {
+                    let mut body = self.body.take().unwrap();
+                    let temp_dir = self.tune.temp_dir().to_owned();
+                    self.delegate = Delegate::Dispatch(dispatch_rx(move || {
+                        if body.is_ram() {
+                            debug!("to write back file (dispatch, len: {})", new_len);
+                            if let Err(e) = body.write_back(temp_dir) {
+                                return (Err(e), body);
+                            }
+                        }
+                        debug!("to write buf (dispatch, len: {})", buf.len());
+                        let res = body.write_all(&buf);
+                        (res, body)
+                    }));
+                    // Ensure re-poll with a new empty chunk
+                    cx.waker().wake_by_ref();
+                    return Ok(Some(vec!{}.into()));
+                }
             }
-            // recurse once (needed for correct waking)
-            return Pin::new(self).poll_send(cx, buf);
         }
 
         // If still Ram at this point, needs to be written back (blocking)
-        if self.body.is_ram() {
+        if self.body.as_ref().unwrap().is_ram() {
             permit.unwrap().run_unwrap(|| {
                 debug!("to write back file (blocking, len: {})", new_len);
-                self.body.write_back(self.tune.temp_dir())?;
+                self.body.as_mut().unwrap().write_back(self.tune.temp_dir())?;
                 debug!("to write buf (blocking, len: {})", buf.len());
-                self.body.write_all(&buf)
+                self.body.as_mut().unwrap().write_all(&buf)
             })?;
         } else {
             permit.unwrap().run_unwrap(|| {
                 debug!("to write buf (blocking, len: {})", buf.len());
-                self.body.write_all(&buf)
+                self.body.as_mut().unwrap().write_all(&buf)
             })?;
         }
         Ok(None)

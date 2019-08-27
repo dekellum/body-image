@@ -161,7 +161,7 @@ impl AsyncImageState {
                     Ok(0) => Ok(None),
                     Ok(len) => {
                         unsafe { buf.advance_mut(len); }
-                        debug!("read chunk (blocking, len: {})", len);
+                        debug!("read chunk (len: {})", len);
                         Ok(Some(buf.freeze()))
                     }
                     Err(e) => Err(e)
@@ -176,7 +176,7 @@ impl AsyncImageState {
                 {
                     Ok(b) => {
                         debug!(
-                            "MemMap copy to chunk (blocking, len: {})",
+                            "MemMap copy to chunk (len: {})",
                             b.len());
                         Ok(Some(b))
                     }
