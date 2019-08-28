@@ -9,10 +9,8 @@ use std::task::{Context, Poll};
 use std::vec::IntoIter;
 
 use blocking_permit::{
-    blocking_permit_future,
-    dispatch_rx,
-    BlockingPermitFuture,
-    DispatchBlocking,
+    blocking_permit_future, BlockingPermitFuture,
+    dispatch_rx, DispatchBlocking,
     IsReactorThread,
 };
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
@@ -77,7 +75,10 @@ pub struct AsyncBodyImage {
 
 #[derive(Debug)]
 enum Delegate {
-    Dispatch(DispatchBlocking<(Result<Option<Bytes>,io::Error>, AsyncImageState)>),
+    Dispatch(DispatchBlocking<(
+        Result<Option<Bytes>, io::Error>,
+        AsyncImageState
+    )>),
     Permit(BlockingPermitFuture<'static>),
     None
 }

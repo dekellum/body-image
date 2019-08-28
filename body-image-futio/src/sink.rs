@@ -3,10 +3,8 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use blocking_permit::{
-    blocking_permit_future,
-    dispatch_rx,
-    BlockingPermitFuture,
-    DispatchBlocking,
+    blocking_permit_future, BlockingPermitFuture,
+    dispatch_rx, DispatchBlocking,
     IsReactorThread,
 };
 use futures::sink::Sink;
