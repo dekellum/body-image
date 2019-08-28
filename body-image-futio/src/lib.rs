@@ -33,7 +33,7 @@
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
 
-// FIXME #![deny(dead_code, unused_imports)]
+#![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
 use std::error::Error as StdError;

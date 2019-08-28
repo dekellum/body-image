@@ -47,9 +47,9 @@ pub trait StreamWrapper: Stream {
 ///
 /// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
 /// state. `BodyImage` in `Ram` is made available with zero-copy using a
-/// consuming iterator.  This implementation uses `tokio_threadpool::blocking`
-/// to request becoming a backup thread for blocking reads from `FsRead` state
-/// and when dereferencing from `MemMap` state (see below).
+/// consuming iterator.  This implementation uses permits or a dispatch pool
+/// for blocking reads from `FsRead` state and when copying from `MemMap`
+/// state (see below).
 ///
 /// ## MemMap
 ///

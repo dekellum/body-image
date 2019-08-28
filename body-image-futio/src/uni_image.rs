@@ -39,9 +39,9 @@ use crate::{
 ///
 /// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
 /// state. `BodyImage` in `Ram` is made available with zero-copy using a
-/// consuming iterator.  This implementation uses `tokio_threadpool::blocking`
-/// to request becoming a backup thread for blocking reads from `FsRead` state
-/// and when dereferencing from `MemMap` state.
+/// consuming iterator.  This implementation uses permits or a dispatch pool
+/// for blocking reads from `FsRead` state and when dereferencing from `MemMap`
+/// state.
 #[derive(Debug)]
 pub struct UniBodyImage {
     state: UniBodyState,
@@ -108,8 +108,6 @@ enum BufState {
     MemMap(MemMapBuf),
 }
 
-// FIXME: Above may require manual Debug to avoid too many Bytes displayed
-
 impl UniBodyBuf {
     pub(crate) fn empty() -> UniBodyBuf {
         UniBodyBuf::from_bytes(Bytes::with_capacity(0))
@@ -121,8 +119,7 @@ impl UniBodyBuf {
         UniBodyBuf { buf: BufState::Bytes(b.into_buf()) }
     }
 
-    fn from_mmap(mb: MemMapBuf) -> UniBodyBuf
-    {
+    fn from_mmap(mb: MemMapBuf) -> UniBodyBuf {
         UniBodyBuf { buf: BufState::MemMap(mb) }
     }
 }

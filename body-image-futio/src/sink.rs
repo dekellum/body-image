@@ -27,8 +27,8 @@ pub trait SinkWrapper<T>: Sink<T> {
     ///
     /// ## Panics
     ///
-    /// If called after a non-successful poll completion or before
-    /// `poll_close`. (FIXME: clarify)
+    /// May panic if called after a `Result::Err` is returned from any `Sink`
+    /// method or before `Sink::poll_flush` or `Sink::poll_close` is called.
     fn into_inner(self) -> BodySink;
 }
 
@@ -38,15 +38,9 @@ pub trait SinkWrapper<T>: Sink<T> {
 /// asynchronous fashion.
 ///
 /// `Tunables` are used during the streaming to decide when to write back a
-/// BodySink in `Ram` to `FsWrite`.  This implementation uses
-/// `tokio_threadpool::blocking` to request becoming a backup thread for
-/// blocking operations including `BodySink::write_back` and
-/// `BodySink::write_all` (state `FsWrite`). It may thus only be used on the
-/// tokio threadpool. If the `max_blocking` number of backup threads is
-/// reached, and a blocking operation is required, then this implementation
-/// will appear *full*, with `start_send` returning
-/// `Ok(AsyncSink::NotReady(chunk)`, until a backup thread becomes available
-/// or any timeout occurs.
+/// BodySink in `Ram` to `FsWrite`. This implementation uses permits or a
+/// dispatch pool for blocking operations including `BodySink::write_back` and
+/// `BodySink::write_all` (state `FsWrite`).
 #[derive(Debug)]
 pub struct AsyncBodySink {
     body: Option<BodySink>,

@@ -21,16 +21,9 @@ use crate::{BLOCKING_SET, FutioError, UniBodyBuf, SinkWrapper};
 /// fashion and with zero-copy `MemMap` support (*mmap* feature only).
 ///
 /// `Tunables` are used during the streaming to decide when to write back a
-/// BodySink in `Ram` to `FsWrite`.  This implementation uses
-/// `tokio_threadpool::blocking` to request becoming a backup thread for
-/// blocking operations including `BodySink::write_back` and
-/// `BodySink::write_all` (state `FsWrite`). It may thus only be used on the
-/// tokio threadpool. If the `max_blocking` number of backup threads is
-/// reached, and a blocking operation is required, then this implementation
-/// will appear *full*, with `start_send` returning
-/// `Ok(AsyncSink::NotReady(chunk))`, until a backup thread becomes available
-/// or any timeout occurs.
-// FIXME: above docs (with others)
+/// BodySink in `Ram` to `FsWrite`. This implementation uses permits or a
+/// dispatch pool for blocking operations including `BodySink::write_back` and
+/// `BodySink::write_all` (state `FsWrite`).
 pub struct UniBodySink {
     body: Option<BodySink>,
     delegate: Delegate,
@@ -49,6 +42,7 @@ impl fmt::Debug for UniBodySink {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UniBodySink")
             .field("body", &self.body)
+            .field("delegate", &self.delegate)
             .field("tune", &self.tune)
             .finish()
     }
