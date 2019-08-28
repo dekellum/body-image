@@ -101,6 +101,7 @@ pub static BROWSE_ACCEPT: &str =
 
 lazy_static! {
     static ref BLOCKING_SET: Semaphore = Semaphore::new(2);
+    // FIXME: Need a configuration scheme for this.
 }
 
 /// Error enumeration for body-image-futio origin errors. This may be
