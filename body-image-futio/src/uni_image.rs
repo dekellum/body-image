@@ -110,6 +110,23 @@ enum BufState {
 
 // FIXME: Above may require manual Debug to avoid too many Bytes displayed
 
+impl UniBodyBuf {
+    pub(crate) fn empty() -> UniBodyBuf {
+        UniBodyBuf::from_bytes(Bytes::with_capacity(0))
+    }
+
+    fn from_bytes<B>(b: B) -> UniBodyBuf
+        where B: IntoBuf<Buf=Cursor<Bytes>>
+    {
+        UniBodyBuf { buf: BufState::Bytes(b.into_buf()) }
+    }
+
+    fn from_mmap(mb: MemMapBuf) -> UniBodyBuf
+    {
+        UniBodyBuf { buf: BufState::MemMap(mb) }
+    }
+}
+
 impl Buf for UniBodyBuf {
     fn remaining(&self) -> usize {
         match self.buf {
@@ -192,9 +209,8 @@ impl UniBodyState {
                     Ok(0) => Ok(None),
                     Ok(len) => {
                         unsafe { buf.advance_mut(len); }
-                        let b = buf.freeze().into_buf();
                         debug!("read chunk (len: {})", len);
-                        Ok(Some(UniBodyBuf { buf: BufState::Bytes(b) }))
+                        Ok(Some(UniBodyBuf::from_bytes(buf.freeze())))
                     }
                     Err(e) => Err(e)
                 }
@@ -204,7 +220,7 @@ impl UniBodyState {
                     mb.advise_sequential()?;
                     let _b = mb.bytes()[0];
                     debug!("prepared MemMap (len: {})", mb.len());
-                    Ok(Some(UniBodyBuf { buf: BufState::MemMap(mb) }))
+                    Ok(Some(UniBodyBuf::from_mmap(mb)))
                 } else {
                     Ok(None)
                 }
@@ -267,9 +283,7 @@ impl Stream for UniBodyImage {
             return match iter.next() {
                 Some(b) => {
                     this.consumed += b.len() as u64;
-                    Poll::Ready(Some(Ok(
-                        UniBodyBuf { buf: BufState::Bytes(b.into_buf()) }
-                    )))
+                    Poll::Ready(Some(Ok(UniBodyBuf::from_bytes(b))))
                 }
                 None => Poll::Ready(None),
             }
