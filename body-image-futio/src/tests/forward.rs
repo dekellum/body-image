@@ -68,7 +68,7 @@ fn transfer_empty_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = empty_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
@@ -89,7 +89,7 @@ fn transfer_uni_empty_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = empty_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
@@ -137,7 +137,7 @@ fn transfer_small_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = small_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
@@ -158,7 +158,7 @@ fn transfer_uni_small_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = small_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
@@ -209,7 +209,7 @@ fn transfer_fs_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = fs_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
@@ -230,7 +230,7 @@ fn transfer_uni_fs_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = fs_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
@@ -284,7 +284,7 @@ fn transfer_fs_back_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = fs_back_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
@@ -316,7 +316,7 @@ fn transfer_uni_fs_back_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
@@ -385,7 +385,7 @@ fn transfer_fs_map_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = fs_map_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
@@ -407,7 +407,7 @@ fn transfer_uni_fs_map_ct() {
     register_dispatch();
     let mut rt = CtRuntime::new().unwrap();
     let task = fs_map_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res: Result<(), FutioError> = rt.block_on(task);
+    let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
 }
