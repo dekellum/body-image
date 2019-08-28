@@ -46,7 +46,7 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     let rt = tokio::runtime::Builder::new()
         .name_prefix("tpool-")
         .core_threads(2)
-        .blocking_threads(2)
+        .blocking_threads(2) // FIXME: Increase with permit/dispatch in place?
         .build()
         .unwrap();
 
