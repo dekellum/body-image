@@ -156,9 +156,6 @@ impl fmt::Debug for AsyncImageState {
 impl AsyncImageState {
     fn read_next(&mut self, avail: u64) -> Result<Option<Bytes>, io::Error> {
         match *self {
-            AsyncImageState::Ram(ref mut iter) => {
-                Ok(iter.next())
-            }
             AsyncImageState::File { ref mut rs, bsize } => {
                 let bs = cmp::min(bsize, avail) as usize;
                 let mut buf = BytesMut::with_capacity(bs);
@@ -188,6 +185,7 @@ impl AsyncImageState {
                     Err(e) => Err(e),
                 }
             }
+            AsyncImageState::Ram(_) => unimplemented!(),
             AsyncImageState::Delegated => unimplemented!(),
         }
     }
