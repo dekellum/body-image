@@ -16,7 +16,6 @@ use blocking_permit::{
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use futures::stream::Stream;
 use http;
-use hyper;
 use olio::fs::rc::ReadSlice;
 use tao_log::{debug, info, warn};
 
@@ -38,9 +37,9 @@ pub trait StreamWrapper: Stream {
 }
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
-/// `hyper::body::Payload` traits.
+/// `http_body::Body` traits.
 ///
-/// The `Payload` trait (plus `Send`) makes this usable with hyper as the `B`
+/// The `Body` trait (plus `Send`) makes this usable with hyper as the `B`
 /// body type of `http::Request<B>` (client) or `http::Response<B>`
 /// (server). The `Stream` trait is sufficient for use via
 /// `hyper::Body::with_stream`.
@@ -54,7 +53,7 @@ pub trait StreamWrapper: Stream {
 /// ## MemMap
 ///
 /// While it works without complaint, it is not generally advisable to adapt a
-/// `BodyImage` in `MemMap` state with this `Payload` and `Stream` type. The
+/// `BodyImage` in `MemMap` state with this `Body` and `Stream` type. The
 /// `Bytes` part of the contract requires a owned copy of the memory-mapped
 /// region of memory, which contradicts the advantage of the memory-map. The
 /// cost is confirmed by the `cargo bench stream` benchmarks.
@@ -192,7 +191,7 @@ impl AsyncImageState {
     }
 }
 
-impl hyper::body::Payload for AsyncBodyImage {
+impl http_body::Body for AsyncBodyImage {
     type Data = Cursor<Bytes>;
     type Error = io::Error;
 
@@ -207,8 +206,16 @@ impl hyper::body::Payload for AsyncBodyImage {
         }
     }
 
-    fn content_length(&self) -> Option<u64> {
-        Some(self.len)
+    fn poll_trailers(self: Pin<&mut Self>, _cx: &mut Context<'_>)
+        -> Poll<Result<Option<http::HeaderMap>, Self::Error>>
+    {
+        return Poll::Ready(Ok(None));
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        let mut hint = http_body::SizeHint::new();
+        hint.set_exact(self.len);
+        hint
     }
 
     fn is_end_stream(&self) -> bool {

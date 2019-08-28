@@ -17,7 +17,6 @@ use blocking_permit::{
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use futures::stream::Stream;
 use http;
-use hyper;
 use olio::fs::rc::ReadSlice;
 use tao_log::{debug, info, warn};
 
@@ -335,7 +334,7 @@ impl Stream for UniBodyImage {
     }
 }
 
-impl hyper::body::Payload for UniBodyImage {
+impl http_body::Body for UniBodyImage {
     type Data = UniBodyBuf;
     type Error = io::Error;
 
@@ -345,8 +344,16 @@ impl hyper::body::Payload for UniBodyImage {
         self.poll_next(cx)
     }
 
-    fn content_length(&self) -> Option<u64> {
-        Some(self.len)
+    fn poll_trailers(self: Pin<&mut Self>, _cx: &mut Context<'_>)
+        -> Poll<Result<Option<http::HeaderMap>, Self::Error>>
+    {
+        return Poll::Ready(Ok(None));
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        let mut hint = http_body::SizeHint::new();
+        hint.set_exact(self.len);
+        hint
     }
 
     fn is_end_stream(&self) -> bool {

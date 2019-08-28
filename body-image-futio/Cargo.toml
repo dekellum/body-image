@@ -22,6 +22,7 @@ bytes      = { version=">=0.4.6, <0.5" }
 flate2     = { version=">=1.0.1, <1.1" }
 futures    = { version=">=0.3.0-alpha.18, <0.4", package="futures-preview" }
 http       = { version=">=0.1.6, <0.2" }
+http-body  = { version=">=0.2.0-alpha.1, <0.3" }
 httparse   = { version=">=1.2.4, <1.4" }
 hyper      = { version=">=0.13.0-a.0, <0.14" }
 hyper-tls  = { version=">=0.3.2, <0.5" }
