@@ -7,6 +7,8 @@ use futures::{
 };
 use hyperx::header::{ContentLength, TypedHeaders};
 use tokio::future::FutureExt;
+use tokio::runtime::{Runtime as ThRuntime, Builder as ThBuilder};
+use tokio::runtime::current_thread::Runtime as CtRuntime;
 
 use body_image::{BodySink, Dialog, Tunables};
 
@@ -14,23 +16,32 @@ use crate::{
     AsyncBodySink, InDialog, FutioError, Monolog, RequestRecord, SinkWrapper,
 };
 
+/// Extension trait for various kinds of runtimes.
 pub trait RuntimeExt {
     /// Like Runtime::block_on but blocks on a oneshot receiver, with the
     /// original future spawned, to ensure it actually runs on a worker thread.
-    fn block_on_pool<F>(&self, futr: F) -> F::Output
+    fn block_on_pool<F>(&mut self, futr: F) -> F::Output
         where F: Future + Send + 'static,
               F::Output: fmt::Debug + Send;
 }
 
-impl RuntimeExt for tokio::runtime::Runtime {
+impl RuntimeExt for ThRuntime {
     // FIXME: Not sure if this is intended behavior for tokio 0.2 Runtime
-    fn block_on_pool<F>(&self, futr: F) -> F::Output
+    fn block_on_pool<F>(&mut self, futr: F) -> F::Output
         where F: Future + Send + 'static,
               F::Output: fmt::Debug + Send
     {
         let (tx, rx) = futures::channel::oneshot::channel();
         self.spawn(futr.map(move |o| tx.send(o).expect("send")));
         self.block_on(rx).expect("recv")
+    }
+}
+
+impl RuntimeExt for CtRuntime {
+    fn block_on_pool<F>(&mut self, futr: F) -> F::Output
+        where F: Future
+    {
+        self.block_on(futr)
     }
 }
 
@@ -43,7 +54,7 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     where B: hyper::body::Payload + Send + Unpin,
           <B as hyper::body::Payload>::Data: Unpin
 {
-    let rt = tokio::runtime::Builder::new()
+    let mut rt = ThBuilder::new()
         .name_prefix("tpool-")
         .core_threads(2)
         .blocking_threads(1000)

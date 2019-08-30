@@ -10,7 +10,7 @@ use http::{Request, Response};
 use futures::{future, Future, Stream};
 
 use tokio;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Runtime as ThRuntime, Builder as ThBuilder};
 use tokio::reactor::Handle;
 use tokio::timer::Delay;
 
@@ -391,7 +391,7 @@ fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
 }
 
 fn new_limited_runtime() -> Runtime {
-    tokio::runtime::Builder::new()
+    ThBuilder::new()
         .name_prefix("tpool-")
         .core_threads(2)
         .blocking_threads(2)
