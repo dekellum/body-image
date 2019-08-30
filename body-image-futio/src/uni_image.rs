@@ -351,9 +351,7 @@ impl http_body::Body for UniBodyImage {
     }
 
     fn size_hint(&self) -> http_body::SizeHint {
-        let mut hint = http_body::SizeHint::new();
-        hint.set_exact(self.len);
-        hint
+        http_body::SizeHint::with_exact(self.len)
     }
 
     fn is_end_stream(&self) -> bool {
