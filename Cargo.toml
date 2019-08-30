@@ -22,7 +22,7 @@ tokio-net = { git="https://github.com/tokio-rs/tokio" }
 tokio-timer = { git="https://github.com/tokio-rs/tokio" }
 tokio-tls = { git="https://github.com/tokio-rs/tokio" }
 
-blocking-permit = { git="https://github.com/dekellum/blocking-permit" }
+blocking-permit = { path="/home/david/src/blocking-permit" }
 
 http-body = { git="https://github.com/hyperium/http-body" }
 hyper = { git="https://github.com/hyperium/hyper", rev="2664cf505f3" }
