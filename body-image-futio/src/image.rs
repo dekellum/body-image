@@ -241,6 +241,7 @@ impl Stream for AsyncBodyImage {
                     Poll::Ready(Ok((Err(e), st))) => {
                         if e.kind() == io::ErrorKind::Interrupted {
                             warn!("AsyncBodyImage: write interrupted");
+                            cx.waker().wake_by_ref(); //ensure re-poll
                             (Poll::Pending, st)
                         } else {
                             (Poll::Ready(Some(Err(e))), st)
@@ -313,6 +314,7 @@ impl Stream for AsyncBodyImage {
                 Err(e) => {
                     if e.kind() == io::ErrorKind::Interrupted {
                         warn!("AsyncBodyImage: write interrupted");
+                        cx.waker().wake_by_ref(); //ensure re-poll
                         Poll::Pending
                     } else {
                         Poll::Ready(Some(Err(e)))

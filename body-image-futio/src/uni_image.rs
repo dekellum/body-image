@@ -247,6 +247,7 @@ impl Stream for UniBodyImage {
                     Poll::Ready(Ok((Err(e), st))) => {
                         if e.kind() == io::ErrorKind::Interrupted {
                             warn!("UniBodyImage: write interrupted");
+                            cx.waker().wake_by_ref(); // Ensure re-poll
                             (Poll::Pending, st)
                         } else {
                             (Poll::Ready(Some(Err(e))), st)
@@ -319,6 +320,7 @@ impl Stream for UniBodyImage {
                 Err(e) => {
                     if e.kind() == io::ErrorKind::Interrupted {
                         warn!("UniBodyImage: write interrupted");
+                        cx.waker().wake_by_ref(); //ensure re-poll
                         Poll::Pending
                     } else {
                         Poll::Ready(Some(Err(e)))
