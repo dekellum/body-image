@@ -39,6 +39,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -100,8 +101,29 @@ pub static BROWSE_ACCEPT: &str =
      */*;q=0.8";
 
 lazy_static! {
-    static ref BLOCKING_SET: Semaphore = Semaphore::new(2);
-    // FIXME: Need a configuration scheme for this.
+    static ref SET_COUNT: AtomicUsize = AtomicUsize::new(1);
+    static ref BLOCKING_SET: Semaphore = Semaphore::new(1);
+}
+
+/// Ensure that the set of allowed cocurrent blocking operations, used for all
+/// permit-based blocking in this crate, is at least the specified value,
+/// returning the actual current value (which may be higher or equal).
+pub fn ensure_min_blocking_set(min: usize) -> usize {
+    let mut old = SET_COUNT.load(Ordering::SeqCst);
+    while min > old {
+        match SET_COUNT.compare_exchange(
+            old, min,
+            Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => {
+                BLOCKING_SET.add_permits(min - old);
+                return min;
+            }
+            Err(o) => {
+                old = o;
+            }
+        }
+    }
+    old
 }
 
 /// Error enumeration for body-image-futio origin errors. This may be
