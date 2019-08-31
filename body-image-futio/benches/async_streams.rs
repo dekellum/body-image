@@ -160,6 +160,32 @@ fn stream_22_fsread_uni_dispatch_ql0(b: &mut Bencher) {
     rt.shutdown_on_idle();
 }
 
+// `UniBodyImage` in `FsRead`, default buffer size (64K), threaded runtime,
+// direct run (no dispatch threads).
+#[bench]
+fn stream_22_fsread_uni_dispatch_direct(b: &mut Bencher) {
+    lazy_static! {
+        static ref POOL: DispatchPool =
+            DispatchPool::builder().pool_size(0).queue_length(0).create();
+    }
+    let tune = Tunables::default();
+    let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
+    let body = sink_data(sink).unwrap();
+    let mut rt = ThBuilder::new()
+        .core_threads(2)
+        .blocking_threads(1000)
+        .after_start(move || {
+            DispatchPool::register_thread_local(POOL.clone());
+        })
+        .build()
+        .expect("ThRuntime build");
+    b.iter(|| {
+        let stream = UniBodyImage::new(body.clone(), &tune);
+        summarize_stream(stream, &mut rt);
+    });
+    rt.shutdown_on_idle();
+}
+
 // `UniBodyImage` in `FsRead`, default buffer size (64K), current thread
 // runtime, dispatch pool
 #[bench]
