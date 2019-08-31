@@ -11,7 +11,11 @@ use tokio::runtime::current_thread::Runtime as CtRuntime;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 
-use crate::{FutioError, AsyncBodyImage, AsyncBodySink, SinkWrapper, StreamWrapper};
+use crate::{
+    ensure_min_blocking_set,
+    FutioError, AsyncBodyImage, AsyncBodySink,
+    RuntimeExt, SinkWrapper, StreamWrapper
+};
 use crate::logger::test_logger;
 
 #[cfg(feature = "mmap")]
@@ -27,6 +31,7 @@ fn deregister_dispatch() {
 }
 
 fn th_runtime() -> ThRuntime {
+    assert_eq!(3, ensure_min_blocking_set(3));
     ThBuilder::new()
         .name_prefix("tpool-")
         .core_threads(3)
@@ -77,9 +82,9 @@ fn transfer_empty_ct() {
 fn transfer_empty_th() {
     assert!(test_logger());
     let task = empty_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
 
 #[test]
@@ -99,9 +104,9 @@ fn transfer_uni_empty_ct() {
 fn transfer_uni_empty_th() {
     assert!(test_logger());
     let task = empty_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
 
 fn small_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
@@ -146,9 +151,9 @@ fn transfer_small_ct() {
 fn transfer_small_th() {
     assert!(test_logger());
     let task = small_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
 
 #[test]
@@ -168,9 +173,9 @@ fn transfer_uni_small_ct() {
 fn transfer_uni_small_th() {
     assert!(test_logger());
     let task = small_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
 
 fn fs_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
@@ -218,9 +223,9 @@ fn transfer_fs_ct() {
 fn transfer_fs_th() {
     assert!(test_logger());
     let task = fs_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
 
 #[test]
@@ -240,9 +245,9 @@ fn transfer_uni_fs_ct() {
 fn transfer_uni_fs_th() {
     assert!(test_logger());
     let task = fs_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
 
 fn fs_back_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
@@ -293,16 +298,16 @@ fn transfer_fs_back_ct() {
 fn transfer_fs_back_th() {
     assert!(test_logger());
     let task = fs_back_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
 
 #[test]
 fn transfer_fs_back_th_multi() {
     assert!(test_logger());
     let rt = th_runtime();
-    for _ in 1..20 {
+    for _ in 0..20 {
         let task = fs_back_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
         rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
     }
@@ -326,9 +331,9 @@ fn transfer_uni_fs_back_ct() {
 fn transfer_uni_fs_back_th() {
     assert!(test_logger());
     let task = fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
 
 #[test]
@@ -336,7 +341,7 @@ fn transfer_uni_fs_back_th() {
 fn transfer_uni_fs_back_th_multi() {
     assert!(test_logger());
     let rt = th_runtime();
-    for _ in 1..20 {
+    for _ in 0..20 {
         let task = fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
         rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
     }
@@ -395,9 +400,9 @@ fn transfer_fs_map_ct() {
 fn transfer_fs_map_th() {
     assert!(test_logger());
     let task = fs_map_task::<AsyncBodyImage, AsyncBodySink, hyper::Chunk>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
 
 #[test]
@@ -417,7 +422,7 @@ fn transfer_uni_fs_map_ct() {
 fn transfer_uni_fs_map_th() {
     assert!(test_logger());
     let task = fs_map_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let rt = th_runtime();
-    rt.spawn(task.map(|r: Result<(),FutioError>| r.unwrap()));
-    rt.shutdown_on_idle();
+    let mut rt = th_runtime();
+    rt.block_on_pool(task).unwrap();
+    rt.shutdown_now();
 }
