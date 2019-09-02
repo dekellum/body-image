@@ -36,6 +36,7 @@ fn th_runtime() -> ThRuntime {
         .name_prefix("tpool-")
         .core_threads(3)
         .blocking_threads(1024)
+        .keep_alive(Some(std::time::Duration::from_millis(1)))
         .build()
         .expect("ThRuntime build")
 }
