@@ -57,7 +57,7 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     let mut rt = ThBuilder::new()
         .name_prefix("tpool-")
         .core_threads(2)
-        .blocking_threads(1000)
+        .blocking_threads(1024)
         .build()
         .unwrap();
 
@@ -69,7 +69,7 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         rt.block_on_pool(request_dialog(&client, rr, tune))
     };
 
-    rt.shutdown_on_idle();
+    rt.shutdown_now();
     res
 }
 
