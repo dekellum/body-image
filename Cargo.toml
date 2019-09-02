@@ -12,21 +12,21 @@ members = [
 "body-image" = { path = "body-image" }
 "body-image-futio" = { path = "body-image-futio" }
 
-tokio = { git="https://github.com/tokio-rs/tokio" }
+tokio = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
 # tokio-buf = { git="https://github.com/tokio-rs/tokio" }
-tokio-codec = { git="https://github.com/tokio-rs/tokio" }
-tokio-executor = { git="https://github.com/tokio-rs/tokio" }
-tokio-io = { git="https://github.com/tokio-rs/tokio" }
-tokio-sync = { git="https://github.com/tokio-rs/tokio" }
-tokio-net = { git="https://github.com/tokio-rs/tokio" }
-tokio-timer = { git="https://github.com/tokio-rs/tokio" }
-tokio-tls = { git="https://github.com/tokio-rs/tokio" }
+tokio-codec = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
+tokio-executor = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
+tokio-io = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
+tokio-sync = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
+tokio-net = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
+tokio-timer = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
+tokio-tls = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
 
 blocking-permit = { path="/home/david/src/blocking-permit" }
 
 http-body = { git="https://github.com/hyperium/http-body" }
-hyper = { git="https://github.com/hyperium/hyper", rev="2664cf505f3" }
-hyper-tls = { path="/home/david/src/hyper-tls" }
+hyper = { git="https://github.com/hyperium/hyper" }
+hyper-tls = { git="https://github.com/hyperium/hyper-tls" }
 
 
 [profile.release]

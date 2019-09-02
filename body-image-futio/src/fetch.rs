@@ -62,7 +62,7 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         .unwrap();
 
     let res = {
-        let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)
+        let connector = hyper_tls::HttpsConnector::new()
             .map_err(|e| FutioError::Other(Box::new(e)))?;
         let client = hyper::Client::builder().build(connector);
 
