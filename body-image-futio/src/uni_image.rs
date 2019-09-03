@@ -59,8 +59,12 @@ enum Delegate {
     None
 }
 
-impl StreamWrapper for UniBodyImage {
-    fn new(body: BodyImage, tune: &Tunables) -> UniBodyImage {
+impl UniBodyImage {
+    /// Wrap by consuming the `BodyImage` instance.
+    ///
+    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
+    /// beforehand to preserve an owned copy.
+    pub fn new(body: BodyImage, tune: &Tunables) -> UniBodyImage {
         let len = body.len();
         match body.explode() {
             ExplodedImage::Ram(v) => {
@@ -91,6 +95,12 @@ impl StreamWrapper for UniBodyImage {
                 }
             }
         }
+    }
+}
+
+impl StreamWrapper for UniBodyImage {
+    fn new(body: BodyImage, tune: &Tunables) -> UniBodyImage {
+        UniBodyImage::new(body, tune)
     }
 }
 

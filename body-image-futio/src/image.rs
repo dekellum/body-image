@@ -90,8 +90,12 @@ enum AsyncImageState {
     Delegated,
 }
 
-impl StreamWrapper for AsyncBodyImage {
-    fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
+impl AsyncBodyImage {
+    /// Wrap by consuming the `BodyImage` instance.
+    ///
+    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
+    /// beforehand to preserve an owned copy.
+    pub fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
         let len = body.len();
         match body.explode() {
             ExplodedImage::Ram(v) => {
@@ -123,6 +127,12 @@ impl StreamWrapper for AsyncBodyImage {
                 }
             }
         }
+    }
+}
+
+impl StreamWrapper for AsyncBodyImage {
+    fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
+        AsyncBodyImage::new(body, tune)
     }
 }
 

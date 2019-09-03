@@ -48,7 +48,11 @@ impl fmt::Debug for UniBodySink {
     }
 }
 
-impl SinkWrapper<UniBodyBuf> for UniBodySink {
+impl UniBodySink {
+    /// Wrap by consuming a `BodySink` and `Tunables` instances.
+    ///
+    /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
+    /// that can be done beforehand to preserve owned copies.
     fn new(body: BodySink, tune: Tunables) -> UniBodySink {
         UniBodySink {
             body: Some(body),
@@ -58,12 +62,6 @@ impl SinkWrapper<UniBodyBuf> for UniBodySink {
         }
     }
 
-    fn into_inner(self) -> BodySink {
-        self.body.expect("UniBodySink::into_inner called in incomplete state")
-    }
-}
-
-impl UniBodySink {
     // This logically combines `Sink::poll_ready` and `Sink::start_send` into
     // one operation. If the item is returned, this is equivelent to
     // `Poll::Pending`, and the item will be later retried.
@@ -166,6 +164,16 @@ impl UniBodySink {
             })?;
         }
         Ok(None)
+    }
+}
+
+impl SinkWrapper<UniBodyBuf> for UniBodySink {
+    fn new(body: BodySink, tune: Tunables) -> UniBodySink {
+        UniBodySink::new(body, tune)
+    }
+
+    fn into_inner(self) -> BodySink {
+        self.body.expect("UniBodySink::into_inner called in incomplete state")
     }
 }
 

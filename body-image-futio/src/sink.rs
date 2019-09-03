@@ -56,8 +56,12 @@ enum Delegate {
     None
 }
 
-impl SinkWrapper<hyper::Chunk> for AsyncBodySink {
-    fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
+impl AsyncBodySink {
+    /// Wrap by consuming a `BodySink` and `Tunables` instances.
+    ///
+    /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
+    /// that can be done beforehand to preserve owned copies.
+    pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
         AsyncBodySink {
             body: Some(body),
             delegate: Delegate::None,
@@ -66,12 +70,6 @@ impl SinkWrapper<hyper::Chunk> for AsyncBodySink {
         }
     }
 
-    fn into_inner(self) -> BodySink {
-        self.body.expect("AsyncBodySink::into_inner called in incomplete state")
-    }
-}
-
-impl AsyncBodySink {
     // This logically combines `Sink::poll_ready` and `Sink::start_send` into
     // one operation. If the item is returned, this is equivelent to
     // `Poll::Pending`, and the item will be later retried.
@@ -175,6 +173,16 @@ impl AsyncBodySink {
             })?;
         }
         Ok(None)
+    }
+}
+
+impl SinkWrapper<hyper::Chunk> for AsyncBodySink {
+    fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
+        AsyncBodySink::new(body, tune)
+    }
+
+    fn into_inner(self) -> BodySink {
+        self.body.expect("AsyncBodySink::into_inner called in incomplete state")
     }
 }
 
