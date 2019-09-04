@@ -51,8 +51,8 @@ impl fmt::Debug for UniBodySink {
 impl UniBodySink {
     /// Wrap by consuming a `BodySink` and `Tunables` instances.
     ///
-    /// *Note*: Both `BodyImage` and `Tunables` are `Clone` (inexpensive), so
-    /// that can be done beforehand to preserve owned copies.
+    /// *Note*: `Tunables` is `Clone` (inexpensive), so that can be done
+    /// beforehand to preserve an owned copy.
     fn new(body: BodySink, tune: Tunables) -> UniBodySink {
         UniBodySink {
             body: Some(body),
