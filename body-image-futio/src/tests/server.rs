@@ -1,80 +1,69 @@
-use std::net::SocketAddr;
+use std::future::Future;
 use std::io;
+use std::net::SocketAddr;
 use std::net::TcpListener as StdTcpListener;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-
-use http;
+use futures::future::{FutureExt, TryFutureExt};
+use futures::stream::{StreamExt, TryStreamExt};
 use http::{Request, Response};
-use futures::{future, Future, Stream};
+use http;
+use tao_log::{debug, debugv, warn};
 
 use tokio;
 use tokio::runtime::{Runtime as ThRuntime, Builder as ThBuilder};
-use tokio::reactor::Handle;
-use tokio::timer::Delay;
-
-use tokio_tcp::TcpListener;
+use tokio_net::driver::Handle;
+use tokio_net::tcp::TcpListener;
 
 use hyper;
 use hyper::Body;
 use hyper::client::{Client, HttpConnector};
 use hyper::server::conn::Http;
-use hyper::service::{service_fn, service_fn_ok};
-
-use tao_log::{debug, debugv, warn};
+use hyper::service::service_fn;
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
-use crate::{AsyncBodyImage, FutioError, RequestRecord, RequestRecorder,
+
+use crate::{AsyncBodyImage, FutioError, RequestRecord, RequestRecorder, RuntimeExt,
             request_dialog, user_agent};
-#[cfg(feature = "mmap")] use crate::{AsyncBodySink, Flaw, UniBodyImage};
+#[cfg(feature = "mmap")] use crate::{AsyncBodySink, UniBodyImage};
 use crate::logger::test_logger;
 
-#[test]
-fn large_concurrent_gets() {
-    assert!(test_logger());
-
-    let mut rt = new_limited_runtime();
-    let (fut1, url1) = simple_server(174_333);
-    rt.spawn(fut1);
-    let (fut2, url2) = simple_server(1_393_400);
-    rt.spawn(fut2);
-
-    let tune = Tuner::new()
-        .set_max_body_ram(64 * 1024)
-        .finish();
-
-    let res = rt.block_on(
-        get_req::<Body>(&url1, &tune)
-            .join(get_req::<Body>(&url2, &tune))
-    );
-    match res {
-        Ok((dl0, dl1)) => {
-            assert_eq!(dl0.res_body().len(),   174_333);
-            assert_eq!(dl1.res_body().len(), 1_393_400);
-            assert!(!dl0.res_body().is_ram());
-            assert!(!dl1.res_body().is_ram());
-        }
-        Err(e) => {
-            panic!("failed with: {}", e);
-        }
-    }
-    rt.shutdown_on_idle().wait().unwrap();
+macro_rules! one_service {
+    ($s:ident) => {{
+        let (listener, addr) = local_bind().unwrap();
+        let fut = async move {
+            let mut incoming = listener.incoming();
+            let socket = incoming.next()
+                .await
+                .expect("some")
+                .expect("socket");
+            socket.set_nodelay(true).expect("nodelay");
+            Http::new()
+                .serve_connection(socket, service_fn($s))
+                .await
+        };
+        let fut = fut
+            .map_err(|e| warn!("On one_service connection: {}", e))
+            .map(|_| ());
+        (fut, format!("http://{}", &addr))
+    }}
 }
 
 #[test]
 fn post_echo_body() {
     assert!(test_logger());
-
     let mut rt = new_limited_runtime();
-    let (fut, url) = echo_server();
-    rt.spawn(fut);
+
+    let (serv, url) = one_service!(echo);
+    rt.spawn(serv);
 
     let tune = Tuner::new()
         .set_buffer_size_fs(17)
         .finish();
     let body = fs_body_image(445);
-    match rt.block_on(post_body_req::<Body>(&url, body, &tune)) {
+    let client = post_body_req::<Body>(&url, body, &tune);
+    match rt.block_on_pool(client) {
         Ok(dialog) => {
             debugv!(&dialog);
             assert_eq!(dialog.res_body().len(), 445);
@@ -83,7 +72,7 @@ fn post_echo_body() {
             panic!("failed with: {}", e);
         }
     }
-    rt.shutdown_on_idle().wait().unwrap();
+    rt.shutdown_on_idle();
 }
 
 #[test]
@@ -91,14 +80,15 @@ fn post_echo_async_body() {
     assert!(test_logger());
 
     let mut rt = new_limited_runtime();
-    let (fut, url) = echo_server();
-    rt.spawn(fut);
+    let (serv, url) = one_service!(echo);
+    rt.spawn(serv);
 
     let tune = Tuner::new()
         .set_buffer_size_fs(17)
         .finish();
     let body = fs_body_image(445);
-    match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
+    let client = post_body_req::<AsyncBodyImage>(&url, body, &tune);
+    match rt.block_on_pool(client) {
         Ok(dialog) => {
             debugv!(&dialog);
             assert_eq!(dialog.res_body().len(), 445);
@@ -107,7 +97,7 @@ fn post_echo_async_body() {
             panic!("failed with: {}", e);
         }
     }
-    rt.shutdown_on_idle().wait().unwrap();
+    rt.shutdown_on_idle();
 }
 
 #[test]
@@ -116,7 +106,7 @@ fn post_echo_async_body_mmap_copy() {
     assert!(test_logger());
 
     let mut rt = new_limited_runtime();
-    let (fut, url) = echo_server();
+    let (fut, url) = one_service!(echo);
     rt.spawn(fut);
 
     let tune = Tuner::new()
@@ -124,7 +114,8 @@ fn post_echo_async_body_mmap_copy() {
         .finish();
     let mut body = fs_body_image(445);
     body.mem_map().unwrap();
-    match rt.block_on(post_body_req::<AsyncBodyImage>(&url, body, &tune)) {
+    let client = post_body_req::<AsyncBodyImage>(&url, body, &tune);
+    match rt.block_on_pool(client) {
         Ok(dialog) => {
             debugv!(&dialog);
             assert_eq!(dialog.res_body().len(), 445);
@@ -133,34 +124,23 @@ fn post_echo_async_body_mmap_copy() {
             panic!("failed with: {}", e);
         }
     }
-    rt.shutdown_on_idle().wait().unwrap();
-}
-
-#[test]
-#[cfg(feature = "mmap")]
-fn post_echo_uni_body() {
-    run_post_echo_uni_body(false);
+    rt.shutdown_on_idle();
 }
 
 #[test]
 #[cfg(feature = "mmap")]
 fn post_echo_uni_body_mmap() {
-    run_post_echo_uni_body(true);
-}
-
-#[cfg(feature = "mmap")]
-fn run_post_echo_uni_body(mmap: bool) {
     assert!(test_logger());
 
     let mut rt = new_limited_runtime();
-    let (fut, url) = echo_server_uni(mmap);
+    let (fut, url) = one_service!(echo_uni_mmap);
     rt.spawn(fut);
 
     let tune = Tuner::new()
         .set_buffer_size_fs(2048)
         .finish();
     let body = fs_body_image(194_767);
-    match rt.block_on(post_body_req::<UniBodyImage>(&url, body, &tune)) {
+    match rt.block_on_pool(post_body_req::<UniBodyImage>(&url, body, &tune)) {
         Ok(dialog) => {
             debugv!(&dialog);
             assert_eq!(dialog.res_body().len(), 194_767);
@@ -169,7 +149,7 @@ fn run_post_echo_uni_body(mmap: bool) {
             panic!("failed with: {}", e);
         }
     }
-    rt.shutdown_on_idle().wait().unwrap();
+    rt.shutdown_on_idle();
 }
 
 #[test]
@@ -177,14 +157,14 @@ fn timeout_before_response() {
     assert!(test_logger());
 
     let mut rt = new_limited_runtime();
-    let (fut, url) = delayed_server();
+    let (fut, url) = one_service!(delayed);
     rt.spawn(fut);
 
     let tune = Tuner::new()
         .set_res_timeout(Duration::from_millis(10))
         .set_body_timeout(Duration::from_millis(600))
         .finish();
-    match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
+    match rt.block_on_pool(get_req::<AsyncBodyImage>(&url, &tune)) {
         Ok(_) => {
             panic!("should have timed-out!");
         }
@@ -193,7 +173,7 @@ fn timeout_before_response() {
             _ => panic!("not response timeout {:?}", e),
         }
     }
-    rt.shutdown_on_idle().wait().unwrap();
+    rt.shutdown_on_idle();
 }
 
 #[test]
@@ -201,14 +181,14 @@ fn timeout_during_streaming() {
     assert!(test_logger());
 
     let mut rt = new_limited_runtime();
-    let (fut, url) = delayed_server();
+    let (fut, url) = one_service!(delayed);
     rt.spawn(fut);
 
     let tune = Tuner::new()
         .unset_res_timeout() // workaround, see *_race version of test below
         .set_body_timeout(Duration::from_millis(600))
         .finish();
-    match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
+    match rt.block_on_pool(get_req::<AsyncBodyImage>(&url, &tune)) {
         Ok(_) => {
             panic!("should have timed-out!");
         }
@@ -217,7 +197,7 @@ fn timeout_during_streaming() {
             _ => panic!("not a body timeout {:?}", e),
         }
     }
-    rt.shutdown_on_idle().wait().unwrap();
+    rt.shutdown_on_idle();
 }
 
 #[test]
@@ -226,7 +206,7 @@ fn timeout_during_streaming_race() {
     assert!(test_logger());
 
     let mut rt = new_limited_runtime();
-    let (fut, url) = delayed_server();
+    let (fut, url) = one_service!(delayed);
     rt.spawn(fut);
 
     let tune = Tuner::new()
@@ -235,7 +215,7 @@ fn timeout_during_streaming_race() {
         .set_res_timeout(Duration::from_millis(590))
         .set_body_timeout(Duration::from_millis(600))
         .finish();
-    match rt.block_on(get_req::<AsyncBodyImage>(&url, &tune)) {
+    match rt.block_on_pool(get_req::<AsyncBodyImage>(&url, &tune)) {
         Ok(_) => {
             panic!("should have timed-out!");
         }
@@ -244,96 +224,56 @@ fn timeout_during_streaming_race() {
             _ => panic!("not a body timeout {:?}", e),
         }
     }
-    rt.shutdown_on_idle().wait().unwrap();
+    rt.shutdown_on_idle();
 }
 
-macro_rules! one_service {
-    ($s:ident) => {{
-        let (listener, addr) = local_bind().unwrap();
-        let fut = listener.incoming()
-            .into_future()
-            .map_err(|_| -> hyper::Error { unreachable!() })
-            .and_then(move |(item, _incoming)| {
-                let socket = item.unwrap();
-                socket.set_nodelay(true).unwrap();
-                Http::new().serve_connection(socket, $s)
-            })
-            .map_err(|e| warn!("On serve connection: {}", e));
-        (fut, format!("http://{}", &addr))
-    }}
+async fn echo(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    Ok(debugv!("echo", Response::new(req.into_body())))
 }
 
-/// The most simple body echo'ing server, using hyper body types.
-fn echo_server() -> (impl Future<Item=(), Error=()>, String) {
-    let svc = service_fn_ok(move |req: Request<Body>| {
-        debugv!("echo server", Response::new(req.into_body()))
-    });
-    one_service!(svc)
+async fn echo_uni_mmap(req: Request<Body>)
+    -> Result<Response<UniBodyImage>, FutioError>
+{
+    let tune = Tuner::new()
+        .set_buffer_size_fs(2734)
+        .set_max_body_ram(15_000)
+        .finish();
+    let mut asink = AsyncBodySink::new(
+        BodySink::with_ram_buffers(4),
+        tune
+    );
+    req.into_body()
+        .err_into::<FutioError>()
+        .forward(&mut asink)
+        .await?;
+
+    let tune = Tuner::new().set_buffer_size_fs(4972).finish();
+    let mut bi = asink.into_inner().prepare()?;
+    bi.mem_map()?;
+
+    Ok(Response::builder()
+       .status(200)
+       .body(debugv!("echo server (mmap)", UniBodyImage::new(bi, &tune)))
+       .expect("response"))
 }
 
-/// A body echo'ing server, which buffers complete requests (potentially to
-/// disk) using AsyncBodySink and responds with them using a UniBodyImage
-#[cfg(feature = "mmap")]
-fn echo_server_uni(mmap: bool) -> (impl Future<Item=(), Error=()>, String) {
-    let svc = service_fn(move |req: Request<Body>| {
-        let tune = Tuner::new()
-            .set_buffer_size_fs(2734)
-            .set_max_body_ram(15_000)
-            .finish();
-        let asink = AsyncBodySink::new(
-            BodySink::with_ram_buffers(4),
-            tune
+async fn delayed(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    let bi = ram_body_image(0x8000, 32);
+    let tune = Tunables::default();
+    let now = Instant::now();
+    let delay1 = tokio::timer::delay(now + Duration::from_millis(100));
+    let delay2 = tokio::timer::delay(now + Duration::from_millis(900));
+    delay1.await;
+    let rbody = AsyncBodyImage::new(bi, &tune)
+        .chain(
+            delay2
+                .map(|_| Ok(Bytes::new()))
+                .into_stream()
         );
-        req.into_body()
-            .from_err::<Flaw>()
-            .forward(asink)
-            .and_then(move |(_strm, asink)| {
-                let tune = Tuner::new().set_buffer_size_fs(4972).finish();
-                let mut bi = asink.into_inner().prepare()?;
-                if mmap { bi.mem_map()?; }
-                Ok(Response::builder()
-                   .status(200)
-                   .body(debugv!("echo server", UniBodyImage::new(bi, &tune)))?)
-            })
-    });
-    one_service!(svc)
-}
-
-/// Server always returning a 1 MiB response body, after delaying before the
-/// initial response, and before completing the body. For testing timeouts.
-fn delayed_server() -> (impl Future<Item=(), Error=()>, String) {
-    let svc = service_fn(move |_req: Request<Body>| {
-        let bi = ram_body_image(0x8000, 32);
-        let tune = Tunables::default();
-        let now = Instant::now();
-        let delay1 = tokio::timer::Delay::new(now + Duration::from_millis(100))
-            .map_err(|e| -> http::Error { unreachable!(e) });
-        let delay2 = Delay::new(now + Duration::from_millis(900))
-            .map_err(|e| -> io::Error { unreachable!(e) });
-        delay1.and_then(move |()| {
-            future::result(Response::builder().status(200).body(
-                hyper::Body::wrap_stream(
-                    debugv!("delayed", AsyncBodyImage::new(bi, &tune)).select(
-                        delay2
-                            .map(|_| Bytes::new())
-                            .into_stream()
-                    )
-                )
-            ))
-        })
-    });
-    one_service!(svc)
-}
-
-fn simple_server(size: usize) -> (impl Future<Item=(), Error=()>, String) {
-    let svc = service_fn(move |_req| {
-        let bi = fs_body_image(size);
-        let tune = Tunables::default();
-        Response::builder()
-            .status(200)
-            .body(debugv!("simple server", AsyncBodyImage::new(bi, &tune)))
-    });
-    one_service!(svc)
+    Ok(Response::builder()
+       .status(200)
+       .body(Body::wrap_stream(rbody))
+       .expect("response"))
 }
 
 fn local_bind() -> Result<(TcpListener, SocketAddr), io::Error> {
@@ -360,8 +300,9 @@ fn ram_body_image(csize: usize, count: usize) -> BodyImage {
 }
 
 fn get_req<T>(url: &str, tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=FutioError> + Send
-    where T: hyper::body::Payload + Send,
+    -> impl Future<Output=Result<Dialog, FutioError>> + Send
+    where T: hyper::body::Payload + Send + Unpin,
+          <T as hyper::body::Payload>::Data: Unpin,
           http::request::Builder: RequestRecorder<T>
 {
     let req: RequestRecord<T> = http::Request::builder()
@@ -370,14 +311,15 @@ fn get_req<T>(url: &str, tune: &Tunables)
         .header(http::header::USER_AGENT, &user_agent()[..])
         .record()
         .unwrap();
-    let connector = HttpConnector::new(1 /*DNS threads*/);
+    let connector = HttpConnector::new();
     let client: Client<_, T> = Client::builder().build(connector);
     request_dialog(&client, req, &tune)
 }
 
 fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=FutioError> + Send
-    where T: hyper::body::Payload + Send,
+    -> impl Future<Output=Result<Dialog, FutioError>> + Send
+    where T: hyper::body::Payload + Send + Unpin,
+          <T as hyper::body::Payload>::Data: Unpin,
           http::request::Builder: RequestRecorder<T>
 {
     let req: RequestRecord<T> = http::Request::builder()
@@ -385,16 +327,16 @@ fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
         .uri(url)
         .record_body_image(body, &tune)
         .unwrap();
-    let connector = HttpConnector::new(1 /*DNS threads*/);
+    let connector = HttpConnector::new();
     let client: Client<_, T> = Client::builder().build(connector);
     request_dialog(&client, req, &tune)
 }
 
-fn new_limited_runtime() -> Runtime {
+fn new_limited_runtime() -> ThRuntime {
     ThBuilder::new()
         .name_prefix("tpool-")
         .core_threads(2)
-        .blocking_threads(2)
+        .blocking_threads(2) // FIXME: probably need to increase
         .build()
         .expect("runtime build")
 }
