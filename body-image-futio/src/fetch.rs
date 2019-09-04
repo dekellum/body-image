@@ -13,7 +13,7 @@ use tokio::runtime::current_thread::Runtime as CtRuntime;
 use body_image::{BodySink, Dialog, Tunables};
 
 use crate::{
-    AsyncBodySink, InDialog, FutioError, Monolog, RequestRecord, SinkWrapper,
+    AsyncBodySink, InDialog, FutioError, Monolog, RequestRecord
 };
 
 /// Extension trait for various kinds of runtimes.

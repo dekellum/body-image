@@ -62,6 +62,16 @@ impl UniBodySink {
         }
     }
 
+    /// Unwrap and return the `BodySink`.
+    ///
+    /// ## Panics
+    ///
+    /// May panic if called after a `Result::Err` is returned from any `Sink`
+    /// method or before `Sink::poll_flush` or `Sink::poll_close` is called.
+    pub fn into_inner(self) -> BodySink {
+        self.body.expect("UniBodySink::into_inner called in incomplete state")
+    }
+
     // This logically combines `Sink::poll_ready` and `Sink::start_send` into
     // one operation. If the item is returned, this is equivelent to
     // `Poll::Pending`, and the item will be later retried.
@@ -173,7 +183,7 @@ impl SinkWrapper<UniBodyBuf> for UniBodySink {
     }
 
     fn into_inner(self) -> BodySink {
-        self.body.expect("UniBodySink::into_inner called in incomplete state")
+        UniBodySink::into_inner(self)
     }
 }
 
