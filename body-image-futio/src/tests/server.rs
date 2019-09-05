@@ -150,7 +150,7 @@ fn post_echo_async_body_mmap_copy() {
     assert!(test_logger());
     let mut rt = new_limited_runtime();
 
-    let (fut, url) = one_service!(echo);
+    let (fut, url) = one_service!(echo_async);
     rt.spawn(fut);
 
     let tune = Tuner::new()
