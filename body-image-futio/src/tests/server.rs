@@ -217,7 +217,7 @@ fn timeout_before_response() {
             _ => panic!("not response timeout {:?}", e),
         }
     }
-    rt.shutdown_on_idle();
+    rt.shutdown_now();
 }
 
 #[test]
@@ -241,7 +241,7 @@ fn timeout_during_streaming() {
             _ => panic!("not a body timeout {:?}", e),
         }
     }
-    rt.shutdown_on_idle();
+    rt.shutdown_now();
 }
 
 #[test]
