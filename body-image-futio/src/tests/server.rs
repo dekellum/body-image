@@ -29,6 +29,9 @@ use crate::{AsyncBodyImage, FutioError, RequestRecord, RequestRecorder, RuntimeE
 #[cfg(feature = "mmap")] use crate::{AsyncBodySink, UniBodyImage};
 use crate::logger::test_logger;
 
+// Return a tuple of (serv: impl Future, url: String) where serv will service a
+// single request via the passed function, and the url to access it via a local
+// tcp port.
 macro_rules! one_service {
     ($s:ident) => {{
         let (listener, addr) = local_bind().unwrap();
@@ -78,8 +81,8 @@ fn post_echo_body() {
 #[test]
 fn post_echo_async_body() {
     assert!(test_logger());
-
     let mut rt = new_limited_runtime();
+
     let (serv, url) = one_service!(echo);
     rt.spawn(serv);
 
@@ -104,8 +107,8 @@ fn post_echo_async_body() {
 #[cfg(feature = "mmap")]
 fn post_echo_async_body_mmap_copy() {
     assert!(test_logger());
-
     let mut rt = new_limited_runtime();
+
     let (fut, url) = one_service!(echo);
     rt.spawn(fut);
 
@@ -131,8 +134,8 @@ fn post_echo_async_body_mmap_copy() {
 #[cfg(feature = "mmap")]
 fn post_echo_uni_body_mmap() {
     assert!(test_logger());
-
     let mut rt = new_limited_runtime();
+
     let (fut, url) = one_service!(echo_uni_mmap);
     rt.spawn(fut);
 
@@ -155,8 +158,8 @@ fn post_echo_uni_body_mmap() {
 #[test]
 fn timeout_before_response() {
     assert!(test_logger());
-
     let mut rt = new_limited_runtime();
+
     let (fut, url) = one_service!(delayed);
     rt.spawn(fut);
 
@@ -179,8 +182,8 @@ fn timeout_before_response() {
 #[test]
 fn timeout_during_streaming() {
     assert!(test_logger());
-
     let mut rt = new_limited_runtime();
+
     let (fut, url) = one_service!(delayed);
     rt.spawn(fut);
 
@@ -204,8 +207,8 @@ fn timeout_during_streaming() {
 #[cfg(feature = "may_fail")]
 fn timeout_during_streaming_race() {
     assert!(test_logger());
-
     let mut rt = new_limited_runtime();
+
     let (fut, url) = one_service!(delayed);
     rt.spawn(fut);
 
