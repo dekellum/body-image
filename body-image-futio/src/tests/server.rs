@@ -5,7 +5,7 @@ use std::net::TcpListener as StdTcpListener;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use futures::future::{FutureExt, TryFutureExt};
+use futures::future::{join_all, FutureExt, TryFutureExt};
 use futures::stream::{StreamExt, TryStreamExt};
 use http::{Request, Response};
 use http;
@@ -20,7 +20,7 @@ use hyper;
 use hyper::Body;
 use hyper::client::{Client, HttpConnector};
 use hyper::server::conn::Http;
-use hyper::service::service_fn;
+use hyper::service::{make_service_fn, service_fn};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 
@@ -50,6 +50,21 @@ macro_rules! one_service {
             .map_err(|e| warn!("On one_service connection: {}", e))
             .map(|_| ());
         (fut, format!("http://{}", &addr))
+    }}
+}
+
+// Like above, but return tuple of persistent server and its url
+macro_rules! server {
+    ($s:ident) => {{
+        let server = hyper::Server::bind(&([127, 0, 0, 1], 0).into())
+            .serve(make_service_fn(|_| async {
+                Ok::<_, hyper::Error>(service_fn($s))
+            }));
+        let local_addr = format!("http://{}", server.local_addr());
+        let server = server
+            .map_err(|e| warn!("On server: {}", e))
+            .map(|_| ());
+        (server, local_addr)
     }}
 }
 
@@ -101,6 +116,32 @@ fn post_echo_async_body() {
         }
     }
     rt.shutdown_on_idle();
+}
+
+#[test]
+fn post_echo_async_body_multi() {
+    assert!(test_logger());
+    let mut rt = new_limited_runtime();
+
+    let (serv, url) = server!(echo_async);
+    rt.spawn(serv);
+
+    let tune = Tuner::new()
+        .set_buffer_size_fs(17)
+        .finish();
+    let futures: Vec<_> = (0..20).map(|i| {
+        let body = fs_body_image(445 + i);
+        post_body_req::<AsyncBodyImage>(&url, body, &tune)
+    }).collect();
+    let all = join_all(futures);
+    let mut i = 0;
+    for r in rt.block_on_pool(all) {
+        let dialog = r.expect("request failure");
+        assert_eq!(dialog.res_body().len(), 445 + i);
+        i += 1;
+    }
+
+    rt.shutdown_now(); // server otherwise runs forever;
 }
 
 #[test]
@@ -227,11 +268,36 @@ fn timeout_during_streaming_race() {
             _ => panic!("not a body timeout {:?}", e),
         }
     }
-    rt.shutdown_on_idle();
+    rt.shutdown_now();
 }
 
 async fn echo(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     Ok(debugv!("echo", Response::new(req.into_body())))
+}
+
+async fn echo_async(req: Request<Body>)
+    -> Result<Response<AsyncBodyImage>, FutioError>
+{
+    let tune = Tuner::new()
+        .set_buffer_size_fs(2734)
+        .set_max_body_ram(15_000)
+        .finish();
+    let mut asink = AsyncBodySink::new(
+        BodySink::with_ram_buffers(4),
+        tune
+    );
+    req.into_body()
+        .err_into::<FutioError>()
+        .forward(&mut asink)
+        .await?;
+
+    let tune = Tuner::new().set_buffer_size_fs(4972).finish();
+    let bi = asink.into_inner().prepare()?;
+
+    Ok(Response::builder()
+       .status(200)
+       .body(debugv!("echo server (mmap)", AsyncBodyImage::new(bi, &tune)))
+       .expect("response"))
 }
 
 async fn echo_uni_mmap(req: Request<Body>)
@@ -339,7 +405,7 @@ fn new_limited_runtime() -> ThRuntime {
     ThBuilder::new()
         .name_prefix("tpool-")
         .core_threads(2)
-        .blocking_threads(2) // FIXME: probably need to increase
+        .blocking_threads(1024)
         .build()
         .expect("runtime build")
 }
