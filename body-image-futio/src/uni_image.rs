@@ -359,7 +359,7 @@ impl http_body::Body for UniBodyImage {
     fn poll_trailers(self: Pin<&mut Self>, _cx: &mut Context<'_>)
         -> Poll<Result<Option<http::HeaderMap>, Self::Error>>
     {
-        return Poll::Ready(Ok(None));
+        Poll::Ready(Ok(None))
     }
 
     fn size_hint(&self) -> http_body::SizeHint {
