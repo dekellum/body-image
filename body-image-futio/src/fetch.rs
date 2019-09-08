@@ -52,7 +52,7 @@ impl RuntimeExt for CtRuntime {
 pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     -> Result<Dialog, FutioError>
     where B: hyper::body::Payload + Send + Unpin,
-          <B as hyper::body::Payload>::Data: Unpin
+          B::Data: Unpin
 {
     let mut rt = ThBuilder::new()
         .name_prefix("tpool-")
@@ -84,7 +84,7 @@ pub fn request_dialog<CN, B>(
     -> impl Future<Output=Result<Dialog, FutioError>> + Send + 'static
     where CN: hyper::client::connect::Connect + Sync + 'static,
           B: hyper::body::Payload + Send + Unpin,
-          <B as hyper::body::Payload>::Data: Unpin
+          B::Data: Unpin
 {
     let prolog = rr.prolog;
 
