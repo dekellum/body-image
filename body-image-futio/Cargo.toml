@@ -24,8 +24,8 @@ futures    = { version=">=0.3.0-alpha.18, <0.4", package="futures-preview" }
 http       = { version=">=0.1.6, <0.2" }
 http-body  = { version=">=0.2.0-alpha.1, <0.3" }
 httparse   = { version=">=1.2.4, <1.4" }
-hyper      = { version=">=0.13.0-a.0, <0.14" }
-hyper-tls  = { version=">=0.3.2, <0.5" }
+hyper      = { version=">=0.13.0-a.0, <0.14", features=["stream"] }
+hyper-tls  = { version=">=0.4.0-alpha.1, <0.5" }
 hyperx     = { version=">=0.15.0, <0.16" }
 tao-log    = { version=">=0.1.0, <0.3" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }
