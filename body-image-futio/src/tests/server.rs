@@ -98,7 +98,7 @@ fn post_echo_async_body() {
     assert!(test_logger());
     let mut rt = new_limited_runtime();
 
-    let (serv, url) = one_service!(echo);
+    let (serv, url) = one_service!(echo_async);
     rt.spawn(serv);
 
     let tune = Tuner::new()
@@ -296,7 +296,7 @@ async fn echo_async(req: Request<Body>)
 
     Ok(Response::builder()
        .status(200)
-       .body(debugv!("echo server (mmap)", AsyncBodyImage::new(bi, &tune)))
+       .body(debugv!("echo (async)", AsyncBodyImage::new(bi, &tune)))
        .expect("response"))
 }
 
@@ -322,7 +322,7 @@ async fn echo_uni_mmap(req: Request<Body>)
 
     Ok(Response::builder()
        .status(200)
-       .body(debugv!("echo server (mmap)", UniBodyImage::new(bi, &tune)))
+       .body(debugv!("echo (mmap)", UniBodyImage::new(bi, &tune)))
        .expect("response"))
 }
 
