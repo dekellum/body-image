@@ -41,9 +41,9 @@ fn setup_logger(level: u32) -> Result<(), Flaw> {
     };
     if level < 2 {
         disp = disp
-            .level_for("hyper::proto",  log::LevelFilter::Info)
-            .level_for("tokio_core",    log::LevelFilter::Info)
-            .level_for("tokio_reactor", log::LevelFilter::Info);
+            .level_for("hyper::proto",   log::LevelFilter::Info)
+            .level_for("tokio_net",      log::LevelFilter::Info)
+            .level_for("tokio_executor", log::LevelFilter::Info);
     }
 
     disp.chain(std::io::stderr())
