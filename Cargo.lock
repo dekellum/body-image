@@ -33,9 +33,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "barc"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
- "body-image 1.2.0",
+ "body-image 1.3.0",
  "brotli 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "fern 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -51,11 +51,11 @@ dependencies = [
 
 [[package]]
 name = "barc-cli"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
- "barc 1.2.0",
- "body-image 1.2.0",
- "body-image-futio 1.2.0",
+ "barc 1.3.0",
+ "body-image 1.3.0",
+ "body-image-futio 1.3.0",
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "fern 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "http 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -78,7 +78,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "body-image"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "http 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -90,9 +90,9 @@ dependencies = [
 
 [[package]]
 name = "body-image-futio"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
- "body-image 1.2.0",
+ "body-image 1.3.0",
  "brotli 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "fern 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
