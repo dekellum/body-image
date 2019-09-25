@@ -1,4 +1,8 @@
 ## 1.3.0 (TBD)
+* Fix build.rs for `rustc --version` not including git metadata.
+
+* Narrow flate2 dependency to < 1.0.10, to avoid MSRV breakage. flate2
+  1.0.10 and 1.0.11 releases have MSRV 1.34.0 (alexcrichton/flate2-rs#207)
 
 ## 1.2.0 (2019-5-13)
 * Upgrade to hyperx 0.15.0 and use new `TypedHeaders` extension to simplify

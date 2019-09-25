@@ -1,4 +1,5 @@
 ## 1.3.0 (TBD)
+* Fix build.rs for `rustc --version` not including git metadata.
 
 ## 1.2.0 (2019-5-13)
 * Narrow various dependencies to avoid future MINOR versions, for reliability.
