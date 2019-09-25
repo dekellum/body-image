@@ -1298,7 +1298,7 @@ mod barc_tests {
         assert!(test_logger());
         let fname = barc_test_file("empty_record.barc").unwrap();
         let strategy = NoCompressStrategy::default();
-        write_read_empty_record(&fname, &strategy).unwrap();;
+        write_read_empty_record(&fname, &strategy).unwrap();
     }
 
     #[test]
@@ -1350,7 +1350,7 @@ mod barc_tests {
         assert!(test_logger());
         let fname = barc_test_file("large.barc").unwrap();
         let strategy = NoCompressStrategy::default();
-        write_read_large(&fname, &strategy).unwrap();;
+        write_read_large(&fname, &strategy).unwrap();
     }
 
     #[test]
@@ -1682,7 +1682,7 @@ mod barc_tests {
 
         if let Err(e) = reader.read(&tune) {
             if let BarcError::ReadInvalidRecHead = e {
-                assert!(true);
+                //expected
             } else {
                 panic!("Other error: {}", e);
             }
