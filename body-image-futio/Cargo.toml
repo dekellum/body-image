@@ -31,6 +31,7 @@ memmap     = { version=">=0.7.0, <0.8", optional=true }
 olio       = { version=">=1.2.0, <1.3", default-features=false }
 tokio      = { version=">=0.1.22, <0.2", default-features=false, features=["rt-full"] }
 tokio-reactor = { version=">=0.1.10, <0.2" }
+tokio-sync = { version=">=0.1.2, <0.2" }
 tokio-threadpool = { version=">=0.1.16, <0.2" }
 
 [features]
