@@ -1,6 +1,12 @@
 ## 1.3.0 (TBD)
 * Fix build.rs for `rustc --version` not including git metadata.
 
+* Upgrade to tempfile 3.1.0 and transitively to rand 0.7.0
+
+* Upgrade to olio 1.2.0. `BodyImage` and `Dialog` are again always `Sync`.
+
+* Minimum supported rust version is now 1.32.0 (to match above upgrades).
+
 ## 1.2.0 (2019-5-13)
 * Narrow various dependencies to avoid future MINOR versions, for reliability.
   We may subsequently make PATCH releases which _broaden_ private or public

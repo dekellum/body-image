@@ -1,6 +1,11 @@
 ## 1.3.0 (TBD)
 * Fix build.rs for `rustc --version` not including git metadata.
 
+* Upgrade to barc, body-image, body-image-futio versions 1.3.0, including
+  olio 1.2.0, tempfile 3.1.0, rand 0.7.
+
+* Minimum supported rust version is now 1.32.0 (to match above upgrades).
+
 ## 1.2.0 (2019-5-13)
 * Narrow various dependencies to avoid future MINOR versions, for reliability.
   We may subsequently make PATCH releases which _broaden_ private or public
