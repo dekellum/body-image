@@ -54,21 +54,21 @@ use body_image::{
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
 mod compress;
-pub use crate::compress::{
+pub use compress::{
     CompressStrategy, Compression, EncodeWrapper,
     GzipCompressStrategy, NoCompressStrategy,
 };
 
-use crate::compress::DecodeWrapper;
+use compress::DecodeWrapper;
 
 #[cfg(feature = "brotli")]
-pub use crate::compress::BrotliCompressStrategy;
+pub use compress::BrotliCompressStrategy;
 
 #[cfg(not(barc_std_try_from))]
 mod try_conv;
 
 #[cfg(not(barc_std_try_from))]
-pub use crate::try_conv::{TryFrom, TryInto};
+pub use try_conv::{TryFrom, TryInto};
 
 // Public imports of std::convert equivalents to try_conv::*, as stabilized in
 // rustc 1.34.0.  We also deprecate these re-exports, as the `std::convert`

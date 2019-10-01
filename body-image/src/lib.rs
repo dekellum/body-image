@@ -63,7 +63,7 @@ use tempfile::tempfile_in;
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
 #[cfg(feature = "mmap")] #[doc(hidden)] pub mod _mem_handle_ext;
-#[cfg(feature = "mmap")] use crate::_mem_handle_ext::MemHandleExt;
+#[cfg(feature = "mmap")] use _mem_handle_ext::MemHandleExt;
 
 /// The crate version string.
 pub static VERSION: &str               = env!("CARGO_PKG_VERSION");
