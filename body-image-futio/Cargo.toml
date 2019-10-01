@@ -28,9 +28,11 @@ hyper-tls  = { version=">=0.3.0, <0.4" }
 hyperx     = { version=">=0.15.0, <0.16" }
 tao-log    = { version=">=0.1.0, <0.3" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }
-olio       = { version=">=1.0.0, <1.2", default-features=false }
-tokio      = { version=">=0.1.14, <0.2", default-features=false, features=["rt-full"] }
-tokio-threadpool = { version=">=0.1.10, <0.2" }
+olio       = { version=">=1.2.0, <1.3", default-features=false }
+tokio      = { version=">=0.1.22, <0.2", default-features=false, features=["rt-full"] }
+tokio-reactor = { version=">=0.1.10, <0.2" }
+tokio-sync = { version=">=0.1.2, <0.2" }
+tokio-threadpool = { version=">=0.1.16, <0.2" }
 
 [features]
 default = ["mmap", "brotli"]
@@ -44,5 +46,5 @@ bench = false
 
 [dev-dependencies]
 fern        = { version=">=0.5.5, <0.6" }
-rand        = { version=">=0.6.1, <0.7" }
+rand        = { version=">=0.7.0, <0.8" }
 tokio-tcp   = { version=">=0.1.3, <0.2" }

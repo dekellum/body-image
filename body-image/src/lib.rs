@@ -137,10 +137,9 @@ impl From<io::Error> for BodyError {
 /// : Body in a memory mapped file, ready for random access read (default
 ///   *mmap* feature)
 ///
-/// All states support concurrent reads. `BodyImage` is `Send` and supports
-/// low-cost shallow `Clone` via internal (atomic) reference
-/// counting. `BodyImage` is not `Sync` (with the default *mmap* feature
-/// enabled).
+/// All states support concurrent reads. `BodyImage` is `Send`, `Sync`, and
+/// supports low-cost shallow `Clone` via internal (atomic) reference
+/// counting.
 #[derive(Clone, Debug)]
 pub struct BodyImage {
     state: ImageState,
@@ -1207,8 +1206,10 @@ mod body_tests {
         assert!(is_sync::<BodyError>());
 
         assert!(is_send::<BodyImage>());
+        assert!(is_sync::<BodyImage>());
 
         assert!(is_send::<Dialog>());
+        assert!(is_sync::<Dialog>());
 
         assert!(is_send::<Tunables>());
         assert!(is_sync::<Tunables>());
@@ -1220,13 +1221,6 @@ mod body_tests {
     #[test]
     fn test_body_error_size() {
         assert!(size_of::<BodyError>() <= 24);
-    }
-
-    #[cfg(not(feature = "mmap"))]
-    #[test]
-    fn test_sync_not_mmap() {
-        assert!(is_sync::<BodyImage>());
-        assert!(is_sync::<Dialog>());
     }
 
     #[test]

@@ -1,6 +1,11 @@
 ## 1.3.0 (TBD)
 * Fix build.rs for `rustc --version` not including git metadata.
 
+* Upgrade to body-image 1.3.0, olio 1.2.0, tempfile 3.1.0 and transitively to
+  rand 0.7.0.
+
+* Minimum supported rust version is now 1.32.0 (to match above upgrades).
+
 * Narrow flate2 dependency to < 1.0.10, to avoid MSRV breakage. flate2
   1.0.10 and 1.0.11 releases have MSRV 1.34.0 (alexcrichton/flate2-rs#207)
 

@@ -1,6 +1,15 @@
 ## 1.3.0 (TBD)
 * Fix build.rs for `rustc --version` not including git metadata.
 
+* Upgrade to body-image 1.3.0 and olio 1.2.0, including tempfile 3.1.0 and
+  rand 0.7.
+
+* Upgrade tokio minimums to most recent tokio 0.1.22, tokio-reactor 0.1.10,
+  tokio-threadpool 0.1.16 for parity with above and to avoid large numbers of
+  duplicates.
+
+* Minimum supported rust version is now 1.32.0 (to match above upgrades).
+
 * Narrow flate2 dependency to < 1.0.10, to avoid MSRV breakage. flate2
   1.0.10 and 1.0.11 releases have MSRV 1.34.0 (alexcrichton/flate2-rs#207)
 
