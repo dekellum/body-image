@@ -1,4 +1,4 @@
-## 1.3.0 (TBD)
+## 1.3.0 (2019-10-1)
 * Fix build.rs for `rustc --version` not including git metadata.
 
 * Upgrade to tempfile 3.1.0 and transitively to rand 0.7.0
