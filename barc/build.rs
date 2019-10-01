@@ -3,7 +3,7 @@ use std::process::Command;
 
 fn main() {
     static PACKAGE: &'static str = "barc";
-    let msrv = vec![1, 32];
+    let msrv = vec![1, 34];
 
     static VERSION: &'static str = env!("CARGO_PKG_VERSION");
     static M_V: &'static str = "minimum supported rust version (MSRV)";
@@ -14,10 +14,6 @@ fn main() {
         panic!(
             "{} v{} {} is {} > {} (this rustc)",
             PACKAGE, VERSION, M_V, join(&msrv), join(&rustv));
-    }
-
-    if rustv >= vec![1, 34] {
-       println!("cargo:rustc-cfg=barc_std_try_from");
     }
 }
 

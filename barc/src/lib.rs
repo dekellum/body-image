@@ -64,20 +64,7 @@ use compress::DecodeWrapper;
 #[cfg(feature = "brotli")]
 pub use compress::BrotliCompressStrategy;
 
-#[cfg(not(barc_std_try_from))]
-mod try_conv;
-
-#[cfg(not(barc_std_try_from))]
-pub use try_conv::{TryFrom, TryInto};
-
-// Public imports of std::convert equivalents to try_conv::*, as stabilized in
-// rustc 1.34.0.  We also deprecate these re-exports, as the `std::convert`
-// types should be used directly. However, re-export deprecations are currently
-// ignored by rustc, see https://github.com/rust-lang/rust/issues/47236.
-#[cfg(barc_std_try_from)]
-#[deprecated(since = "1.2.0", note="Use the std::convert traits directly")]
-#[doc(no_inline)]
-pub use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 
 /// Fixed record head size including CRLF terminator:
 /// 54 Bytes
@@ -1170,7 +1157,6 @@ mod logger;
 
 #[cfg(test)]
 mod barc_tests {
-    #[cfg(barc_std_try_from)]
     use std::convert::TryInto;
 
     use std::fs;
