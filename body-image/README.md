@@ -15,7 +15,7 @@ See the top-level (project workspace) README for additional rationale.
 
 ## Minimum supported rust version
 
-MSRV := 1.31.0
+MSRV := 1.32.0
 
 The crate will fail fast on any lower rustc (via a build.rs version
 check) and is also CI tested on this version.
