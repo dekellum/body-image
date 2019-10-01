@@ -1,33 +1,20 @@
 [workspace]
 members = [
     "body-image",
+# FIXME: disable temporarily
 #    "barc",
     "body-image-futio",
 #    "barc-cli",
 ]
 
 [patch.crates-io]
+# FIXME: disable temporarily
 # "barc" = { path = "barc" }
 # "barc-cli" = { path = "barc-cli" }
 "body-image" = { path = "body-image" }
 "body-image-futio" = { path = "body-image-futio" }
 
-tokio = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
-# tokio-buf = { git="https://github.com/tokio-rs/tokio" }
-tokio-codec = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
-tokio-executor = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
-tokio-io = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
-tokio-sync = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
-tokio-net = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
-tokio-timer = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
-tokio-tls = { git="https://github.com/tokio-rs/tokio", rev="6a94d2cf" }
-
 blocking-permit = { path="/home/david/src/blocking-permit" }
-
-http-body = { git="https://github.com/hyperium/http-body" }
-hyper = { git="https://github.com/hyperium/hyper" }
-hyper-tls = { git="https://github.com/hyperium/hyper-tls" }
-
 
 [profile.release]
 lto = "thin"
