@@ -3,14 +3,6 @@
 cargo -Z minimal-versions generate-lockfile
 
 # due to:
-# gcc v0.3.0
-# [build-dependencies]
-# └── miniz-sys v0.1.7
-#     └── flate2 v1.0.1
-#         └── body-image-futio v1.3.0 (/home/david/src/body-image/body-image-futio)
-cargo update -p miniz-sys --precise 0.1.11
-
-# due to:
 # semver v0.1.0
 # └── rustc_version v0.1.0
 #     [build-dependencies]
