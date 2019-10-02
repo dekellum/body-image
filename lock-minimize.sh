@@ -32,9 +32,3 @@ cargo update -p unicase --precise 2.1.0
 #             [dev-dependencies]
 #             └── body-image-futio v1.3.0 (/home/david/src/body-image/body-image-futio) (*)
 cargo update -p parking_lot_core --precise 0.6.2
-
-# test failure due to:
-# brotli-decompressor v2.1.0
-# └── brotli v3.1.0
-#    └── body-image-futio v1.3.0 (/home/david/src/body-image/body-image-futio)
-cargo update -p brotli-decompressor --precise 2.1.2
