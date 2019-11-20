@@ -35,6 +35,10 @@ tokio-reactor = { version=">=0.1.10, <0.2" }
 tokio-sync = { version=">=0.1.2, <0.2" }
 tokio-threadpool = { version=">=0.1.16, <0.2" }
 
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+# FIXME: max transitive for MSRV 1.32.0
+security-framework = { version="=0.3.1", optional=true, default-features=false }
+
 [features]
 default = ["mmap", "brotli"]
 mmap = ["memmap", "olio/mmap", "body-image/mmap"]
