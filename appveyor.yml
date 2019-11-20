@@ -23,5 +23,17 @@ install:
 build: false
 
 test_script:
-  - cargo test --no-default-features
-  - cargo test
+  - 'cargo test  --manifest-path body-image/Cargo.toml --no-default-features'
+  - 'cargo test  --manifest-path body-image/Cargo.toml --all-features'
+  - 'cargo test  --manifest-path barc/Cargo.toml --no-default-features'
+  - 'cargo test  --manifest-path barc/Cargo.toml --no-default-features --features mmap'
+  - 'cargo test  --manifest-path barc/Cargo.toml --no-default-features --features brotli'
+  - 'cargo test  --manifest-path barc/Cargo.toml --all-features'
+  - 'cargo test  --manifest-path body-image-futio/Cargo.toml --no-default-features'
+  - 'cargo test  --manifest-path body-image-futio/Cargo.toml --no-default-features --features mmap'
+  - 'cargo test  --manifest-path body-image-futio/Cargo.toml --no-default-features --features brotli'
+  - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features'
+  - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features --features mmap'
+  - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features --features brotli'
+  - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features --features futio'
+  - 'cargo build --manifest-path barc-cli/Cargo.toml --all-features'
