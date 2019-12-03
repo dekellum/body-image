@@ -280,7 +280,7 @@ impl BodySink {
         if len > 0 {
             match self.state {
                 SinkState::Ram(ref mut v) => {
-                    v.push(buf.into());
+                    v.push(BytesMut::from(buf).freeze());
                 }
                 SinkState::FsWrite(ref mut f) => {
                     f.write_all(buf)?;
@@ -606,7 +606,11 @@ impl BodyImage {
         'eof: loop {
             let mut buf = BytesMut::with_capacity(tune.buffer_size_ram());
             'fill: loop {
-                let len = match rin.read(unsafe { buf.bytes_mut() }) {
+                let b = unsafe {
+                    &mut *(buf.bytes_mut()
+                           as *mut [mem::MaybeUninit<u8>] as *mut [u8])
+                };
+                let len = match rin.read(b) {
                     Ok(len) => len,
                     Err(e) => {
                         if e.kind() == ErrorKind::Interrupted {
@@ -716,7 +720,10 @@ fn read_to_body_fs<R>(r: &mut R, mut body: BodySink, tune: &Tunables)
     let mut size: u64 = 0;
     let mut buf = BytesMut::with_capacity(tune.buffer_size_fs());
     loop {
-        let len = match r.read(unsafe { buf.bytes_mut() }) {
+        let b = unsafe {
+            &mut *(buf.bytes_mut() as *mut [mem::MaybeUninit<u8>] as *mut [u8])
+        };
+        let len = match r.read(b) {
             Ok(l) => l,
             Err(e) => {
                 if e.kind() == ErrorKind::Interrupted {
