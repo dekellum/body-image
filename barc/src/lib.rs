@@ -32,6 +32,7 @@ use std::fs::{File, OpenOptions};
 use std::fmt;
 use std::io;
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
+use std::mem;
 use std::ops::{AddAssign, ShlAssign};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::path::Path;
@@ -396,7 +397,7 @@ pub enum DialogConvertError {
     NoMetaUrl,
 
     /// The url meta header failed to parse as an `http::Uri`.
-    InvalidUrl(http::uri::InvalidUriBytes),
+    InvalidUrl(http::uri::InvalidUri),
 
     /// No method meta header found.
     NoMetaMethod,
@@ -483,7 +484,7 @@ impl TryFrom<Record> for Dialog {
     /// modified in an unsupported way.
     fn try_from(rec: Record) -> Result<Self, Self::Error> {
         let url = if let Some(uv) = rec.meta.get(hname_meta_url()) {
-            http::Uri::from_shared(uv.as_bytes().into())
+            http::Uri::try_from(uv.as_bytes())
                 .map_err(DialogConvertError::InvalidUrl)
         } else {
             Err(DialogConvertError::NoMetaUrl)
@@ -1033,7 +1034,10 @@ fn read_headers<R>(rin: &mut R, with_crlf: bool, len: usize)
     let tlen = if with_crlf { len } else { len + 2 };
     let mut buf = BytesMut::with_capacity(tlen);
     unsafe {
-        rin.read_exact(&mut buf.bytes_mut()[..len])?;
+        let b = &mut *(
+            buf.bytes_mut() as *mut [mem::MaybeUninit<u8>] as *mut [u8]
+        );
+        rin.read_exact(&mut b[..len])?;
         buf.advance_mut(len);
     }
 
@@ -1089,7 +1093,10 @@ fn read_body_ram<R>(rin: &mut R, with_crlf: bool, len: usize)
 
     let mut buf = BytesMut::with_capacity(len);
     unsafe {
-        rin.read_exact(&mut buf.bytes_mut()[..len])?;
+        let b = &mut *(
+            buf.bytes_mut() as *mut [mem::MaybeUninit<u8>] as *mut [u8]
+        );
+        rin.read_exact(&mut b[..len])?;
         let l = if with_crlf { len - 2 } else { len };
         buf.advance_mut(l);
     }
@@ -1111,7 +1118,10 @@ fn read_body_fs<R>(rin: &mut R, len: u64, tune: &Tunables)
     let mut buf = BytesMut::with_capacity(tune.buffer_size_fs());
     loop {
         let rlen = {
-            let b = unsafe { buf.bytes_mut() };
+            let b = unsafe {
+                &mut *(buf.bytes_mut()
+                       as *mut [mem::MaybeUninit<u8>] as *mut [u8])
+            };
             let limit = cmp::min(b.len() as u64, len - body.len()) as usize;
             assert!(limit > 0);
             match rin.read(&mut b[..limit]) {
