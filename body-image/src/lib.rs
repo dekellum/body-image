@@ -280,7 +280,7 @@ impl BodySink {
         if len > 0 {
             match self.state {
                 SinkState::Ram(ref mut v) => {
-                    v.push(BytesMut::from(buf).freeze());
+                    v.push(Bytes::copy_from_slice(buf));
                 }
                 SinkState::FsWrite(ref mut f) => {
                     f.write_all(buf)?;
