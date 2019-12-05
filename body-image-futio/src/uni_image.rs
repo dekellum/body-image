@@ -5,7 +5,7 @@ use std::io::{Cursor, Read};
 use std::ops::Deref;
 use std::vec::IntoIter;
 
-use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http;
 use tao_log::debug;
 use olio::fs::rc::ReadSlice;
