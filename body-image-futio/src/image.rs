@@ -13,7 +13,7 @@ use blocking_permit::{
     dispatch_rx, DispatchBlocking,
     IsReactorThread,
 };
-use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::stream::Stream;
 use http;
 use olio::fs::rc::ReadSlice;
