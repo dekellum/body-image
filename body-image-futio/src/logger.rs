@@ -1,5 +1,6 @@
 use std;
 use std::sync::Once;
+use std::borrow::Cow;
 
 use fern;
 use tao_log::log;
@@ -26,7 +27,10 @@ fn setup_logger(level: u32) -> Result<(), Flaw> {
     let mut disp = fern::Dispatch::new()
         .format(|out, message, record| {
             let t = std::thread::current();
-            let tn = t.name().unwrap_or("-");
+            let mut tn = Cow::from(t.name().unwrap_or("-"));
+            if tn == "tokio-runtime-worker" {
+                tn = Cow::from(format!("{}-{:?}", tn, t.id()))
+            }
             out.finish(format_args!(
                 "{} {} {}: {}",
                 record.level(), record.target(), tn, message
