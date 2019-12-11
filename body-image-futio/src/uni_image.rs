@@ -11,8 +11,7 @@ use std::vec::IntoIter;
 
 use blocking_permit::{
     blocking_permit_future, BlockingPermitFuture,
-    dispatch_rx, DispatchBlocking,
-    IsReactorThread,
+    dispatch_rx, Dispatched, DispatchRx,
 };
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::stream::Stream;
@@ -28,11 +27,11 @@ use crate::{
 };
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
-/// `hyper::body::Payload` traits, using the custom
+/// `hyper::body::HttpBody` traits, using the custom
 /// [`UniBodyBuf`](struct.UniBodyBuf.html) item buffer type (instead of
 /// `Bytes`) for zero-copy `MemMap` support (*mmap* feature only).
 ///
-/// The `Payload` trait (plus `Send`) makes this usable with hyper as the `B`
+/// The `HttpBody` trait (plus `Send`) makes this usable with hyper as the `B`
 /// body type of `http::Request<B>` (client) or `http::Response<B>`
 /// (server).
 ///
@@ -372,7 +371,7 @@ impl http_body::Body for UniBodyImage {
 }
 
 impl RequestRecorder<UniBodyImage> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<UniBodyImage>, http::Error> {
+    fn record(self) -> Result<RequestRecord<UniBodyImage>, http::Error> {
         let request = {
             let body = BodyImage::empty();
             let tune = Tunables::default();
@@ -390,7 +389,7 @@ impl RequestRecorder<UniBodyImage> for http::request::Builder {
         })
     }
 
-    fn record_body<BB>(&mut self, body: BB)
+    fn record_body<BB>(self, body: BB)
         -> Result<RequestRecord<UniBodyImage>, http::Error>
         where BB: Into<Bytes>
     {
@@ -412,7 +411,7 @@ impl RequestRecorder<UniBodyImage> for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body } })
     }
 
-    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
+    fn record_body_image(self, body: BodyImage, tune: &Tunables)
         -> Result<RequestRecord<UniBodyImage>, http::Error>
     {
         let request = self.body(UniBodyImage::new(body.clone(), tune))?;

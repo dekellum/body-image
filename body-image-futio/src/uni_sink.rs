@@ -5,8 +5,7 @@ use std::task::{Context, Poll};
 
 use blocking_permit::{
     blocking_permit_future, BlockingPermitFuture,
-    dispatch_rx, DispatchBlocking,
-    IsReactorThread,
+    dispatch_rx, DispatchRx, Dispatched,
 };
 use futures::sink::Sink;
 use tao_log::debug;

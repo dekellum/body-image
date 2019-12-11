@@ -24,7 +24,7 @@ use hyper::service::{make_service_fn, service_fn};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 
-use crate::{AsyncBodyImage, FutioError, RequestRecord, RequestRecorder, RuntimeExt,
+use crate::{AsyncBodyImage, FutioError, RequestRecord, RequestRecorder,
             request_dialog, user_agent};
 #[cfg(feature = "mmap")] use crate::{AsyncBodySink, UniBodyImage};
 use crate::logger::test_logger;
@@ -370,8 +370,8 @@ fn ram_body_image(csize: usize, count: usize) -> BodyImage {
 
 fn get_req<T>(url: &str, tune: &Tunables)
     -> impl Future<Output=Result<Dialog, FutioError>> + Send
-    where T: hyper::body::Payload + Send + Unpin,
-          <T as hyper::body::Payload>::Data: Unpin,
+    where T: hyper::body::HttpBody + Send + Unpin,
+          <T as hyper::body::HttpBody>::Data: Unpin,
           http::request::Builder: RequestRecorder<T>
 {
     let req: RequestRecord<T> = http::Request::builder()
@@ -387,8 +387,8 @@ fn get_req<T>(url: &str, tune: &Tunables)
 
 fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
     -> impl Future<Output=Result<Dialog, FutioError>> + Send
-    where T: hyper::body::Payload + Send + Unpin,
-          <T as hyper::body::Payload>::Data: Unpin,
+    where T: hyper::body::HttpBody + Send + Unpin,
+          <T as hyper::body::HttpBody>::Data: Unpin,
           http::request::Builder: RequestRecorder<T>
 {
     let req: RequestRecord<T> = http::Request::builder()

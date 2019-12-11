@@ -10,8 +10,7 @@ use std::vec::IntoIter;
 
 use blocking_permit::{
     blocking_permit_future, BlockingPermitFuture,
-    dispatch_rx, DispatchBlocking,
-    IsReactorThread,
+    dispatch_rx, Dispatched, is_dispatch_pool_registered
 };
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::stream::Stream;
@@ -74,7 +73,7 @@ pub struct AsyncBodyImage {
 
 #[derive(Debug)]
 enum Delegate {
-    Dispatch(DispatchBlocking<(
+    Dispatch(Dispatched<(
         Result<Option<Bytes>, io::Error>,
         AsyncImageState
     )>),
@@ -169,7 +168,12 @@ impl AsyncImageState {
             AsyncImageState::File { ref mut rs, bsize } => {
                 let bs = cmp::min(bsize, avail) as usize;
                 let mut buf = BytesMut::with_capacity(bs);
-                match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
+                let b = unsafe {
+                    &mut *(buf.bytes_mut()
+                           as *mut [mem::MaybeUninit<u8>] as *mut [u8])
+                };
+
+                match rs.read(&mut b[..bs]) {
                     Ok(0) => Ok(None),
                     Ok(len) => {
                         unsafe { buf.advance_mut(len); }
@@ -210,7 +214,7 @@ impl http_body::Body for AsyncBodyImage {
     {
         match self.poll_next(cx) {
             Poll::Pending              => Poll::Pending,
-            Poll::Ready(Some(Ok(b)))   => Poll::Ready(Some(Ok(b.into_buf()))),
+            Poll::Ready(Some(Ok(b)))   => Poll::Ready(Some(Ok(Cursor::new(b)))),
             Poll::Ready(Some(Err(e)))  => Poll::Ready(Some(Err(e))),
             Poll::Ready(None)          => Poll::Ready(None)
         }
@@ -237,12 +241,12 @@ impl Stream for AsyncBodyImage {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Option<Self::Item>>
     {
-        let this = self.get_mut();
+        let this = unsafe { self.get_unchecked_mut() };
 
         // Handle any delegate futures (new permit or early exit)
         let permit = match this.delegate {
             Delegate::Dispatch(ref mut db) => {
-                info!("delegate poll to DispatchBlocking");
+                info!("delegate poll to Dispatched");
                 let (poll_res, rstate) = match Pin::new(&mut *db).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
@@ -267,7 +271,8 @@ impl Stream for AsyncBodyImage {
                 return poll_res;
             }
             Delegate::Permit(ref mut pf) => {
-                match Pin::new(pf).poll(cx) {
+                let pf = unsafe { Pin::new_unchecked(pf) };
+                match pf.poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Ok(p)) => {
                         this.delegate = Delegate::None;
@@ -298,26 +303,25 @@ impl Stream for AsyncBodyImage {
 
         // Otherwise we'll need a permit or to dispatch (and exit early)
         if permit.is_none() {
-            match blocking_permit_future(&BLOCKING_SET) {
-                Ok(f) => {
-                    this.delegate = Delegate::Permit(f);
-                }
-                Err(IsReactorThread) => {
-                    let mut st = mem::replace(
-                        &mut this.state,
-                        AsyncImageState::Delegated
-                    );
-                    this.delegate = Delegate::Dispatch(dispatch_rx(move || {
-                        (st.read_next(avail), st)
-                    }));
-                },
+            if is_dispatch_pool_registered() {
+                let mut st = mem::replace(
+                    &mut this.state,
+                    AsyncImageState::Delegated
+                );
+                this.delegate = Delegate::Dispatch(
+                    dispatch_rx(move || (st.read_next(avail), st)).unwrap()
+                );
+            } else {
+                let f = blocking_permit_future(&BLOCKING_SET);
+                this.delegate = Delegate::Permit(f);
             }
+            let s = unsafe { Pin::new_unchecked(this) };
             // recurse once (needed for correct waking)
-            return Pin::new(this).poll_next(cx);
+            return s.poll_next(cx);
         }
 
         // Use permit to run the blocking operation on thread
-        let res = permit.unwrap().run_unwrap(|| {
+        let res = permit.unwrap().run(|| {
             match this.state.read_next(avail) {
                 Ok(Some(b)) => Poll::Ready(Some(Ok(b))),
                 Ok(None) => Poll::Ready(None),
@@ -341,7 +345,7 @@ impl Stream for AsyncBodyImage {
 }
 
 impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<AsyncBodyImage>, http::Error> {
+    fn record(self) -> Result<RequestRecord<AsyncBodyImage>, http::Error> {
         let request = {
             let body = BodyImage::empty();
             let tune = Tunables::default();
@@ -359,7 +363,7 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
         })
     }
 
-    fn record_body<BB>(&mut self, body: BB)
+    fn record_body<BB>(self, body: BB)
         -> Result<RequestRecord<AsyncBodyImage>, http::Error>
         where BB: Into<Bytes>
     {
@@ -381,7 +385,7 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body } })
     }
 
-    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
+    fn record_body_image(self, body: BodyImage, tune: &Tunables)
         -> Result<RequestRecord<AsyncBodyImage>, http::Error>
     {
         let request = self.body(AsyncBodyImage::new(body.clone(), tune))?;
