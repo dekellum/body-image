@@ -344,6 +344,9 @@ impl Stream for AsyncBodyImage {
     }
 }
 
+// Safety: FIXME
+impl Unpin for AsyncBodyImage {}
+
 impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
     fn record(self) -> Result<RequestRecord<AsyncBodyImage>, http::Error> {
         let request = {
