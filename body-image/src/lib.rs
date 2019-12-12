@@ -54,7 +54,6 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, BufMut};
 
-use http;
 use log::{debug, warn};
 use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
