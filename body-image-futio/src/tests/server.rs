@@ -6,8 +6,8 @@ use std::pin::Pin;
 use std::time::{Duration};
 
 use bytes::Bytes;
-use futures::future::{FutureExt, TryFutureExt};
-use futures::stream::{StreamExt, TryStreamExt};
+use futures::future::{FutureExt};
+use futures::stream::{FuturesUnordered, StreamExt, TryStreamExt};
 use http::{Request, Response};
 use tao_log::{debug, debugv, warn};
 
@@ -19,8 +19,11 @@ use hyper::client::{Client, HttpConnector};
 use hyper::server::conn::Http;
 use hyper::service::service_fn;
 
-#[cfg(feature = "may_fail")] use futures::stream::FuturesUnordered;
-#[cfg(feature = "may_fail")] use hyper::service::make_service_fn;
+#[cfg(feature = "may_fail")]
+use hyper::service::make_service_fn;
+
+#[cfg(feature = "may_fail")]
+use futures::future::{TryFutureExt};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 
@@ -35,23 +38,26 @@ use crate::logger::test_logger;
 // Return a tuple of (serv: impl Future, url: String) where serv will service a
 // single request via the passed function, and the url to access it via a local
 // tcp port.
-macro_rules! one_service {
-    ($s:ident) => {{
+macro_rules! service {
+    ($c:literal, $s:ident) => {{
         let (mut listener, addr) = local_bind().unwrap();
         let fut = async move {
-            let mut incoming = listener.incoming();
-            let socket = incoming.next()
-                .await
-                .expect("some")
-                .expect("socket");
-            socket.set_nodelay(true).expect("nodelay");
-            Http::new()
-                .serve_connection(socket, service_fn($s))
-                .await
+            for i in 0..$c {
+                let mut incoming = listener.incoming();
+                let socket = incoming.next()
+                    .await
+                    .expect("some")
+                    .expect("socket");
+                socket.set_nodelay(true).expect("nodelay");
+                let res = Http::new()
+                    .serve_connection(socket, service_fn($s))
+                    .await;
+                if let Err(e) = res {
+                    warn!("On service! [{}]: {}", i, e);
+                    break;
+                }
+            }
         };
-        let fut = fut
-              .map_err(|e| warn!("On one_service connection: {}", e))
-              .map(|_| ());
         (format!("http://{}", &addr), fut)
     }}
 }
@@ -76,7 +82,7 @@ macro_rules! server {
 fn post_echo_body() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = one_service!(echo);
+        let (url, srv) = service!(1, echo);
         let jh = spawn(srv);
         let tune = Tuner::new()
             .set_buffer_size_fs(17)
@@ -103,7 +109,7 @@ fn post_echo_body() {
 fn post_echo_async_body() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = one_service!(echo_async);
+        let (url, srv) = service!(1, echo_async);
         let jh = spawn(srv);
         let tune = Tuner::new()
             .set_buffer_size_fs(17)
@@ -129,7 +135,7 @@ fn post_echo_async_body() {
 // FIXME: Unreliable due to lack of well timed server shutdown?
 #[cfg(feature = "may_fail")]
 #[test]
-fn post_echo_async_body_multi() {
+fn post_echo_async_body_multi_server() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
         let (url, srv) = server!(echo_async);
@@ -147,11 +153,31 @@ fn post_echo_async_body_multi() {
 }
 
 #[test]
+fn post_echo_async_body_multi() {
+    assert!(test_logger());
+    let res = new_limited_runtime().block_on(async {
+        let (url, srv) = service!(20, echo_async);
+        let jh = spawn(srv);
+        let tune = Tuner::new()
+            .set_buffer_size_fs(17)
+            .finish();
+        let futures: FuturesUnordered<_> = (0..20).map(|i| {
+            let body = fs_body_image(445 + i);
+            spawn(post_body_req::<AsyncBodyImage>(&url, body, &tune))
+        }).collect();
+        let res = futures.collect::<Vec<_>>() .await;
+        let _ = jh. await;
+        res
+    });
+    assert_eq!(20, res.iter().filter(|r| r.is_ok()).count());
+}
+
+#[test]
 #[cfg(feature = "mmap")]
 fn post_echo_async_body_mmap_copy() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = one_service!(echo_async);
+        let (url, srv) = service!(1, echo_async);
         let jh = spawn(srv);
         let tune = Tuner::new()
             .set_buffer_size_fs(17)
@@ -180,7 +206,7 @@ fn post_echo_async_body_mmap_copy() {
 fn post_echo_uni_body_mmap() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = one_service!(echo_uni_mmap);
+        let (url, srv) = service!(1, echo_uni_mmap);
         let jh = spawn(srv);
         let tune = Tuner::new()
             .set_buffer_size_fs(2048)
@@ -207,7 +233,7 @@ fn post_echo_uni_body_mmap() {
 fn timeout_before_response() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = one_service!(delayed);
+        let (url, srv) = service!(1, delayed);
         let jh = spawn(srv);
         let tune = Tuner::new()
             .set_res_timeout(Duration::from_millis(10))
@@ -234,7 +260,7 @@ fn timeout_before_response() {
 fn timeout_during_streaming() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = one_service!(delayed);
+        let (url, srv) = service!(1, delayed);
         let jh = spawn(srv);
         let tune = Tuner::new()
             .unset_res_timeout() // workaround, see *_race version of test below
@@ -262,10 +288,10 @@ fn timeout_during_streaming() {
 fn timeout_during_streaming_race() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = one_service!(delayed);
+        let (url, srv) = service!(1, delayed);
         let jh = spawn(srv);
         let tune = Tuner::new()
-            // Correct test assertion, but this may fail on CI due to timing
+            // Correct test assertion, but this may fail due to timing
             // issues
             .set_res_timeout(Duration::from_millis(590))
             .set_body_timeout(Duration::from_millis(600))
