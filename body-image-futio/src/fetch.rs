@@ -1,5 +1,4 @@
 use std::future::Future;
-use std::pin::Pin;
 
 use futures::{
     future::{Either, FutureExt as _, TryFutureExt},
@@ -120,7 +119,7 @@ async fn resp_future(monolog: Monolog, tune: Tunables)
     let mut async_body = AsyncBodySink::new(bsink, tune);
 
     body.err_into::<FutioError>()
-        .forward(unsafe { Pin::new_unchecked(&mut async_body)})
+        .forward(&mut async_body)
         .await?;
 
     Ok(InDialog {

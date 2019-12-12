@@ -236,3 +236,5 @@ impl Sink<Bytes> for AsyncBodySink {
         self.poll_flush(cx)
     }
 }
+
+impl Unpin for AsyncBodySink {}

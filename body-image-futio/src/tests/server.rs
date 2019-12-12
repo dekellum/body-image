@@ -2,7 +2,6 @@ use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
 use std::net::TcpListener as StdTcpListener;
-use std::pin::Pin;
 use std::time::{Duration};
 
 use bytes::Bytes;
@@ -330,7 +329,7 @@ async fn echo_async(req: Request<Body>)
     );
     req.into_body()
         .err_into::<FutioError>()
-        .forward(unsafe { Pin::new_unchecked(&mut asink) })
+        .forward(&mut asink)
         .await?;
 
     let tune = Tuner::new().set_buffer_size_fs(4972).finish();
@@ -356,7 +355,7 @@ async fn echo_uni_mmap(req: Request<Body>)
     );
     req.into_body()
         .err_into::<FutioError>()
-        .forward(unsafe { Pin::new_unchecked(&mut asink) })
+        .forward(&mut asink)
         .await?;
 
     let tune = Tuner::new().set_buffer_size_fs(4972).finish();

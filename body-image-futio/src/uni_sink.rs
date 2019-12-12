@@ -227,3 +227,5 @@ impl Sink<UniBodyBuf> for UniBodySink {
         self.poll_flush(cx)
     }
 }
+
+impl Unpin for UniBodySink {}

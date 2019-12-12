@@ -1,5 +1,4 @@
 use std::future::Future;
-use std::pin::Pin;
 use blocking_permit::DispatchPool;
 use bytes::Bytes;
 use futures::{
@@ -47,7 +46,7 @@ fn local_runtime() -> tokio::runtime::Runtime {
 
 fn empty_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
     where St: StreamWrapper + TryStream + StreamExt,
-          Sk: SinkWrapper<B> + Sink<B, Error=FutioError>,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
@@ -62,7 +61,7 @@ fn empty_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 
         body.err_into::<FutioError>()
             .map_ok(B::from)
-            .forward(unsafe { Pin::new_unchecked(&mut asink) })
+            .forward(&mut asink)
             .await?;
 
         let bsink = asink.into_inner();
@@ -114,7 +113,7 @@ fn transfer_uni_empty_th() {
 
 fn small_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
     where St: StreamWrapper + TryStream + StreamExt,
-          Sk: SinkWrapper<B> + Sink<B, Error=FutioError>,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
@@ -129,7 +128,7 @@ fn small_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 
         body.err_into::<FutioError>()
             .map_ok(B::from)
-            .forward(unsafe { Pin::new_unchecked(&mut asink) })
+            .forward(&mut asink)
             .await?;
 
         let bsink = asink.into_inner();
@@ -181,7 +180,7 @@ fn transfer_uni_small_th() {
 
 fn fs_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
     where St: StreamWrapper + TryStream + StreamExt,
-          Sk: SinkWrapper<B> + Sink<B, Error=FutioError>,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
@@ -199,7 +198,7 @@ fn fs_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 
         body.err_into::<FutioError>()
             .map_ok(B::from)
-            .forward(unsafe { Pin::new_unchecked(&mut asink) })
+            .forward(&mut asink)
             .await?;
 
         let bsink = asink.into_inner();
@@ -251,7 +250,7 @@ fn transfer_uni_fs_th() {
 
 fn fs_back_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
     where St: StreamWrapper + TryStream + StreamExt,
-          Sk: SinkWrapper<B> + Sink<B, Error=FutioError>,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
@@ -272,7 +271,7 @@ fn fs_back_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 
         body.err_into::<FutioError>()
             .map_ok(B::from)
-            .forward(unsafe { Pin::new_unchecked(&mut asink) })
+            .forward(&mut asink)
             .await?;
 
         let bsink = asink.into_inner();
@@ -354,7 +353,7 @@ fn transfer_uni_fs_back_th_multi() {
 #[cfg(feature = "mmap")]
 fn fs_map_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
     where St: StreamWrapper + TryStream + StreamExt,
-          Sk: SinkWrapper<B> + Sink<B, Error=FutioError>,
+          Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
@@ -376,7 +375,7 @@ fn fs_map_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 
         body.err_into::<FutioError>()
             .map_ok(B::from)
-            .forward(unsafe { Pin::new_unchecked(&mut asink) })
+            .forward(&mut asink)
             .await?;
 
         let bsink = asink.into_inner();
