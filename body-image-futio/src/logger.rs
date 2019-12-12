@@ -1,8 +1,6 @@
-use std;
 use std::sync::Once;
 use std::borrow::Cow;
 
-use fern;
 use tao_log::log;
 
 use crate::Flaw;

@@ -43,8 +43,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use bytes::Bytes;
-use http;
-use hyper;
 use lazy_static::lazy_static;
 use tao_log::warn;
 use blocking_permit::Semaphore;

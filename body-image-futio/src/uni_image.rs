@@ -15,7 +15,6 @@ use blocking_permit::{
 };
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::stream::Stream;
-use http;
 use olio::fs::rc::ReadSlice;
 use tao_log::{debug, info, warn};
 
