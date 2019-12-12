@@ -171,7 +171,6 @@ impl AsyncImageState {
                     &mut *(buf.bytes_mut()
                            as *mut [mem::MaybeUninit<u8>] as *mut [u8])
                 };
-
                 match rs.read(&mut b[..bs]) {
                     Ok(0) => Ok(None),
                     Ok(len) => {
@@ -187,7 +186,7 @@ impl AsyncImageState {
                 // This can only copy via *bytes* `copy_from_slice`.
                 match mmap.tmp_advise(
                     MemAdvice::Sequential,
-                    || Ok(Bytes::from(&mmap[..])))
+                    || Ok(Bytes::copy_from_slice(&mmap[..])))
                 {
                     Ok(b) => {
                         debug!(
@@ -314,8 +313,8 @@ impl Stream for AsyncBodyImage {
                 let f = blocking_permit_future(&BLOCKING_SET);
                 this.delegate = Delegate::Permit(f);
             }
-            let s = unsafe { Pin::new_unchecked(this) };
             // recurse once (needed for correct waking)
+            let s = unsafe { Pin::new_unchecked(this) };
             return s.poll_next(cx);
         }
 

@@ -340,9 +340,9 @@ fn transfer_uni_fs_back_th() {
 #[cfg(feature = "mmap")]
 fn transfer_uni_fs_back_th_multi() {
     assert!(test_logger());
-    let rt = th_runtime();
+    let mut rt = th_runtime();
     let futures: FuturesUnordered<_> = (0..20).map(|_| {
-        rt.spawn(fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>());
+        rt.spawn(fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>())
     }).collect();
     let join = rt.spawn(async {
         let c = futures.collect::<Vec<_>>() .await;
@@ -404,7 +404,7 @@ fn transfer_fs_map_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
     let task = fs_map_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
-    rt.block_on(rt.spawn(task)).unwrap();
+    rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
 #[test]
@@ -425,5 +425,5 @@ fn transfer_uni_fs_map_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
     let task = fs_map_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    rt.block_on(rt.spawn(task)).unwrap();
+    rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }

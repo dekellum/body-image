@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 
 use blocking_permit::{
     blocking_permit_future, BlockingPermitFuture,
-    dispatch_rx, DispatchRx, Dispatched,
+    dispatch_rx, Dispatched, is_dispatch_pool_registered
 };
 use futures::sink::Sink;
 use tao_log::debug;
@@ -32,7 +32,7 @@ pub struct UniBodySink {
 
 #[derive(Debug)]
 enum Delegate {
-    Dispatch(DispatchBlocking<(Result<(), BodyError>, BodySink)>),
+    Dispatch(Dispatched<(Result<(), BodyError>, BodySink)>),
     Permit(BlockingPermitFuture<'static>),
     None
 }
@@ -95,7 +95,8 @@ impl UniBodySink {
                 }
             }
             Delegate::Permit(ref mut pf) => {
-                match Pin::new(pf).poll(cx) {
+                let pf = unsafe { Pin::new_unchecked(pf) };
+                match pf.poll(cx) {
                     Poll::Pending => return Ok(Some(buf)),
                     Poll::Ready(Ok(p)) => {
                         self.delegate = Delegate::None;
@@ -130,44 +131,42 @@ impl UniBodySink {
 
         // Otherwise we'll need a permit or to dispatch (and exit early)
         if permit.is_none() {
-            match blocking_permit_future(&BLOCKING_SET) {
-                Ok(f) => {
-                    self.delegate = Delegate::Permit(f);
-                    // Ensure re-poll with same chunk
-                    cx.waker().wake_by_ref();
-                    return Ok(Some(buf));
-                }
-                Err(IsReactorThread) => {
-                    let mut body = self.body.take().unwrap();
-                    let temp_dir = self.tune.temp_dir().to_owned();
-                    self.delegate = Delegate::Dispatch(dispatch_rx(move || {
-                        if body.is_ram() {
-                            debug!("to write back file (dispatch, len: {})", new_len);
-                            if let Err(e) = body.write_back(temp_dir) {
-                                return (Err(e), body);
-                            }
+            if is_dispatch_pool_registered() {
+                let mut body = self.body.take().unwrap();
+                let temp_dir = self.tune.temp_dir().to_owned();
+                self.delegate = Delegate::Dispatch(dispatch_rx(move || {
+                    if body.is_ram() {
+                        debug!("to write back file (dispatch, len: {})", new_len);
+                        if let Err(e) = body.write_back(temp_dir) {
+                            return (Err(e), body);
                         }
-                        debug!("to write buf (dispatch, len: {})", buf.len());
-                        let res = body.write_all(&buf);
-                        (res, body)
-                    }));
-                    // Ensure re-poll with a new empty buffer
-                    cx.waker().wake_by_ref();
-                    return Ok(Some(UniBodyBuf::empty()));
-                }
+                    }
+                    debug!("to write buf (dispatch, len: {})", buf.len());
+                    let res = body.write_all(&buf);
+                    (res, body)
+                }).unwrap());
+                // Ensure re-poll with a new empty buffer
+                cx.waker().wake_by_ref();
+                return Ok(Some(UniBodyBuf::empty()));
+            } else {
+                let f = blocking_permit_future(&BLOCKING_SET);
+                self.delegate = Delegate::Permit(f);
+                // Ensure re-poll with same chunk
+                cx.waker().wake_by_ref();
+                return Ok(Some(buf));
             }
         }
 
         // If still Ram at this point, needs to be written back (blocking)
         if self.body.as_ref().unwrap().is_ram() {
-            permit.unwrap().run_unwrap(|| {
+            permit.unwrap().run(|| {
                 debug!("to write back file (blocking, len: {})", new_len);
                 self.body.as_mut().unwrap().write_back(self.tune.temp_dir())?;
                 debug!("to write buf (blocking, len: {})", buf.len());
                 self.body.as_mut().unwrap().write_all(&buf)
             })?;
         } else {
-            permit.unwrap().run_unwrap(|| {
+            permit.unwrap().run(|| {
                 debug!("to write buf (blocking, len: {})", buf.len());
                 self.body.as_mut().unwrap().write_all(&buf)
             })?;
@@ -195,22 +194,24 @@ impl Sink<UniBodyBuf> for UniBodySink {
         self.poll_flush(cx)
     }
 
-    fn start_send(mut self: Pin<&mut Self>, buf: UniBodyBuf)
+    fn start_send(self: Pin<&mut Self>, buf: UniBodyBuf)
         -> Result<(), FutioError>
     {
-        assert!(self.buf.is_none());
-        self.buf = Some(buf);
+        let this = unsafe { self.get_unchecked_mut() };
+        assert!(this.buf.is_none());
+        this.buf = Some(buf);
         Ok(())
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Result<(), FutioError>>
     {
-        if let Some(buf) = self.buf.take() {
-            match self.poll_send(cx, buf) {
+        let this = unsafe { self.get_unchecked_mut() };
+        if let Some(buf) = this.buf.take() {
+            match this.poll_send(cx, buf) {
                 Ok(None) => Poll::Ready(Ok(())),
                 Ok(s @ Some(_)) => {
-                    self.buf = s;
+                    this.buf = s;
                     Poll::Pending
                 }
                 Err(e) => Poll::Ready(Err(e))

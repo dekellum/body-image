@@ -11,7 +11,7 @@ use std::vec::IntoIter;
 
 use blocking_permit::{
     blocking_permit_future, BlockingPermitFuture,
-    dispatch_rx, Dispatched, DispatchRx,
+    dispatch_rx, Dispatched, is_dispatch_pool_registered,
 };
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::stream::Stream;
@@ -49,7 +49,7 @@ pub struct UniBodyImage {
 
 #[derive(Debug)]
 enum Delegate {
-    Dispatch(DispatchBlocking<(
+    Dispatch(Dispatched<(
         Result<Option<UniBodyBuf>, io::Error>,
         UniBodyState
     )>),
@@ -117,13 +117,11 @@ enum BufState {
 
 impl UniBodyBuf {
     pub(crate) fn empty() -> UniBodyBuf {
-        UniBodyBuf::from_bytes(Bytes::with_capacity(0))
+        UniBodyBuf::from_bytes(Bytes::new())
     }
 
-    fn from_bytes<B>(b: B) -> UniBodyBuf
-        where B: IntoBuf<Buf=Cursor<Bytes>>
-    {
-        UniBodyBuf { buf: BufState::Bytes(b.into_buf()) }
+    fn from_bytes(b: Bytes) -> UniBodyBuf {
+        UniBodyBuf { buf: BufState::Bytes(Cursor::new(b)) }
     }
 
     fn from_mmap(mb: MemMapBuf) -> UniBodyBuf {
@@ -209,7 +207,11 @@ impl UniBodyState {
             UniBodyState::File { ref mut rs, bsize } => {
                 let bs = cmp::min(bsize, avail) as usize;
                 let mut buf = BytesMut::with_capacity(bs);
-                match rs.read(unsafe { &mut buf.bytes_mut()[..bs] }) {
+                let b = unsafe {
+                    &mut *(buf.bytes_mut()
+                           as *mut [mem::MaybeUninit<u8>] as *mut [u8])
+                };
+                match rs.read(&mut b[..bs]) {
                     Ok(0) => Ok(None),
                     Ok(len) => {
                         unsafe { buf.advance_mut(len); }
@@ -241,12 +243,12 @@ impl Stream for UniBodyImage {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Option<Self::Item>>
     {
-        let this = self.get_mut();
+        let this = unsafe { self.get_unchecked_mut() };
 
         // Handle any delegate futures (new permit or early exit)
         let permit = match this.delegate {
             Delegate::Dispatch(ref mut db) => {
-                info!("delegate poll to DispatchBlocking");
+                info!("delegate poll to Dispatched");
                 let (poll_res, rstate) = match Pin::new(&mut *db).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
@@ -271,7 +273,8 @@ impl Stream for UniBodyImage {
                 return poll_res;
             }
             Delegate::Permit(ref mut pf) => {
-                match Pin::new(pf).poll(cx) {
+                let pf = unsafe { Pin::new_unchecked(pf) };
+                match pf.poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Ok(p)) => {
                         this.delegate = Delegate::None;
@@ -302,26 +305,25 @@ impl Stream for UniBodyImage {
 
         // Otherwise we'll need a permit or to dispatch (and exit early)
         if permit.is_none() {
-            match blocking_permit_future(&BLOCKING_SET) {
-                Ok(f) => {
-                    this.delegate = Delegate::Permit(f);
-                }
-                Err(IsReactorThread) => {
-                    let mut st = mem::replace(
-                        &mut this.state,
-                        UniBodyState::Delegated
-                    );
-                    this.delegate = Delegate::Dispatch(dispatch_rx(move || {
-                        (st.read_next(avail), st)
-                    }));
-                },
+            if is_dispatch_pool_registered() {
+                let mut st = mem::replace(
+                    &mut this.state,
+                    UniBodyState::Delegated
+                );
+                this.delegate = Delegate::Dispatch(dispatch_rx(move || {
+                    (st.read_next(avail), st)
+                }).unwrap());
+            } else {
+                let f = blocking_permit_future(&BLOCKING_SET);
+                this.delegate = Delegate::Permit(f);
             }
             // recurse once (needed for correct waking)
-            return Pin::new(this).poll_next(cx);
+            let s = unsafe { Pin::new_unchecked(this) };
+            return s.poll_next(cx);
         }
 
         // Use permit to run the blocking operation on thread
-        let res = permit.unwrap().run_unwrap(|| {
+        let res = permit.unwrap().run(|| {
             match this.state.read_next(avail) {
                 Ok(Some(b)) => Poll::Ready(Some(Ok(b))),
                 Ok(None) => Poll::Ready(None),
