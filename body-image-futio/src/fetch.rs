@@ -26,6 +26,8 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     let mut rt = tokio::runtime::Builder::new()
         .num_threads(2)
         .threaded_scheduler()
+        .enable_io()
+        .enable_time()
         .build()
         .unwrap();
 
