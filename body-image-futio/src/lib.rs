@@ -397,7 +397,7 @@ mod logger;
 mod tests {
     mod forward;
 
-    //FIXME: mod server;
+    mod server;
 
     /// These tests may fail because they depend on public web servers
     // #[cfg(feature = "may_fail")]
