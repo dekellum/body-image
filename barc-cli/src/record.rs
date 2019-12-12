@@ -1,6 +1,3 @@
-use http;
-use hyper;
-
 use barc::{BarcFile, CompressStrategy, Record, TryFrom};
 use body_image::Tunables;
 use body_image_futio::{
