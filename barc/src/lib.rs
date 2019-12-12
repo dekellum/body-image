@@ -38,8 +38,6 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::path::Path;
 
 use bytes::{BytesMut, BufMut};
-use http;
-use httparse;
 use http::header::{HeaderName, HeaderValue};
 use tao_log::{debug, warn};
 use olio::fs::rc::{ReadPos, ReadSlice};
