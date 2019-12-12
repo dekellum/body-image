@@ -19,7 +19,7 @@ use crate::{
 /// internally, waiting with timeout, and dropping these on completion.
 pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     -> Result<Dialog, FutioError>
-    where B: hyper::body::HttpBody + Send + Unpin + 'static,
+    where B: hyper::body::HttpBody + Send + 'static,
           B::Data: Send + Unpin,
           B::Error: Into<Flaw>
 {
@@ -37,11 +37,6 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
         .map_err(|e| FutioError::Other(Box::new(e)))?
 }
 
-use hyper::service::Service;
-use hyper::Uri;
-use tokio::io::{AsyncRead, AsyncWrite};
-use hyper::client::connect::Connection;
-
 /// Given a suitable `hyper::Client` and `RequestRecord`, return a
 /// `Future<Output=Result<Dialog, FutioError>>.  The provided `Tunables`
 /// governs timeout intervals (initial response and complete body) and if the
@@ -51,12 +46,9 @@ pub fn request_dialog<CN, B>(
     rr: RequestRecord<B>,
     tune: &Tunables)
     -> impl Future<Output=Result<Dialog, FutioError>> + Send + 'static
-    where CN: Service<Uri> + Clone + Send + Sync + 'static,
-          CN::Response: Connection + AsyncRead + AsyncWrite + Send + Unpin + 'static,
-          CN::Future: Send + Unpin + 'static,
-          CN::Error: Into<Flaw>,
-          B: hyper::body::HttpBody + Send + Unpin + 'static,
-          B::Data: Send + Unpin,
+    where CN: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+          B: hyper::body::HttpBody + Send + 'static,
+          B::Data: Send,
           B::Error: Into<Flaw>
 {
     let prolog = rr.prolog;
