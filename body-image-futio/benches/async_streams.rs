@@ -11,8 +11,9 @@ use blocking_permit::{
     DispatchPool,
     register_dispatch_pool, deregister_dispatch_pool
 };
-use futures::future;
-use futures::stream::{Stream, StreamExt};
+use futures_core::stream::Stream;
+use futures_util::future;
+use futures_util::stream::StreamExt;
 use rand::seq::SliceRandom;
 use test::Bencher;
 
