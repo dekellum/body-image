@@ -5,8 +5,10 @@ use std::net::TcpListener as StdTcpListener;
 use std::time::{Duration};
 
 use bytes::Bytes;
-use futures::future::{FutureExt};
-use futures::stream::{FuturesUnordered, StreamExt, TryStreamExt};
+use futures_util::{
+    future::{FutureExt},
+    stream::{FuturesUnordered, StreamExt, TryStreamExt}
+};
 use http::{Request, Response};
 use tao_log::{debug, debugv, warn};
 
@@ -22,7 +24,7 @@ use hyper::service::service_fn;
 use hyper::service::make_service_fn;
 
 #[cfg(feature = "may_fail")]
-use futures::future::{TryFutureExt};
+use futures_util::future::{TryFutureExt};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 

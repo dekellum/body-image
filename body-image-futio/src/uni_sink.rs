@@ -7,7 +7,7 @@ use blocking_permit::{
     blocking_permit_future, BlockingPermitFuture,
     dispatch_rx, Dispatched, is_dispatch_pool_registered
 };
-use futures::sink::Sink;
+use futures_sink::Sink;
 use tao_log::debug;
 
 use body_image::{BodyError, BodySink, Tunables};

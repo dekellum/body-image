@@ -14,7 +14,7 @@ use blocking_permit::{
     dispatch_rx, Dispatched, is_dispatch_pool_registered,
 };
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures::stream::Stream;
+use futures_core::stream::Stream;
 use olio::fs::rc::ReadSlice;
 use tao_log::{debug, info, warn};
 

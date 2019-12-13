@@ -1,10 +1,10 @@
 use std::future::Future;
 use blocking_permit::DispatchPool;
 use bytes::Bytes;
-use futures::{
-    sink::Sink,
-    stream::{FuturesUnordered, StreamExt, TryStream, TryStreamExt},
-};
+
+use futures_core::TryStream;
+use futures_util::stream::{FuturesUnordered, StreamExt, TryStreamExt};
+use futures_sink::Sink;
 
 use body_image::{BodySink, BodyImage, Tunables, Tuner};
 

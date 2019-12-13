@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use futures::{
+use futures_util::{
     future::{Either, FutureExt as _, TryFutureExt},
     stream::{StreamExt, TryStreamExt},
 };
