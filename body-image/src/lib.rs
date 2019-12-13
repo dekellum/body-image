@@ -991,7 +991,7 @@ pub struct Tunables {
     size_estimate_deflate:   u16,
     size_estimate_gzip:      u16,
     size_estimate_brotli:    u16,
-    temp_dir:                PathBuf,
+    temp_dir:                Arc<PathBuf>,
     res_timeout:             Option<Duration>,
     body_timeout:            Option<Duration>,
 }
@@ -1007,7 +1007,7 @@ impl Tunables {
             size_estimate_deflate:       4,
             size_estimate_gzip:          5,
             size_estimate_brotli:        6,
-            temp_dir:     env::temp_dir(),
+            temp_dir:     Arc::new(env::temp_dir()),
             res_timeout:  None,
             body_timeout: Some(Duration::from_secs(60)),
         }
@@ -1149,7 +1149,7 @@ impl Tuner {
     pub fn set_temp_dir<P>(&mut self, path: P) -> &mut Tuner
         where P: AsRef<Path>
     {
-        self.template.temp_dir = path.as_ref().into();
+        self.template.temp_dir = Arc::new(path.as_ref().into());
         self
     }
 
