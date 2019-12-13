@@ -3,14 +3,12 @@ members = [
     "body-image",
     "barc",
     "body-image-futio",
-# FIXME: disable temporarily
-#    "barc-cli",
+    "barc-cli",
 ]
 
 [patch.crates-io]
 "barc" = { path = "barc" }
-# FIXME: disable temporariliy
-# "barc-cli" = { path = "barc-cli" }
+"barc-cli" = { path = "barc-cli" }
 "body-image" = { path = "body-image" }
 "body-image-futio" = { path = "body-image-futio" }
 
