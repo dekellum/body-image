@@ -22,13 +22,13 @@ body-image = { version=">=1.4.0, <1.5", default-features=false }
 body-image-futio = { version=">=1.4.0, <1.5", optional=true, default-features=false }
 clap       = { version=">=2.31.2, <2.34", default-features=false, features=["wrap_help"] }
 fern       = { version=">=0.5.5, <0.6" }
-http       = { version=">=0.1.6, <0.2" }
-hyper      = { version=">=0.12.1, <0.13", optional=true }
+http       = { version=">=0.2.0, <0.3" }
+hyper      = { version=">=0.13.0, <0.14", default-features=false, features=["stream", "tcp"], optional=true }
 log        = { version=">=0.4.4, <0.5" }
 
 [features]
 default = ["mmap", "brotli", "futio"]
-futio   = ["hyper", "body-image-futio"]
+futio   = ["hyper", "body-image-futio", "body-image-futio/hyper_http"]
 mmap    = ["barc/mmap", "body-image/mmap", "body-image-futio/mmap"]
 brotli  = ["barc/brotli", "body-image-futio/brotli"]
 
