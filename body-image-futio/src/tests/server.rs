@@ -412,7 +412,7 @@ fn ram_body_image(csize: usize, count: usize) -> BodyImage {
 
 fn get_req<T>(url: &str, tune: &Tunables)
     -> impl Future<Output=Result<Dialog, FutioError>> + Send
-    where T: hyper::body::HttpBody + Send + 'static,
+    where T: http_body::Body + Send + 'static,
           T::Data: Send,
           T::Error: Into<Flaw>,
           http::request::Builder: RequestRecorder<T>
@@ -430,7 +430,7 @@ fn get_req<T>(url: &str, tune: &Tunables)
 
 fn post_body_req<T>(url: &str, body: BodyImage, tune: &Tunables)
     -> impl Future<Output=Result<Dialog, FutioError>> + Send
-    where T: hyper::body::HttpBody + Send + 'static,
+    where T: http_body::Body + Send + 'static,
           T::Data: Send,
           T::Error: Into<Flaw>,
           http::request::Builder: RequestRecorder<T>

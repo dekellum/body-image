@@ -18,7 +18,7 @@ use crate::{
 /// internally, waiting with timeout, and dropping these on completion.
 pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
     -> Result<Dialog, FutioError>
-    where B: hyper::body::HttpBody + Send + 'static,
+    where B: http_body::Body + Send + 'static,
           B::Data: Send + Unpin,
           B::Error: Into<Flaw>
 {
@@ -48,7 +48,7 @@ pub fn request_dialog<CN, B>(
     tune: &Tunables)
     -> impl Future<Output=Result<Dialog, FutioError>> + Send + 'static
     where CN: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
-          B: hyper::body::HttpBody + Send + 'static,
+          B: http_body::Body + Send + 'static,
           B::Data: Send,
           B::Error: Into<Flaw>
 {

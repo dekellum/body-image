@@ -26,7 +26,7 @@ use crate::{
 };
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
-/// `hyper::body::HttpBody` traits, using the custom
+/// `http_body::Body` traits, using the custom
 /// [`UniBodyBuf`](struct.UniBodyBuf.html) item buffer type (instead of
 /// `Bytes`) for zero-copy `MemMap` support (*mmap* feature only).
 ///

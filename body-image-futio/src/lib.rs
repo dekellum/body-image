@@ -22,7 +22,7 @@
 //!   asynchronous input from a (e.g. `hyper::Body`) `Stream`.
 //!
 //! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
-//!   asynchronous output as a `Stream` and `hyper::body::HttpBody`.
+//!   asynchronous output as a `Stream` and `http_body::Body`.
 //!
 //! * Alternatively, [`UniBodySink`](struct.UniBodySink.html) and
 //!   [`UniBodyImage`](struct.UniBodyImage.html) offer zero-copy `MemMap`
@@ -315,7 +315,7 @@ impl InDialog {
 /// request fields (`method`, `uri`, `headers`) are recorded by `clone`, after
 /// finishing the request.
 pub trait RequestRecorder<B>
-    where B: hyper::body::HttpBody + Send
+    where B: http_body::Body + Send
 {
     /// Short-hand for completing the builder with an empty body, as is
     /// the case with many HTTP request methods (e.g. GET).
