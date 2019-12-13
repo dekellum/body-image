@@ -33,23 +33,20 @@
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
 
-#![deny(dead_code, unused_imports)]
+#![warn(dead_code, unused_imports)] //FIXME
 #![warn(rust_2018_idioms)]
 
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use bytes::Bytes;
-use lazy_static::lazy_static;
 use tao_log::warn;
-use blocking_permit::Semaphore;
 
 use body_image::{
     BodyImage, BodySink, BodyError, Encoding,
-    Prolog, RequestRecorded, Tunables,
+    Prolog, RequestRecorded,
 };
 
 #[cfg(feature = "hyper_http")]
@@ -59,6 +56,9 @@ use body_image::{Epilog, Dialog};
 /// possible to query and downcast the type via methods of
 /// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
+
+mod tune;
+pub use tune::{FutioTunables, FutioTuner};
 
 mod decode;
 pub use decode::{decode_res_body, find_encodings, find_chunked};
@@ -101,32 +101,6 @@ pub static BROWSE_ACCEPT: &str =
      application/xml;q=0.9, \
      */*;q=0.8";
 
-lazy_static! {
-    static ref SET_COUNT: AtomicUsize = AtomicUsize::new(1);
-    static ref BLOCKING_SET: Semaphore = Semaphore::new(true, SET_COUNT.load(Ordering::SeqCst));
-}
-
-/// Ensure that the set of allowed cocurrent blocking operations, used for all
-/// permit-based blocking in this crate, is at least the specified value,
-/// returning the actual current value (which may be higher or equal).
-pub fn ensure_min_blocking_set(min: usize) -> usize {
-    let mut old = SET_COUNT.load(Ordering::SeqCst);
-    while min > old {
-        match SET_COUNT.compare_exchange(
-            old, min,
-            Ordering::SeqCst, Ordering::SeqCst) {
-            Ok(_) => {
-                //FIXME: BLOCKING_SET.add_permits(min - old);
-                return min;
-            }
-            Err(o) => {
-                old = o;
-            }
-        }
-    }
-    old
-}
-
 /// Error enumeration for body-image-futio origin errors. This may be
 /// extended in the future so exhaustive matching is gently discouraged with
 /// an unused variant.
@@ -135,12 +109,12 @@ pub enum FutioError {
     /// Error from `BodySink` or `BodyImage`.
     Body(BodyError),
 
-    /// The `Tunables::res_timeout` duration was reached before receiving the
-    /// initial response.
+    /// The `FutioTunables::res_timeout` duration was reached before receiving
+    /// the initial response.
     ResponseTimeout(Duration),
 
-    /// The `Tunables::body_timeout` duration was reached before receiving the
-    /// complete response body.
+    /// The `FutioTunables::body_timeout` duration was reached before receiving
+    /// the complete response body.
     BodyTimeout(Duration),
 
     /// The content-length header exceeded `Tunables::max_body`.
@@ -337,7 +311,10 @@ pub trait RequestRecorder<B>
         where BB: Into<Bytes>;
 
     /// Complete the builder with a `BodyImage` for the request body.
-    fn record_body_image(self, body: BodyImage, tune: &Tunables)
+    ///
+    /// *Note*: Both `BodyImage` and `FutioTunables` are `Clone` (inexpensive),
+    /// so that can be done beforehand to preserve owned copies.
+    fn record_body_image(self, body: BodyImage, tune: FutioTunables)
         -> Result<RequestRecord<B>, http::Error>;
 }
 
@@ -379,7 +356,7 @@ impl RequestRecorder<hyper::Body> for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body } })
     }
 
-    fn record_body_image(self, body: BodyImage, tune: &Tunables)
+    fn record_body_image(self, body: BodyImage, tune: FutioTunables)
         -> Result<RequestRecord<hyper::Body>, http::Error>
     {
         let request = if !body.is_empty() {

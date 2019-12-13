@@ -8,29 +8,34 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use blocking_permit::{
-    DispatchPool,
+    DispatchPool, Semaphore,
     register_dispatch_pool, deregister_dispatch_pool
 };
 use futures_core::stream::Stream;
 use futures_util::future;
 use futures_util::stream::StreamExt;
+use lazy_static::lazy_static;
 use rand::seq::SliceRandom;
 use test::Bencher;
 
-use body_image::{BodyError, BodySink, BodyImage, Tunables, Tuner};
+use body_image::{BodyError, BodySink, BodyImage, Tuner};
 use body_image_futio::*;
+
+lazy_static! {
+    static ref BLOCKING_SET: Semaphore = Semaphore::new(true, 2);
+}
 
 // `AsyncBodyImage` in `Ram`, pre-gathered (single, contiguous buffer) and
 // used for each iteration.
 #[bench]
 fn stream_01_ram_pregather(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_ram_buffers(1024);
     let mut body = sink_data(sink).unwrap();
     body.gather();
     let mut rt = th_runtime();
     b.iter(|| {
-        let stream = AsyncBodyImage::new(body.clone(), &tune);
+        let stream = AsyncBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -38,12 +43,12 @@ fn stream_01_ram_pregather(b: &mut Bencher) {
 // `AsyncBodyImage` in `Ram`, scattered state
 #[bench]
 fn stream_02_ram(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_ram_buffers(1024);
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
-        let stream = AsyncBodyImage::new(body.clone(), &tune);
+        let stream = AsyncBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -51,12 +56,12 @@ fn stream_02_ram(b: &mut Bencher) {
 #[bench]
 // `UniBodyImage` in `Ram`, scattered state
 fn stream_03_ram_uni(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_ram_buffers(1024);
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
-        let stream = UniBodyImage::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -65,14 +70,14 @@ fn stream_03_ram_uni(b: &mut Bencher) {
 // iteration.
 #[bench]
 fn stream_04_ram_gather(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_ram_buffers(1024);
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
         let mut body = body.clone();
         body.gather();
-        let stream = AsyncBodyImage::new(body, &tune);
+        let stream = AsyncBodyImage::new(body, tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -80,12 +85,14 @@ fn stream_04_ram_gather(b: &mut Bencher) {
 // `AsyncBodyImage` in `FsRead`, default buffer size (64K), threaded runtime
 #[bench]
 fn stream_10_fsread(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTuner::new()
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
-        let stream = AsyncBodyImage::new(body.clone(), &tune);
+        let stream = AsyncBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -93,12 +100,14 @@ fn stream_10_fsread(b: &mut Bencher) {
 // `UniBodyImage` in `FsRead`, default buffer size (64K), threaded runtime.
 #[bench]
 fn stream_20_fsread_uni(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTuner::new()
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
-        let stream = UniBodyImage::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -107,13 +116,13 @@ fn stream_20_fsread_uni(b: &mut Bencher) {
 // dispatch pool.
 #[bench]
 fn stream_21_fsread_uni_dispatch(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let pool = DispatchPool::builder().pool_size(2).create();
     let mut rt = th_dispatch_runtime(pool);
     b.iter(|| {
-        let stream = UniBodyImage::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -122,13 +131,13 @@ fn stream_21_fsread_uni_dispatch(b: &mut Bencher) {
 // dispatch queue length 0.
 #[bench]
 fn stream_22_fsread_uni_dispatch_ql0(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let pool = DispatchPool::builder().pool_size(2).queue_length(0).create();
     let mut rt = th_dispatch_runtime(pool);
     b.iter(|| {
-        let stream = UniBodyImage::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -137,13 +146,13 @@ fn stream_22_fsread_uni_dispatch_ql0(b: &mut Bencher) {
 // direct run (no dispatch threads).
 #[bench]
 fn stream_22_fsread_uni_dispatch_direct(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let pool = DispatchPool::builder().pool_size(0).create();
     let mut rt = th_dispatch_runtime(pool);
     b.iter(|| {
-        let stream = UniBodyImage::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -155,12 +164,12 @@ fn stream_23_fsread_uni_dispatch_ct(b: &mut Bencher) {
     let pool = DispatchPool::builder().pool_size(2).create();
     register_dispatch_pool(pool);
 
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = local_runtime();
     b.iter(|| {
-        let stream = UniBodyImage::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
     deregister_dispatch_pool();
@@ -173,12 +182,12 @@ fn stream_24_fsread_uni_dispatch_ct_ql0(b: &mut Bencher) {
     let pool = DispatchPool::builder().pool_size(2).create();
     register_dispatch_pool(pool);
 
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = local_runtime();
     b.iter(|| {
-        let stream = UniBodyImage::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
     deregister_dispatch_pool();
@@ -191,12 +200,12 @@ fn stream_25_fsread_uni_dispatch_ct_direct(b: &mut Bencher) {
     let pool = DispatchPool::builder().pool_size(2).create();
     register_dispatch_pool(pool);
 
-    let tune = Tunables::default();
+    let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = local_runtime();
     b.iter(|| {
-        let stream = UniBodyImage::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
     deregister_dispatch_pool();
@@ -205,12 +214,15 @@ fn stream_25_fsread_uni_dispatch_ct_direct(b: &mut Bencher) {
 // `AsyncBodyImage` in `FsRead`, 8KiB buffer size
 #[bench]
 fn stream_30_fsread_8k(b: &mut Bencher) {
-    let tune = Tuner::new().set_buffer_size_fs(8 * 1024).finish();
+    let tune = FutioTuner::new()
+        .set_image(Tuner::new().set_buffer_size_fs(8 * 1024).finish())
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
-        let stream = AsyncBodyImage::new(body.clone(), &tune);
+        let stream = AsyncBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -218,12 +230,15 @@ fn stream_30_fsread_8k(b: &mut Bencher) {
 // `AsyncBodyImage` in `FsRead`, 128KiB buffer size
 #[bench]
 fn stream_31_fsread_128k(b: &mut Bencher) {
-    let tune = Tuner::new().set_buffer_size_fs(128 * 1024).finish();
+    let tune = FutioTuner::new()
+        .set_image(Tuner::new().set_buffer_size_fs(128 * 1024).finish())
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
-        let stream = AsyncBodyImage::new(body.clone(), &tune);
+        let stream = AsyncBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -231,12 +246,15 @@ fn stream_31_fsread_128k(b: &mut Bencher) {
 // `AsyncBodyImage` in `FsRead`, 1MiB buffer size
 #[bench]
 fn stream_32_fsread_1m(b: &mut Bencher) {
-    let tune = Tuner::new().set_buffer_size_fs(1024 * 1024).finish();
+    let tune = FutioTuner::new()
+        .set_image(Tuner::new().set_buffer_size_fs(1024 * 1024).finish())
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
-        let stream = AsyncBodyImage::new(body.clone(), &tune);
+        let stream = AsyncBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -244,12 +262,15 @@ fn stream_32_fsread_1m(b: &mut Bencher) {
 // `AsyncBodyImage` in `FsRead`, 4MiB buffer size
 #[bench]
 fn stream_33_fsread_4m(b: &mut Bencher) {
-    let tune = Tuner::new().set_buffer_size_fs(4 * 1024 * 1024).finish();
+    let tune = FutioTuner::new()
+        .set_image(Tuner::new().set_buffer_size_fs(4 * 1024 * 1024).finish())
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
-        let stream = AsyncBodyImage::new(body.clone(), &tune);
+        let stream = AsyncBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -257,13 +278,15 @@ fn stream_33_fsread_4m(b: &mut Bencher) {
 #[bench]
 // `UniBodyImage` in `MemMap`, mmap once ahead-of-time, zero-copy
 fn stream_40_mmap_uni_pre(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTuner::new()
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let mut body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     body.mem_map().unwrap();
     b.iter(|| {
-        let stream = UniBodyImage::new(body.clone(), &tune);
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -271,14 +294,16 @@ fn stream_40_mmap_uni_pre(b: &mut Bencher) {
 // `UniBodyImage` in `MemMap`, new mmap on each iteration, zero-copy
 #[bench]
 fn stream_41_mmap_uni(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTuner::new()
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
         let mut body = body.clone();
         body.mem_map().unwrap();
-        let stream = UniBodyImage::new(body, &tune);
+        let stream = UniBodyImage::new(body, tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }
@@ -287,14 +312,16 @@ fn stream_41_mmap_uni(b: &mut Bencher) {
 // copy to `Bytes`.
 #[bench]
 fn stream_42_mmap_copy(b: &mut Bencher) {
-    let tune = Tunables::default();
+    let tune = FutioTuner::new()
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let mut rt = th_runtime();
     b.iter(|| {
         let mut body = body.clone();
         body.mem_map().unwrap();
-        let stream = AsyncBodyImage::new(body, &tune);
+        let stream = AsyncBodyImage::new(body, tune.clone());
         summarize_stream(stream, &mut rt);
     });
 }

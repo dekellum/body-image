@@ -1,22 +1,27 @@
 use std::future::Future;
-use blocking_permit::DispatchPool;
-use bytes::Bytes;
 
+use blocking_permit::{DispatchPool, Semaphore};
+use bytes::Bytes;
 use futures_core::TryStream;
 use futures_util::stream::{FuturesUnordered, StreamExt, TryStreamExt};
 use futures_sink::Sink;
+use lazy_static::lazy_static;
 
-use body_image::{BodySink, BodyImage, Tunables, Tuner};
+use body_image::{BodySink, BodyImage, Tuner};
 
 use crate::{
-    ensure_min_blocking_set,
-    FutioError, AsyncBodyImage, AsyncBodySink,
+    AsyncBodyImage, AsyncBodySink,
+    FutioError, FutioTuner,
     SinkWrapper, StreamWrapper
 };
 use crate::logger::test_logger;
 
 #[cfg(feature = "mmap")]
 use crate::{UniBodyBuf, UniBodyImage, UniBodySink};
+
+lazy_static! {
+    static ref BLOCKING_TEST_SET: Semaphore = Semaphore::new(true, 3);
+}
 
 fn register_dispatch() {
     let pool = DispatchPool::builder().pool_size(2).create();
@@ -28,7 +33,6 @@ fn deregister_dispatch() {
 }
 
 fn th_runtime() -> tokio::runtime::Runtime {
-    assert_eq!(3, ensure_min_blocking_set(3));
     tokio::runtime::Builder::new()
         .num_threads(3)
         .threaded_scheduler()
@@ -50,8 +54,10 @@ fn empty_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
-    let tune = Tunables::default();
-    let body = St::new(BodyImage::empty(), &tune);
+    let tune = FutioTuner::new()
+        .set_blocking_semaphore(&BLOCKING_TEST_SET)
+        .finish();
+    let body = St::new(BodyImage::empty(), tune.clone());
 
     async move {
         let mut asink = Sk::new(
@@ -117,8 +123,10 @@ fn small_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
-    let tune = Tunables::default();
-    let body = St::new(BodyImage::from_slice("body"), &tune);
+    let tune = FutioTuner::new()
+        .set_blocking_semaphore(&BLOCKING_TEST_SET)
+        .finish();
+    let body = St::new(BodyImage::from_slice("body"), tune.clone());
 
     async move {
         let mut asink = Sk::new(
@@ -184,15 +192,18 @@ fn fs_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
-    let tune = Tuner::new().set_buffer_size_fs(173).finish();
-    let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
+    let tune = FutioTuner::new()
+        .set_image(Tuner::new().set_buffer_size_fs(173).finish())
+        .set_blocking_semaphore(&BLOCKING_TEST_SET)
+        .finish();
+    let mut in_body = BodySink::with_fs(tune.image().temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
     let in_body = in_body.prepare().unwrap();
-    let body = St::new(in_body, &tune);
+    let body = St::new(in_body, tune.clone());
 
     async move {
         let mut asink = Sk::new(
-            BodySink::with_fs(tune.temp_dir()).unwrap(),
+            BodySink::with_fs(tune.image().temp_dir()).unwrap(),
             tune
         );
 
@@ -254,14 +265,19 @@ fn fs_back_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
-    let tune = Tuner::new()
-        .set_buffer_size_fs(173)
-        .set_max_body_ram(15_000)
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_buffer_size_fs(173)
+                .set_max_body_ram(15_000)
+                .finish()
+        )
+        .set_blocking_semaphore(&BLOCKING_TEST_SET)
         .finish();
-    let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
+    let mut in_body = BodySink::with_fs(tune.image().temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
     let in_body = in_body.prepare().unwrap();
-    let body = St::new(in_body, &tune);
+    let body = St::new(in_body, tune.clone());
 
     async move {
         let mut asink = Sk::new(
@@ -357,15 +373,20 @@ fn fs_map_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
           B: From<<St as TryStream>::Ok>,
           St::Error: Into<FutioError>
 {
-    let tune = Tuner::new()
-        .set_buffer_size_fs(173)
-        .set_max_body_ram(15_000)
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_buffer_size_fs(173)
+                .set_max_body_ram(15_000)
+                .finish()
+        )
+        .set_blocking_semaphore(&BLOCKING_TEST_SET)
         .finish();
-    let mut in_body = BodySink::with_fs(tune.temp_dir()).unwrap();
+    let mut in_body = BodySink::with_fs(tune.image().temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
     let mut in_body = in_body.prepare().unwrap();
     in_body.mem_map().unwrap();
-    let body = St::new(in_body, &tune);
+    let body = St::new(in_body, tune.clone());
 
     async move {
         let mut asink = Sk::new(

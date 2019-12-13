@@ -1,9 +1,12 @@
 use tao_log::debugv;
 
-use body_image::{Recorded, Tunables};
+use body_image::Recorded;
 
-use crate::{ACCEPT_ENCODINGS, BROWSE_ACCEPT, fetch,
-            RequestRecord, RequestRecorder, user_agent};
+use crate::{
+    ACCEPT_ENCODINGS, BROWSE_ACCEPT,
+    fetch, FutioTunables,
+    RequestRecord, RequestRecorder, user_agent
+};
 use crate::logger::test_logger;
 
 fn get_request(url: &str)
@@ -22,10 +25,10 @@ fn get_request(url: &str)
 #[test]
 fn test_small_http() {
     assert!(test_logger());
-    let tune = Tunables::new();
+    let tune = FutioTunables::new();
     let req = get_request("http://gravitext.com").unwrap();
 
-    let dl = debugv!(fetch(req, &tune)).unwrap();
+    let dl = debugv!(fetch(req, tune)).unwrap();
 
     assert!(dl.res_body().is_ram());
     assert!(!dl.res_body().is_empty());
@@ -34,10 +37,10 @@ fn test_small_http() {
 #[test]
 fn test_small_https() {
     assert!(test_logger());
-    let tune = Tunables::new();
+    let tune = FutioTunables::new();
     let req = get_request("https://www.usa.gov").unwrap();
 
-    let dl = debugv!(fetch(req, &tune)).unwrap();
+    let dl = debugv!(fetch(req, tune)).unwrap();
     let dl = dl.clone(); // for coverage only
 
     assert!(dl.res_body().is_ram());
@@ -47,10 +50,10 @@ fn test_small_https() {
 #[test]
 fn test_not_found() {
     assert!(test_logger());
-    let tune = Tunables::new();
+    let tune = FutioTunables::new();
     let req = get_request("http://gravitext.com/no/existe").unwrap();
 
-    let dl = debugv!(fetch(req, &tune)).unwrap();
+    let dl = debugv!(fetch(req, tune)).unwrap();
 
     assert_eq!(dl.res_status().as_u16(), 404);
 

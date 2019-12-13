@@ -10,17 +10,17 @@ use bytes::Bytes;
 use futures_sink::Sink;
 use tao_log::debug;
 
-use body_image::{BodyError, BodySink, Tunables};
+use body_image::{BodyError, BodySink};
 
-use crate::{BLOCKING_SET, FutioError};
+use crate::{FutioError, FutioTunables};
 
 /// Trait construction of `Sink` wrapper types.
 pub trait SinkWrapper<T>: Sink<T> {
-    /// Wrap by consuming a `BodySink` and `Tunables` instances.
+    /// Wrap by consuming a `BodySink` and `FutioTunables` instances.
     ///
-    /// *Note*: `Tunables` is `Clone` (inexpensive), so that can be done
+    /// *Note*: `FutioTunables` is `Clone` (inexpensive), so that can be done
     /// beforehand to preserve an owned copy.
-    fn new(body: BodySink, tune: Tunables) -> Self;
+    fn new(body: BodySink, tune: FutioTunables) -> Self;
 
     /// Unwrap and return the `BodySink`.
     ///
@@ -36,15 +36,15 @@ pub trait SinkWrapper<T>: Sink<T> {
 /// (e.g. via `futures::Stream::forward`) to a `BodySink`, in a fully
 /// asynchronous fashion.
 ///
-/// `Tunables` are used during the streaming to decide when to write back a
-/// BodySink in `Ram` to `FsWrite`. This implementation uses permits or a
+/// `FutioTunables` are used during the streaming to decide when to write back
+/// a BodySink in `Ram` to `FsWrite`. This implementation uses permits or a
 /// dispatch pool for blocking operations including `BodySink::write_back` and
 /// `BodySink::write_all` (state `FsWrite`).
 #[derive(Debug)]
 pub struct AsyncBodySink {
     body: Option<BodySink>,
     delegate: Delegate,
-    tune: Tunables,
+    tune: FutioTunables,
     buf: Option<Bytes>
 }
 
@@ -56,11 +56,11 @@ enum Delegate {
 }
 
 impl AsyncBodySink {
-    /// Wrap by consuming a `BodySink` and `Tunables` instances.
+    /// Wrap by consuming a `BodySink` and `FutioTunables` instances.
     ///
-    /// *Note*: `Tunables` is `Clone` (inexpensive), so that can be done
+    /// *Note*: `FutioTunables` is `Clone` (inexpensive), so that can be done
     /// beforehand to preserve an owned copy.
-    pub fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
+    pub fn new(body: BodySink, tune: FutioTunables) -> AsyncBodySink {
         AsyncBodySink {
             body: Some(body),
             delegate: Delegate::None,
@@ -127,12 +127,14 @@ impl AsyncBodySink {
 
         // Early exit if too long
         let new_len = self.body.as_ref().unwrap().len() + (buf.len() as u64);
-        if new_len > self.tune.max_body() {
+        if new_len > self.tune.image().max_body() {
             return Err(BodyError::BodyTooLong(new_len).into());
         }
 
         // Ram doesn't need blocking permit (early exit)
-        if self.body.as_ref().unwrap().is_ram() && new_len <= self.tune.max_body_ram() {
+        if self.body.as_ref().unwrap().is_ram()
+            && new_len <= self.tune.image().max_body_ram()
+        {
             debug!("to save buf (len: {})", buf.len());
             self.body.as_mut().unwrap().write_all(&buf).map_err(FutioError::from)?;
             return Ok(None)
@@ -142,11 +144,11 @@ impl AsyncBodySink {
         if permit.is_none() {
             if is_dispatch_pool_registered() {
                 let mut body = self.body.take().unwrap();
-                let temp_dir = self.tune.temp_dir().to_owned();
+                let temp_dir = self.tune.image().temp_dir_rc();
                 self.delegate = Delegate::Dispatch(dispatch_rx(move || {
                     if body.is_ram() {
                         debug!("to write back file (dispatch, len: {})", new_len);
-                        if let Err(e) = body.write_back(temp_dir) {
+                        if let Err(e) = body.write_back(&*temp_dir) {
                             return (Err(e), body);
                         }
                     }
@@ -158,7 +160,11 @@ impl AsyncBodySink {
                 cx.waker().wake_by_ref();
                 return Ok(Some(vec!{}.into()));
             } else {
-                let f = blocking_permit_future(&BLOCKING_SET);
+                let f = blocking_permit_future(
+                    self.tune.blocking_semaphore()
+                        .expect("One of DispatchPool or \
+                                 blocking Semaphore required!")
+                );
                 self.delegate = Delegate::Permit(f);
                 // Ensure re-poll with same chunk
                 cx.waker().wake_by_ref();
@@ -170,7 +176,8 @@ impl AsyncBodySink {
         if self.body.as_ref().unwrap().is_ram() {
             permit.unwrap().run(|| {
                 debug!("to write back file (blocking, len: {})", new_len);
-                self.body.as_mut().unwrap().write_back(self.tune.temp_dir())?;
+                self.body.as_mut().unwrap()
+                    .write_back(self.tune.image().temp_dir())?;
                 debug!("to write buf (blocking, len: {})", buf.len());
                 self.body.as_mut().unwrap().write_all(&buf)
             })?;
@@ -185,7 +192,7 @@ impl AsyncBodySink {
 }
 
 impl SinkWrapper<Bytes> for AsyncBodySink {
-    fn new(body: BodySink, tune: Tunables) -> AsyncBodySink {
+    fn new(body: BodySink, tune: FutioTunables) -> AsyncBodySink {
         AsyncBodySink::new(body, tune)
     }
 

@@ -10,16 +10,16 @@ use std::vec::IntoIter;
 
 use blocking_permit::{
     blocking_permit_future, BlockingPermitFuture,
-    dispatch_rx, Dispatched, is_dispatch_pool_registered
+    dispatch_rx, Dispatched, is_dispatch_pool_registered,
 };
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_core::stream::Stream;
 use olio::fs::rc::ReadSlice;
 use tao_log::{debug, info, warn};
 
-use body_image::{BodyImage, ExplodedImage, Prolog, Tunables};
+use body_image::{BodyImage, ExplodedImage, Prolog};
 
-use crate::{BLOCKING_SET, RequestRecord, RequestRecorder};
+use crate::{FutioTunables, RequestRecord, RequestRecorder};
 
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
@@ -29,9 +29,9 @@ use crate::{BLOCKING_SET, RequestRecord, RequestRecorder};
 pub trait StreamWrapper: Stream {
     /// Wrap by consuming the `BodyImage` instance.
     ///
-    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
-    /// beforehand to preserve an owned copy.
-    fn new(body: BodyImage, tune: &Tunables) -> Self;
+    /// *Note*: `BodyImage` and `FutioTunables` are `Clone` (inexpensive), so
+    /// that can be done beforehand to preserve owned copies.
+    fn new(body: BodyImage, tune: FutioTunables) -> Self;
 }
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
@@ -45,8 +45,8 @@ pub trait StreamWrapper: Stream {
 /// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
 /// state. `BodyImage` in `Ram` is made available with zero-copy using a
 /// consuming iterator.  This implementation uses permits or a dispatch pool
-/// for blocking reads from `FsRead` state and when copying from `MemMap`
-/// state (see below).
+/// for blocking reads from `FsRead` state and when copying from `MemMap` state
+/// (see below).
 ///
 /// ## MemMap
 ///
@@ -67,7 +67,8 @@ pub struct AsyncBodyImage {
     state: AsyncImageState,
     delegate: Delegate,
     len: u64,
-    consumed: u64
+    consumed: u64,
+    tune: FutioTunables,
 }
 
 #[derive(Debug)]
@@ -82,7 +83,7 @@ enum Delegate {
 
 enum AsyncImageState {
     Ram(IntoIter<Bytes>),
-    File { rs: ReadSlice, bsize: u64 },
+    File(ReadSlice),
     #[cfg(feature = "mmap")]
     MemMap(MemHandle<Mmap>),
     Delegated,
@@ -91,9 +92,9 @@ enum AsyncImageState {
 impl AsyncBodyImage {
     /// Wrap by consuming the `BodyImage` instance.
     ///
-    /// *Note*: `BodyImage` is `Clone` (inexpensive), so that can be done
-    /// beforehand to preserve an owned copy.
-    pub fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
+    /// *Note*: `BodyImage` and `FutioTunables` are `Clone` (inexpensive), so
+    /// that can be done beforehand to preserve owned copies.
+    pub fn new(body: BodyImage, tune: FutioTunables) -> AsyncBodyImage {
         let len = body.len();
         match body.explode() {
             ExplodedImage::Ram(v) => {
@@ -102,17 +103,16 @@ impl AsyncBodyImage {
                     delegate: Delegate::None,
                     len,
                     consumed: 0,
+                    tune,
                 }
             }
             ExplodedImage::FsRead(rs) => {
                 AsyncBodyImage {
-                    state: AsyncImageState::File {
-                        rs,
-                        bsize: tune.buffer_size_fs() as u64
-                    },
+                    state: AsyncImageState::File(rs),
                     delegate: Delegate::None,
                     len,
                     consumed: 0,
+                    tune,
                 }
             }
             #[cfg(feature = "mmap")]
@@ -122,6 +122,7 @@ impl AsyncBodyImage {
                     delegate: Delegate::None,
                     len,
                     consumed: 0,
+                    tune,
                 }
             }
         }
@@ -129,7 +130,7 @@ impl AsyncBodyImage {
 }
 
 impl StreamWrapper for AsyncBodyImage {
-    fn new(body: BodyImage, tune: &Tunables) -> AsyncBodyImage {
+    fn new(body: BodyImage, tune: FutioTunables) -> AsyncBodyImage {
         AsyncBodyImage::new(body, tune)
     }
 }
@@ -141,10 +142,9 @@ impl fmt::Debug for AsyncImageState {
                 // Avoids showing all buffers as u8 lists
                 write!(f, "Ram(IntoIter<Bytes>)")
             }
-            AsyncImageState::File { ref rs, ref bsize } => {
+            AsyncImageState::File(ref rs) => {
                 f.debug_struct("File")
                     .field("rs", rs)
-                    .field("bsize", bsize)
                     .finish()
             }
             #[cfg(feature = "mmap")]
@@ -162,20 +162,19 @@ impl fmt::Debug for AsyncImageState {
 }
 
 impl AsyncImageState {
-    fn read_next(&mut self, avail: u64) -> Result<Option<Bytes>, io::Error> {
+    fn read_next(&mut self, len: usize) -> Result<Option<Bytes>, io::Error> {
         match *self {
-            AsyncImageState::File { ref mut rs, bsize } => {
-                let bs = cmp::min(bsize, avail) as usize;
-                let mut buf = BytesMut::with_capacity(bs);
+            AsyncImageState::File(ref mut rs) => {
+                let mut buf = BytesMut::with_capacity(len);
                 let b = unsafe {
                     &mut *(buf.bytes_mut()
                            as *mut [mem::MaybeUninit<u8>] as *mut [u8])
                 };
-                match rs.read(&mut b[..bs]) {
+                match rs.read(&mut b[..len]) {
                     Ok(0) => Ok(None),
-                    Ok(len) => {
-                        unsafe { buf.advance_mut(len); }
-                        debug!("read chunk (len: {})", len);
+                    Ok(l) => {
+                        unsafe { buf.advance_mut(l); }
+                        debug!("read chunk (len: {})", l);
                         Ok(Some(buf.freeze()))
                     }
                     Err(e) => Err(e)
@@ -299,6 +298,13 @@ impl Stream for AsyncBodyImage {
             return Poll::Ready(None);
         }
 
+        // Length to read is minimum of (fs) buffer size and the amount
+        // available.
+        let rlen = cmp::min(
+            this.tune.image().buffer_size_fs() as u64,
+            avail
+        ) as usize;
+
         // Otherwise we'll need a permit or to dispatch (and exit early)
         if permit.is_none() {
             if is_dispatch_pool_registered() {
@@ -307,10 +313,14 @@ impl Stream for AsyncBodyImage {
                     AsyncImageState::Delegated
                 );
                 this.delegate = Delegate::Dispatch(
-                    dispatch_rx(move || (st.read_next(avail), st)).unwrap()
+                    dispatch_rx(move || (st.read_next(rlen), st)).unwrap()
                 );
             } else {
-                let f = blocking_permit_future(&BLOCKING_SET);
+                let f = blocking_permit_future(
+                    this.tune.blocking_semaphore()
+                        .expect("One of DispatchPool or \
+                                 blocking Semaphore required!")
+                );
                 this.delegate = Delegate::Permit(f);
             }
             // recurse once (needed for correct waking)
@@ -320,7 +330,7 @@ impl Stream for AsyncBodyImage {
 
         // Use permit to run the blocking operation on thread
         let res = permit.unwrap().run(|| {
-            match this.state.read_next(avail) {
+            match this.state.read_next(rlen) {
                 Ok(Some(b)) => Poll::Ready(Some(Ok(b))),
                 Ok(None) => Poll::Ready(None),
                 Err(e) => {
@@ -346,8 +356,9 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
     fn record(self) -> Result<RequestRecord<AsyncBodyImage>, http::Error> {
         let request = {
             let body = BodyImage::empty();
-            let tune = Tunables::default();
-            self.body(AsyncBodyImage::new(body, &tune))?
+            // Tunables are unused for empty body, so default is sufficient.
+            let tune = FutioTunables::default();
+            self.body(AsyncBodyImage::new(body, tune))?
         };
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -371,8 +382,9 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
         } else {
             BodyImage::from_slice(buf)
         };
-        let tune = Tunables::default();
-        let request = self.body(AsyncBodyImage::new(req_body.clone(), &tune))?;
+        // Tunables are unused for Ram based body, so default is sufficient.
+        let tune = FutioTunables::default();
+        let request = self.body(AsyncBodyImage::new(req_body.clone(), tune))?;
 
         let method      = request.method().clone();
         let url         = request.uri().clone();
@@ -383,7 +395,7 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
             prolog: Prolog { method, url, req_headers, req_body } })
     }
 
-    fn record_body_image(self, body: BodyImage, tune: &Tunables)
+    fn record_body_image(self, body: BodyImage, tune: FutioTunables)
         -> Result<RequestRecord<AsyncBodyImage>, http::Error>
     {
         let request = self.body(AsyncBodyImage::new(body.clone(), tune))?;

@@ -10,23 +10,23 @@ use blocking_permit::{
 use futures_sink::Sink;
 use tao_log::debug;
 
-use body_image::{BodyError, BodySink, Tunables};
+use body_image::{BodyError, BodySink};
 
-use crate::{BLOCKING_SET, FutioError, UniBodyBuf, SinkWrapper};
+use crate::{FutioError, FutioTunables, UniBodyBuf, SinkWrapper};
 
 /// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
 /// allows a `Stream<Item=UniBodyBuf>` to be forwarded (e.g. via
 /// `futures::Stream::forward`) to a `BodySink`, in a fully asynchronous
 /// fashion and with zero-copy `MemMap` support (*mmap* feature only).
 ///
-/// `Tunables` are used during the streaming to decide when to write back a
-/// BodySink in `Ram` to `FsWrite`. This implementation uses permits or a
+/// `FutioTunables` are used during the streaming to decide when to write back
+/// a BodySink in `Ram` to `FsWrite`. This implementation uses permits or a
 /// dispatch pool for blocking operations including `BodySink::write_back` and
 /// `BodySink::write_all` (state `FsWrite`).
 pub struct UniBodySink {
     body: Option<BodySink>,
     delegate: Delegate,
-    tune: Tunables,
+    tune: FutioTunables,
     buf: Option<UniBodyBuf>
 }
 
@@ -48,11 +48,11 @@ impl fmt::Debug for UniBodySink {
 }
 
 impl UniBodySink {
-    /// Wrap by consuming a `BodySink` and `Tunables` instances.
+    /// Wrap by consuming a `BodySink` and `FutioTunables` instances.
     ///
-    /// *Note*: `Tunables` is `Clone` (inexpensive), so that can be done
+    /// *Note*: `FutioTunables` is `Clone` (inexpensive), so that can be done
     /// beforehand to preserve an owned copy.
-    fn new(body: BodySink, tune: Tunables) -> UniBodySink {
+    fn new(body: BodySink, tune: FutioTunables) -> UniBodySink {
         UniBodySink {
             body: Some(body),
             delegate: Delegate::None,
@@ -118,14 +118,17 @@ impl UniBodySink {
 
         // Early exit if too long
         let new_len = self.body.as_ref().unwrap().len() + (buf.len() as u64);
-        if new_len > self.tune.max_body() {
+        if new_len > self.tune.image().max_body() {
             return Err(BodyError::BodyTooLong(new_len).into());
         }
 
         // Ram doesn't need blocking permit (early exit)
-        if self.body.as_ref().unwrap().is_ram() && new_len <= self.tune.max_body_ram() {
+        if self.body.as_ref().unwrap().is_ram()
+            && new_len <= self.tune.image().max_body_ram()
+        {
             debug!("to save buf (len: {})", buf.len());
-            self.body.as_mut().unwrap().write_all(&buf).map_err(FutioError::from)?;
+            self.body.as_mut().unwrap().write_all(&buf)
+                .map_err(FutioError::from)?;
             return Ok(None)
         };
 
@@ -133,11 +136,12 @@ impl UniBodySink {
         if permit.is_none() {
             if is_dispatch_pool_registered() {
                 let mut body = self.body.take().unwrap();
-                let temp_dir = self.tune.temp_dir().to_owned();
+                let temp_dir = self.tune.image().temp_dir_rc();
                 self.delegate = Delegate::Dispatch(dispatch_rx(move || {
                     if body.is_ram() {
-                        debug!("to write back file (dispatch, len: {})", new_len);
-                        if let Err(e) = body.write_back(temp_dir) {
+                        debug!("to write back file (dispatch, len: {})",
+                               new_len);
+                        if let Err(e) = body.write_back(&*temp_dir) {
                             return (Err(e), body);
                         }
                     }
@@ -149,7 +153,11 @@ impl UniBodySink {
                 cx.waker().wake_by_ref();
                 return Ok(Some(UniBodyBuf::empty()));
             } else {
-                let f = blocking_permit_future(&BLOCKING_SET);
+                let f = blocking_permit_future(
+                    self.tune.blocking_semaphore()
+                        .expect("One of DispatchPool or \
+                                 blocking Semaphore required!")
+                );
                 self.delegate = Delegate::Permit(f);
                 // Ensure re-poll with same chunk
                 cx.waker().wake_by_ref();
@@ -161,7 +169,8 @@ impl UniBodySink {
         if self.body.as_ref().unwrap().is_ram() {
             permit.unwrap().run(|| {
                 debug!("to write back file (blocking, len: {})", new_len);
-                self.body.as_mut().unwrap().write_back(self.tune.temp_dir())?;
+                self.body.as_mut().unwrap()
+                    .write_back(self.tune.image().temp_dir())?;
                 debug!("to write buf (blocking, len: {})", buf.len());
                 self.body.as_mut().unwrap().write_all(&buf)
             })?;
@@ -176,7 +185,7 @@ impl UniBodySink {
 }
 
 impl SinkWrapper<UniBodyBuf> for UniBodySink {
-    fn new(body: BodySink, tune: Tunables) -> UniBodySink {
+    fn new(body: BodySink, tune: FutioTunables) -> UniBodySink {
         UniBodySink::new(body, tune)
     }
 

@@ -6,17 +6,18 @@ use futures_util::{
 };
 use hyperx::header::{ContentLength, TypedHeaders};
 
-use body_image::{BodySink, Dialog, Tunables};
+use body_image::{BodySink, Dialog};
 
 use crate::{
-    AsyncBodySink, InDialog, Flaw, FutioError, Monolog, RequestRecord
+    AsyncBodySink, InDialog, Flaw, FutioError, FutioTunables,
+    Monolog, RequestRecord
 };
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
 /// function constructs a tokio `Runtime` (ThreadPool),
 /// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
 /// internally, waiting with timeout, and dropping these on completion.
-pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
+pub fn fetch<B>(rr: RequestRecord<B>, tune: FutioTunables)
     -> Result<Dialog, FutioError>
     where B: http_body::Body + Send + 'static,
           B::Data: Send + Unpin,
@@ -39,13 +40,13 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
 }
 
 /// Given a suitable `hyper::Client` and `RequestRecord`, return a
-/// `Future<Output=Result<Dialog, FutioError>>.  The provided `Tunables`
+/// `Future<Output=Result<Dialog, FutioError>>.  The provided `FutioTunables`
 /// governs timeout intervals (initial response and complete body) and if the
 /// response `BodyImage` will be in `Ram` or `FsRead`.
 pub fn request_dialog<CN, B>(
     client: &hyper::Client<CN, B>,
     rr: RequestRecord<B>,
-    tune: &Tunables)
+    tune: FutioTunables)
     -> impl Future<Output=Result<Dialog, FutioError>> + Send + 'static
     where CN: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
           B: http_body::Body + Send + 'static,
@@ -71,8 +72,6 @@ pub fn request_dialog<CN, B>(
         Either::Right(futr)
     };
 
-    let tune = tune.clone();
-
     async move {
         let monolog = futr .await?;
 
@@ -96,7 +95,7 @@ pub fn request_dialog<CN, B>(
     }
 }
 
-async fn resp_future(monolog: Monolog, tune: Tunables)
+async fn resp_future(monolog: Monolog, tune: FutioTunables)
     -> Result<InDialog, FutioError>
 {
     let (resp_parts, body) = monolog.response.into_parts();
@@ -104,16 +103,17 @@ async fn resp_future(monolog: Monolog, tune: Tunables)
     // Result<BodySink> based on CONTENT_LENGTH header.
     let bsink = match resp_parts.headers.try_decode::<ContentLength>() {
         Some(Ok(ContentLength(l))) => {
-            if l > tune.max_body() {
+            if l > tune.image().max_body() {
                 Err(FutioError::ContentLengthTooLong(l))
-            } else if l > tune.max_body_ram() {
-                BodySink::with_fs(tune.temp_dir()).map_err(FutioError::from)
+            } else if l > tune.image().max_body_ram() {
+                BodySink::with_fs(tune.image().temp_dir())
+                    .map_err(FutioError::from)
             } else {
                 Ok(BodySink::with_ram(l))
             }
         },
         Some(Err(e)) => Err(FutioError::Other(Box::new(e))),
-        None => Ok(BodySink::with_ram(tune.max_body_ram()))
+        None => Ok(BodySink::with_ram(tune.image().max_body_ram()))
     }?;
 
     let mut async_body = AsyncBodySink::new(bsink, tune);
