@@ -1,4 +1,6 @@
-use barc::{BarcFile, CompressStrategy, Record, TryFrom};
+use std::convert::TryFrom;
+
+use barc::{BarcFile, CompressStrategy, Record};
 use body_image::Tunables;
 use body_image_futio::{
     ACCEPT_ENCODINGS, BROWSE_ACCEPT, decode_res_body, fetch,
