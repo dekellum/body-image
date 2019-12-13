@@ -32,6 +32,7 @@ test_script:
   - 'cargo test  --manifest-path body-image-futio/Cargo.toml --no-default-features'
   - 'cargo test  --manifest-path body-image-futio/Cargo.toml --no-default-features --features mmap'
   - 'cargo test  --manifest-path body-image-futio/Cargo.toml --no-default-features --features brotli'
+  - 'cargo test  --manifest-path body-image-futio/Cargo.toml'
   - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features'
   - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features --features mmap'
   - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features --features brotli'
