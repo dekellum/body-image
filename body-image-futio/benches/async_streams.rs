@@ -290,8 +290,9 @@ fn stream_33_fsread_4m(b: &mut Bencher) {
     });
 }
 
-#[bench]
 // `UniBodyImage` in `MemMap`, mmap once ahead-of-time, zero-copy
+#[bench]
+#[cfg(feature = "mmap")]
 fn stream_40_mmap_uni_pre(b: &mut Bencher) {
     let tune = FutioTuner::new()
         .set_blocking_semaphore(&BLOCKING_SET)
@@ -308,6 +309,7 @@ fn stream_40_mmap_uni_pre(b: &mut Bencher) {
 
 // `UniBodyImage` in `MemMap`, new mmap on each iteration, zero-copy
 #[bench]
+#[cfg(feature = "mmap")]
 fn stream_41_mmap_uni(b: &mut Bencher) {
     let tune = FutioTuner::new()
         .set_blocking_semaphore(&BLOCKING_SET)
@@ -326,6 +328,7 @@ fn stream_41_mmap_uni(b: &mut Bencher) {
 // `AsyncBodyImage` in `MemMap`, new mmap on each iteration, and with costly
 // copy to `Bytes`.
 #[bench]
+#[cfg(feature = "mmap")]
 fn stream_42_mmap_copy(b: &mut Bencher) {
     let tune = FutioTuner::new()
         .set_blocking_semaphore(&BLOCKING_SET)
