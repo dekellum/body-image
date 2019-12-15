@@ -32,14 +32,14 @@ before_cache:
 env: # important!
 matrix:
   include:
-    - rust: 1.32.0
-    - rust: 1.32.0
+    - rust: 1.39.0
+    - rust: 1.39.0
       env: WITH_LOCK=true
     - rust: stable
       env: WITH_LOCK=true
     - rust: nightly
       env: MAY_FAIL=true
-    - rust: 1.32.0
+    - rust: 1.39.0
       os: osx
       env: WITH_LOCK=true
   allow_failures:
