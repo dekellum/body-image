@@ -48,7 +48,7 @@ use std::fs::File;
 use std::io;
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use bytes::{Bytes, BytesMut, BufMut};
@@ -990,7 +990,7 @@ pub struct Tunables {
     size_estimate_deflate:   u16,
     size_estimate_gzip:      u16,
     size_estimate_brotli:    u16,
-    temp_dir:                Arc<PathBuf>,
+    temp_dir:                Arc<Path>,
 }
 
 impl Tunables {
@@ -1004,7 +1004,7 @@ impl Tunables {
             size_estimate_deflate:       4,
             size_estimate_gzip:          5,
             size_estimate_brotli:        6,
-            temp_dir:     Arc::new(env::temp_dir()),
+            temp_dir: env::temp_dir().into(),
         }
     }
 
@@ -1057,9 +1057,9 @@ impl Tunables {
         &self.temp_dir
     }
 
-    /// Return a reference to the directory in which to write temporary (`BodyImage`)
-    /// files.  Default: `std::env::temp_dir()`
-    pub fn temp_dir_rc(&self) -> Arc<PathBuf> {
+    /// Return a reference to the directory path in which to write temporary
+    /// (`BodyImage`) files.  Default: `std::env::temp_dir()`
+    pub fn temp_dir_rc(&self) -> Arc<Path> {
         self.temp_dir.clone()
     }
 
@@ -1139,7 +1139,7 @@ impl Tuner {
     pub fn set_temp_dir<P>(&mut self, path: P) -> &mut Tuner
         where P: AsRef<Path>
     {
-        self.template.temp_dir = Arc::new(path.as_ref().into());
+        self.template.temp_dir = path.as_ref().into();
         self
     }
 
