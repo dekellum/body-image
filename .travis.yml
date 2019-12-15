@@ -30,6 +30,7 @@ before_cache:
   - rm -rf /home/travis/.cargo/registry
 
 env: # important!
+  global: RUSTFLAGS=-Dwarnings
 matrix:
   include:
     - rust: 1.39.0

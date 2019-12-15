@@ -38,7 +38,6 @@
 //! [barc-cli]: https://docs.rs/crate/barc-cli
 //! [body-image-futio]: https://docs.rs/crate/body-image-futio
 
-#![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
 use std::error::Error as StdError;
