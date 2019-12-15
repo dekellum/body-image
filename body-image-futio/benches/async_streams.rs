@@ -84,7 +84,7 @@ fn stream_04_ram_gather(b: &mut Bencher) {
 
 // `AsyncBodyImage` in `FsRead`, default buffer size (64K), threaded runtime
 #[bench]
-fn stream_10_fsread(b: &mut Bencher) {
+fn stream_20_fsread(b: &mut Bencher) {
     let tune = FutioTuner::new()
         .set_blocking_semaphore(&BLOCKING_SET)
         .finish();
@@ -115,7 +115,22 @@ fn stream_20_fsread_uni(b: &mut Bencher) {
 // `UniBodyImage` in `FsRead`, default buffer size (64K), threaded runtime,
 // dispatch pool.
 #[bench]
-fn stream_21_fsread_uni_dispatch(b: &mut Bencher) {
+fn stream_21_fsread_uni_dispatch1(b: &mut Bencher) {
+    let tune = FutioTunables::default();
+    let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
+    let body = sink_data(sink).unwrap();
+    let pool = DispatchPool::builder().pool_size(1).create();
+    let mut rt = th_dispatch_runtime(pool);
+    b.iter(|| {
+        let stream = UniBodyImage::new(body.clone(), tune.clone());
+        summarize_stream(stream, &mut rt);
+    });
+}
+
+// `UniBodyImage` in `FsRead`, default buffer size (64K), threaded runtime,
+// dispatch pool.
+#[bench]
+fn stream_21_fsread_uni_dispatch2(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
@@ -130,11 +145,11 @@ fn stream_21_fsread_uni_dispatch(b: &mut Bencher) {
 // `UniBodyImage` in `FsRead`, default buffer size (64K), threaded runtime,
 // dispatch queue length 0.
 #[bench]
-fn stream_22_fsread_uni_dispatch_ql0(b: &mut Bencher) {
+fn stream_22_fsread_uni_dispatch1_ql0(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let pool = DispatchPool::builder().pool_size(2).queue_length(0).create();
+    let pool = DispatchPool::builder().pool_size(1).queue_length(0).create();
     let mut rt = th_dispatch_runtime(pool);
     b.iter(|| {
         let stream = UniBodyImage::new(body.clone(), tune.clone());
@@ -145,7 +160,7 @@ fn stream_22_fsread_uni_dispatch_ql0(b: &mut Bencher) {
 // `UniBodyImage` in `FsRead`, default buffer size (64K), threaded runtime,
 // direct run (no dispatch threads).
 #[bench]
-fn stream_22_fsread_uni_dispatch_direct(b: &mut Bencher) {
+fn stream_22_fsread_uni_direct(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
@@ -160,8 +175,8 @@ fn stream_22_fsread_uni_dispatch_direct(b: &mut Bencher) {
 // `UniBodyImage` in `FsRead`, default buffer size (64K), current thread
 // runtime, dispatch pool
 #[bench]
-fn stream_23_fsread_uni_dispatch_ct(b: &mut Bencher) {
-    let pool = DispatchPool::builder().pool_size(2).create();
+fn stream_23_fsread_uni_dispatch1_ct(b: &mut Bencher) {
+    let pool = DispatchPool::builder().pool_size(1).create();
     register_dispatch_pool(pool);
 
     let tune = FutioTunables::default();
@@ -178,8 +193,8 @@ fn stream_23_fsread_uni_dispatch_ct(b: &mut Bencher) {
 // `UniBodyImage` in `FsRead`, default buffer size (64K), current thread
 // runtime, dispatch queue length 0.
 #[bench]
-fn stream_24_fsread_uni_dispatch_ct_ql0(b: &mut Bencher) {
-    let pool = DispatchPool::builder().pool_size(2).create();
+fn stream_24_fsread_uni_dispatch1_ct_ql0(b: &mut Bencher) {
+    let pool = DispatchPool::builder().pool_size(1).queue_length(0).create();
     register_dispatch_pool(pool);
 
     let tune = FutioTunables::default();
@@ -196,8 +211,8 @@ fn stream_24_fsread_uni_dispatch_ct_ql0(b: &mut Bencher) {
 // `UniBodyImage` in `FsRead`, default buffer size (64K), current thread
 // runtime, direct run (no dispatch threads).
 #[bench]
-fn stream_25_fsread_uni_dispatch_ct_direct(b: &mut Bencher) {
-    let pool = DispatchPool::builder().pool_size(2).create();
+fn stream_25_fsread_uni_direct_ct(b: &mut Bencher) {
+    let pool = DispatchPool::builder().pool_size(0).create();
     register_dispatch_pool(pool);
 
     let tune = FutioTunables::default();
@@ -372,7 +387,7 @@ fn test_path() -> Result<PathBuf, Flaw> {
 
 fn th_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(2)
+        .num_threads(3)
         .threaded_scheduler()
         .build()
         .expect("threaded runtime build")
@@ -380,7 +395,7 @@ fn th_runtime() -> tokio::runtime::Runtime {
 
 fn th_dispatch_runtime(pool: DispatchPool) -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(2)
+        .num_threads(3)
         .threaded_scheduler()
         .on_thread_start(move || {
             register_dispatch_pool(pool.clone());
