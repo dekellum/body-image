@@ -21,9 +21,10 @@ use tao_log::{debug, info, warn};
 use body_image::{BodyImage, ExplodedImage, Prolog, };
 
 use crate::{
-    FutioTunables, MemMapBuf,
-    RequestRecord, RequestRecorder, StreamWrapper,
+    FutioTunables, RequestRecord, RequestRecorder, StreamWrapper,
 };
+
+#[cfg(feature = "mmap")] use crate::MemMapBuf;
 
 /// Adaptor for `BodyImage` implementing the `futures::Stream` and
 /// `http_body::Body` traits, using the custom
@@ -84,6 +85,7 @@ impl UniBodyImage {
                     tune,
                 }
             }
+            #[cfg(feature = "mmap")]
             ExplodedImage::MemMap(mmap) => {
                 UniBodyImage {
                     state: UniBodyState::MemMap(Some(MemMapBuf::new(mmap))),
@@ -113,6 +115,7 @@ pub struct UniBodyBuf {
 #[derive(Debug)]
 enum BufState {
     Bytes(Bytes),
+    #[cfg(feature = "mmap")]
     MemMap(MemMapBuf),
 }
 
@@ -125,6 +128,7 @@ impl UniBodyBuf {
         UniBodyBuf { buf: BufState::Bytes(b) }
     }
 
+    #[cfg(feature = "mmap")]
     fn from_mmap(mb: MemMapBuf) -> UniBodyBuf {
         UniBodyBuf { buf: BufState::MemMap(mb) }
     }
@@ -134,6 +138,7 @@ impl Buf for UniBodyBuf {
     fn remaining(&self) -> usize {
         match self.buf {
             BufState::Bytes(ref b)  => b.remaining(),
+            #[cfg(feature = "mmap")]
             BufState::MemMap(ref b) => b.remaining(),
         }
     }
@@ -141,6 +146,7 @@ impl Buf for UniBodyBuf {
     fn bytes(&self) -> &[u8] {
         match self.buf {
             BufState::Bytes(ref b)  => b.bytes(),
+            #[cfg(feature = "mmap")]
             BufState::MemMap(ref b) => b.bytes(),
         }
     }
@@ -148,6 +154,7 @@ impl Buf for UniBodyBuf {
     fn advance(&mut self, count: usize) {
         match self.buf {
             BufState::Bytes(ref mut b)  => b.advance(count),
+            #[cfg(feature = "mmap")]
             BufState::MemMap(ref mut b) => b.advance(count),
         }
     }
@@ -171,6 +178,7 @@ impl Into<Bytes> for UniBodyBuf {
     fn into(self) -> Bytes {
         match self.buf {
             BufState::Bytes(b) => b,
+            #[cfg(feature = "mmap")]
             BufState::MemMap(mb) => Bytes::copy_from_slice(&mb[..]),
         }
     }
@@ -179,6 +187,7 @@ impl Into<Bytes> for UniBodyBuf {
 enum UniBodyState {
     Ram(IntoIter<Bytes>),
     File(ReadSlice),
+    #[cfg(feature = "mmap")]
     MemMap(Option<MemMapBuf>),
     Delegated,
 }
@@ -231,6 +240,7 @@ impl UniBodyState {
                     Err(e) => Err(e)
                 }
             }
+            #[cfg(feature = "mmap")]
             UniBodyState::MemMap(ref mut ob) => {
                 if let Some(mb) = ob.take() {
                     mb.advise_sequential()?;

@@ -72,11 +72,11 @@ pub use sink::{AsyncBodySink, SinkWrapper};
 #[cfg(feature = "mmap")] mod mem_map_buf;
 #[cfg(feature = "mmap")] use mem_map_buf::MemMapBuf;
 
-#[cfg(feature = "mmap")] mod uni_image;
-#[cfg(feature = "mmap")] pub use uni_image::{UniBodyImage, UniBodyBuf};
+mod uni_image;
+pub use uni_image::{UniBodyImage, UniBodyBuf};
 
-#[cfg(feature = "mmap")] mod uni_sink;
-#[cfg(feature = "mmap")] pub use uni_sink::UniBodySink;
+mod uni_sink;
+pub use uni_sink::UniBodySink;
 
 #[cfg(feature = "hyper_http")] mod fetch;
 #[cfg(feature = "hyper_http")] pub use self::fetch::{fetch, request_dialog};

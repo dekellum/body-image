@@ -16,7 +16,6 @@ use crate::{
 };
 use crate::logger::test_logger;
 
-#[cfg(feature = "mmap")]
 use crate::{UniBodyBuf, UniBodyImage, UniBodySink};
 
 lazy_static! {
@@ -97,7 +96,6 @@ fn transfer_empty_th() {
 }
 
 #[test]
-#[cfg(feature = "mmap")]
 fn transfer_uni_empty_ct() {
     assert!(test_logger());
     register_dispatch();
@@ -109,7 +107,6 @@ fn transfer_uni_empty_ct() {
 }
 
 #[test]
-#[cfg(feature = "mmap")]
 fn transfer_uni_empty_th() {
     assert!(test_logger());
     let task = empty_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
@@ -166,7 +163,6 @@ fn transfer_small_th() {
 }
 
 #[test]
-#[cfg(feature = "mmap")]
 fn transfer_uni_small_ct() {
     assert!(test_logger());
     register_dispatch();
@@ -178,7 +174,6 @@ fn transfer_uni_small_ct() {
 }
 
 #[test]
-#[cfg(feature = "mmap")]
 fn transfer_uni_small_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
@@ -239,7 +234,6 @@ fn transfer_fs_th() {
 }
 
 #[test]
-#[cfg(feature = "mmap")]
 fn transfer_uni_fs_ct() {
     assert!(test_logger());
     register_dispatch();
@@ -251,7 +245,6 @@ fn transfer_uni_fs_ct() {
 }
 
 #[test]
-#[cfg(feature = "mmap")]
 fn transfer_uni_fs_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
@@ -331,7 +324,6 @@ fn transfer_fs_back_th_multi() {
 }
 
 #[test]
-#[cfg(feature = "mmap")]
 fn transfer_uni_fs_back_ct() {
     assert!(test_logger());
     register_dispatch();
@@ -343,7 +335,6 @@ fn transfer_uni_fs_back_ct() {
 }
 
 #[test]
-#[cfg(feature = "mmap")]
 fn transfer_uni_fs_back_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
@@ -352,7 +343,6 @@ fn transfer_uni_fs_back_th() {
 }
 
 #[test]
-#[cfg(feature = "mmap")]
 fn transfer_uni_fs_back_th_multi() {
     assert!(test_logger());
     let mut rt = th_runtime();
