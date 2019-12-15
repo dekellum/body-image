@@ -1,7 +1,7 @@
 use std::cmp;
 use std::fmt;
 use std::future::Future;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::io;
 use std::mem;
 use std::ops::Deref;
@@ -112,7 +112,7 @@ pub struct UniBodyBuf {
 
 #[derive(Debug)]
 enum BufState {
-    Bytes(Cursor<Bytes>),
+    Bytes(Bytes),
     MemMap(MemMapBuf),
 }
 
@@ -122,7 +122,7 @@ impl UniBodyBuf {
     }
 
     fn from_bytes(b: Bytes) -> UniBodyBuf {
-        UniBodyBuf { buf: BufState::Bytes(Cursor::new(b)) }
+        UniBodyBuf { buf: BufState::Bytes(b) }
     }
 
     fn from_mmap(mb: MemMapBuf) -> UniBodyBuf {
@@ -133,21 +133,21 @@ impl UniBodyBuf {
 impl Buf for UniBodyBuf {
     fn remaining(&self) -> usize {
         match self.buf {
-            BufState::Bytes(ref c)  => c.remaining(),
+            BufState::Bytes(ref b)  => b.remaining(),
             BufState::MemMap(ref b) => b.remaining(),
         }
     }
 
     fn bytes(&self) -> &[u8] {
         match self.buf {
-            BufState::Bytes(ref c)  => c.bytes(),
+            BufState::Bytes(ref b)  => b.bytes(),
             BufState::MemMap(ref b) => b.bytes(),
         }
     }
 
     fn advance(&mut self, count: usize) {
         match self.buf {
-            BufState::Bytes(ref mut c)  => c.advance(count),
+            BufState::Bytes(ref mut b)  => b.advance(count),
             BufState::MemMap(ref mut b) => b.advance(count),
         }
     }
@@ -164,6 +164,15 @@ impl Deref for UniBodyBuf {
 impl AsRef<[u8]> for UniBodyBuf {
     fn as_ref(&self) -> &[u8] {
         self.bytes()
+    }
+}
+
+impl Into<Bytes> for UniBodyBuf {
+    fn into(self) -> Bytes {
+        match self.buf {
+            BufState::Bytes(b) => b,
+            BufState::MemMap(mb) => Bytes::copy_from_slice(&mb[..]),
+        }
     }
 }
 

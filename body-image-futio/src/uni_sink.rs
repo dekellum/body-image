@@ -127,7 +127,7 @@ impl UniBodySink {
             && new_len <= self.tune.image().max_body_ram()
         {
             debug!("to save buf (len: {})", buf.len());
-            self.body.as_mut().unwrap().write_all(&buf)
+            self.body.as_mut().unwrap().save(buf)
                 .map_err(FutioError::from)?;
             return Ok(None)
         };
