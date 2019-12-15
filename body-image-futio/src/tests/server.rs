@@ -299,8 +299,8 @@ fn timeout_during_streaming() {
     }
 }
 
-#[test]
 #[cfg(feature = "may_fail")]
+#[test]
 fn timeout_during_streaming_race() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
