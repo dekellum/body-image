@@ -3,7 +3,7 @@ use std::time::Duration;
 use blocking_permit::Semaphore;
 use body_image::Tunables;
 
-/// An additional set of tuning constants for futures I/O, extending the
+/// An additional set of tuning constants for asynchronous I/O, extending the
 /// body-image `Tunables` set by composition.  Setters are available via
 /// [`FutioTuner`](struct.FutioTuner.html) (a builder type).
 #[derive(Debug, Clone)]
