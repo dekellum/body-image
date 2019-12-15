@@ -9,7 +9,7 @@ use std::task::{Context, Poll};
 use std::vec::IntoIter;
 
 use blocking_permit::{
-    blocking_permit_future, BlockingPermitFuture,
+    blocking_permit_future, SyncBlockingPermitFuture,
     dispatch_rx, Dispatched, is_dispatch_pool_registered,
 };
 use bytes::{BufMut, Bytes, BytesMut};
@@ -77,7 +77,7 @@ enum Delegate {
         Result<Option<Bytes>, io::Error>,
         AsyncImageState
     )>),
-    Permit(BlockingPermitFuture<'static>),
+    Permit(SyncBlockingPermitFuture<'static>),
     None
 }
 
@@ -321,7 +321,7 @@ impl Stream for AsyncBodyImage {
                         .expect("One of DispatchPool or \
                                  blocking Semaphore required!")
                 );
-                this.delegate = Delegate::Permit(f);
+                this.delegate = Delegate::Permit(f.make_sync());
             }
             // recurse once (needed for correct waking)
             let s = unsafe { Pin::new_unchecked(this) };
@@ -406,5 +406,21 @@ impl RequestRecorder<AsyncBodyImage> for http::request::Builder {
         Ok(RequestRecord {
             request,
             prolog: Prolog { method, url, req_headers, req_body: body } })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AsyncBodyImage;
+
+    fn is_send<T: Send>() -> bool { true }
+    fn is_sync<T: Sync>() -> bool { true }
+
+    #[test]
+    fn test_send_sync() {
+        // In order for AsyncBodyImage to work with hyper::Body::wrap_stream,
+        // it must be both Sync and Send
+        assert!(is_send::<AsyncBodyImage>());
+        assert!(is_sync::<AsyncBodyImage>());
     }
 }
