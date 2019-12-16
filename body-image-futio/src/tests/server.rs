@@ -7,6 +7,7 @@ use std::time::Duration;
 use blocking_permit::Semaphore;
 use bytes::Bytes;
 use futures_util::{
+    future,
     future::FutureExt,
     stream::{FuturesUnordered, StreamExt, TryStreamExt}
 };
@@ -20,13 +21,7 @@ use tokio::spawn;
 use hyper::Body;
 use hyper::client::{Client, HttpConnector};
 use hyper::server::conn::Http;
-use hyper::service::service_fn;
-
-#[cfg(feature = "may_fail")]
-use hyper::service::make_service_fn;
-
-#[cfg(feature = "may_fail")]
-use futures_util::future::TryFutureExt;
+use hyper::service::{make_service_fn, service_fn};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
 
@@ -34,18 +29,18 @@ use crate::{
     AsyncBodyImage, AsyncBodySink,
     Flaw, FutioError, FutioTunables, FutioTuner,
     RequestRecord, RequestRecorder,
+    UniBodyImage,
     request_dialog, user_agent
 };
-#[cfg(feature = "mmap")] use crate::UniBodyImage;
+
 use crate::logger::test_logger;
 
 lazy_static! {
     static ref BLOCKING_TEST_SET: Semaphore = Semaphore::new(true, 2);
 }
 
-// Return a tuple of (serv: impl Future, url: String) where serv will service a
-// single request via the passed function, and the url to access it via a local
-// tcp port.
+// Return a tuple of (serv: impl Future, url: String) that will service C
+// requests via function, and the url to access it via a local tcp port.
 macro_rules! service {
     ($c:literal, $s:ident) => {{
         let (mut listener, addr) = local_bind().unwrap();
@@ -67,22 +62,6 @@ macro_rules! service {
             }
         };
         (format!("http://{}", &addr), fut)
-    }}
-}
-
-// Like above, but return tuple of persistent server and its url
-#[cfg(feature = "may_fail")]
-macro_rules! server {
-    ($s:ident) => {{
-        let server = hyper::Server::bind(&([127, 0, 0, 1], 0).into())
-            .serve(make_service_fn(|_| async {
-                Ok::<_, hyper::Error>(service_fn($s))
-            }));
-        let local_addr = format!("http://{}", server.local_addr());
-        let fut = server
-            .map_err(|e| warn!("On server: {}", e))
-            .map(|_| ());
-        (local_addr, fut)
     }}
 }
 
@@ -140,27 +119,6 @@ fn post_echo_async_body() {
             panic!("failed with: {}", e);
         }
     }
-}
-
-// FIXME: Unreliable due to lack of well timed server shutdown?
-#[cfg(feature = "may_fail")]
-#[test]
-fn post_echo_async_body_multi_server() {
-    assert!(test_logger());
-    let res = new_limited_runtime().block_on(async {
-        let (url, srv) = server!(echo_async);
-        spawn(srv);
-        let tune = FutioTuner::new()
-            .set_image(Tuner::new().set_buffer_size_fs(17).finish())
-            .set_blocking_semaphore(&BLOCKING_TEST_SET)
-            .finish();
-        let futures: FuturesUnordered<_> = (0..20).map(|i| {
-            let body = fs_body_image(445 + i);
-            spawn(post_body_req::<AsyncBodyImage>(&url, body, tune.clone()))
-        }).collect();
-        futures.collect::<Vec<_>>() .await
-    });
-    assert_eq!(20, res.iter().filter(|r| r.is_ok()).count());
 }
 
 #[test]
@@ -330,6 +288,54 @@ fn timeout_during_streaming_race() {
     }
 }
 
+#[test]
+fn get_async_body_multi_server() {
+    assert!(test_logger());
+    let res = new_limited_runtime().block_on(async {
+        let (url, shutdown_tx, srv_jh) = body_server(
+            ram_body_image(0x8000, 32),
+            FutioTunables::default()
+        );
+        let tune = FutioTuner::new()
+            .set_image(Tuner::new().set_max_body_ram(0x8000 * 33).finish())
+            .set_blocking_semaphore(&BLOCKING_TEST_SET)
+            .finish();
+        let connector = HttpConnector::new();
+        let client = Client::builder().build(connector);
+        let futures: FuturesUnordered<_> = (0..20).map(|_| {
+            let req: RequestRecord<AsyncBodyImage> = http::Request::builder()
+                .method(http::Method::GET)
+                .uri(&url)
+                .record()
+                .unwrap();
+            spawn(request_dialog(&client, req, tune.clone()))
+        }).collect();
+        let res = futures.collect::<Vec<_>>() .await;
+
+        // Graceful shutdown sequence (otherwise this will occasional hang)
+        drop(client);
+        shutdown_tx.send(()).unwrap();
+        let _ = srv_jh .await;
+
+        res
+    });
+    assert_eq!(20, res.len());
+    for r in res {
+        match r {
+            Ok(Ok(dialog)) => {
+                assert!(dialog.res_body().is_ram());
+                assert_eq!(dialog.res_body().len(), 0x8000 * 32);
+            }
+            Ok(Err(e)) => {
+                panic!("dialog failed with: {}", e);
+            }
+            Err(e) => {
+                panic!("join failed with: {}", e);
+            }
+        }
+    }
+}
+
 async fn echo(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     Ok(debugv!("echo", Response::new(req.into_body())))
 }
@@ -442,6 +448,36 @@ fn ram_body_image(csize: usize, count: usize) -> BodyImage {
         bs.save(vec![1; csize]).expect("safe for Ram");
     }
     bs.prepare().expect("safe for Ram")
+}
+
+fn body_server(body: BodyImage, tune: FutioTunables)
+    -> (String,
+        tokio::sync::oneshot::Sender<()>,
+        tokio::task::JoinHandle<Result<(), hyper::error::Error>>)
+{
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let server = hyper::Server::bind(&([127, 0, 0, 1], 0).into())
+        .serve(make_service_fn(move |_| {
+            let body = body.clone();
+            let tune = tune.clone();
+            future::ok::<_, FutioError>(service_fn( move |_req| {
+                future::ok::<_, FutioError>(
+                    Response::builder()
+                        .status(200)
+                        .body(UniBodyImage::new(body.clone(), tune.clone()))
+                        .expect("response")
+                )
+            }))
+        }));
+    let local_addr = format!("http://{}", server.local_addr()).to_owned();
+    let server = server
+        .with_graceful_shutdown(async {
+            rx .await
+                .map_err(|e| warn!("On shutdown: {}", e))
+                .ok();
+        });
+    let jh = spawn(server);
+    (local_addr, tx, jh)
 }
 
 fn get_req<T>(url: &str, tune: FutioTunables)
