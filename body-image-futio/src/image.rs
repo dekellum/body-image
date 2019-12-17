@@ -1,7 +1,7 @@
 use std::cmp;
 use std::fmt;
 use std::future::Future;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::io;
 use std::mem;
 use std::pin::Pin;
@@ -203,18 +203,13 @@ impl AsyncImageState {
 }
 
 impl http_body::Body for AsyncBodyImage {
-    type Data = Cursor<Bytes>;
+    type Data = Bytes;
     type Error = io::Error;
 
     fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Option<Result<Self::Data, Self::Error>>>
     {
-        match self.poll_next(cx) {
-            Poll::Pending              => Poll::Pending,
-            Poll::Ready(Some(Ok(b)))   => Poll::Ready(Some(Ok(Cursor::new(b)))),
-            Poll::Ready(Some(Err(e)))  => Poll::Ready(Some(Err(e))),
-            Poll::Ready(None)          => Poll::Ready(None)
-        }
+        self.poll_next(cx)
     }
 
     fn poll_trailers(self: Pin<&mut Self>, _cx: &mut Context<'_>)
