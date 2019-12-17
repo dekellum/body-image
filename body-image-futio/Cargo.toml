@@ -27,7 +27,7 @@ futures-util = { version=">=0.3.1, <0.4", features=["sink"] }
 http       = { version=">=0.2.0, <0.3" }
 http-body  = { version=">=0.3.0, <0.4" }
 httparse   = { version=">=1.2.4, <1.4" }
-hyper      = { version=">=0.13.0, <0.14", default-features=false, features=["stream", "tcp"], optional=true }
+hyper      = { version=">=0.13.1, <0.14", default-features=false, features=["stream", "tcp"], optional=true }
 hyper-tls  = { version=">=0.4.0, <0.5", optional=true }
 hyperx     = { version=">=1.0.0, <1.1" }
 tao-log    = { version=">=0.1.0, <0.3" }

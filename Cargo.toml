@@ -12,9 +12,9 @@ members = [
 "body-image" = { path = "body-image" }
 "body-image-futio" = { path = "body-image-futio" }
 
-blocking-permit = { path="/home/david/src/blocking-permit" }
-olio = { path="/home/david/src/olio" }
-hyperx = { path="/home/david/src/hyperx" }
+blocking-permit = { git="https://github.com/dekellum/blocking-permit", branch="sync-semaphore" }
+olio = { git="https://github.com/dekellum/olio", branch="msrv-34" }
+hyperx = { git="https://github.com/dekellum/hyperx", branch="dev-1.0" }
 
 [profile.release]
 lto = "thin"
