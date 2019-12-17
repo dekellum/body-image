@@ -176,6 +176,23 @@ fn client_16_fs_uni_mmap(b: &mut Bencher) {
     client_run::<UniBodyImage, _, _>(rt, tune, true, b);
 }
 
+#[cfg(feature = "mmap")]
+#[bench]
+fn client_17_fs_uni_mmap_direct(b: &mut Bencher) {
+    let pool = DispatchPool::builder().pool_size(0).create();
+    let rt = th_dispatch_runtime(pool);
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
+    client_run::<UniBodyImage, _, _>(rt, tune, true, b);
+}
+
 fn client_run<I, T, E>(
     mut rt: Runtime,
     tune: FutioTunables,
@@ -197,7 +214,7 @@ fn client_run<I, T, E>(
         let connector = HttpConnector::new();
         let client = Client::builder().build(connector);
         let job = async move {
-            let futures: FuturesUnordered<_> = (0..10).map(|_| {
+            let futures: FuturesUnordered<_> = (0..20).map(|_| {
                 let tune2 = tune.clone();
                 let mmap = mmap;
                 let req: RequestRecord<AsyncBodyImage> =
@@ -273,14 +290,14 @@ async fn summarize_stream<S, T, E>(stream: S)
         future::ready((ml, len + item.len()))
     }) .await;
     assert_eq!(mlast, 255);
-    assert_eq!(len, 8192 * 256);
+    assert_eq!(len, 0x2000 * 1024);
 }
 
-/// Return a new body prepared for read, after writing 2MiB of data the the
+/// Return a new body prepared for read, after writing 8MiB of data the the
 /// given sink (of any state). All possible u8 values are randomly
 /// located within this body.
 fn sink_data(mut body: BodySink) -> Result<BodyImage, BodyError> {
-    let reps = 256;
+    let reps = 1024;
     let mut vals: Vec<u8> = (0..reps).map(|v| (v % 256) as u8).collect();
     vals.shuffle(&mut rand::thread_rng());
     assert!(vals.contains(&255));
