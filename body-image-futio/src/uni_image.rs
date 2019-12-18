@@ -124,12 +124,12 @@ impl UniBodyBuf {
         UniBodyBuf::from_bytes(Bytes::new())
     }
 
-    fn from_bytes(b: Bytes) -> UniBodyBuf {
+    pub(crate) fn from_bytes(b: Bytes) -> UniBodyBuf {
         UniBodyBuf { buf: BufState::Bytes(b) }
     }
 
     #[cfg(feature = "mmap")]
-    fn from_mmap(mb: MemMapBuf) -> UniBodyBuf {
+    pub(crate) fn from_mmap(mb: MemMapBuf) -> UniBodyBuf {
         UniBodyBuf { buf: BufState::MemMap(mb) }
     }
 }

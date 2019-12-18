@@ -77,6 +77,9 @@ pub use uni_image::{UniBodyImage, UniBodyBuf};
 mod uni_sink;
 pub use uni_sink::UniBodySink;
 
+mod omni_image;
+pub use omni_image::OmniBodyImage;
+
 #[cfg(feature = "hyper_http")] mod fetch;
 #[cfg(feature = "hyper_http")] pub use self::fetch::{fetch, request_dialog};
 
