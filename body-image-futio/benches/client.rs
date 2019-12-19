@@ -11,6 +11,8 @@ use blocking_permit::{
     DispatchPool, Semaphore,
     register_dispatch_pool,
 };
+use bytes::Bytes;
+
 use futures_core::stream::Stream;
 use futures_util::future;
 use futures_util::future::FutureExt;
@@ -129,6 +131,21 @@ fn client_13_fs_direct(b: &mut Bencher) {
     client_run::<AsyncBodyImage, _, _>(rt, tune, false, b);
 }
 
+#[bench]
+fn client_13_fs_direct_omni(b: &mut Bencher) {
+    let pool = DispatchPool::builder().pool_size(0).create();
+    let rt = th_dispatch_runtime(pool);
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .finish();
+    client_run::<OmniBodyImage<Bytes>, _, _>(rt, tune, false, b);
+}
+
 #[cfg(feature = "mmap")]
 #[bench]
 fn client_14_fs_mmap(b: &mut Bencher) {
@@ -191,6 +208,23 @@ fn client_17_fs_uni_mmap_direct(b: &mut Bencher) {
         .set_blocking_semaphore(&BLOCKING_SET)
         .finish();
     client_run::<UniBodyImage, _, _>(rt, tune, true, b);
+}
+
+#[cfg(feature = "mmap")]
+#[bench]
+fn client_17_fs_mmap_direct_omni(b: &mut Bencher) {
+    let pool = DispatchPool::builder().pool_size(0).create();
+    let rt = th_dispatch_runtime(pool);
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_semaphore(&BLOCKING_SET)
+        .finish();
+    client_run::<OmniBodyImage<UniBodyBuf>, _, _>(rt, tune, true, b);
 }
 
 fn client_run<I, T, E>(

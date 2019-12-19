@@ -179,8 +179,17 @@ impl Into<Bytes> for UniBodyBuf {
         match self.buf {
             BufState::Bytes(b) => b,
             #[cfg(feature = "mmap")]
-            BufState::MemMap(mb) => Bytes::copy_from_slice(&mb[..]),
+            BufState::MemMap(_mb) => {
+                panic!("FIXME: Don't do this so cheaply!");
+                // Bytes::copy_from_slice(&mb[..]),
+            }
         }
+    }
+}
+
+impl From<Bytes> for UniBodyBuf {
+    fn from(b: Bytes) -> UniBodyBuf {
+        UniBodyBuf { buf: BufState::Bytes(b) }
     }
 }
 

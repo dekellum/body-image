@@ -3,6 +3,7 @@ use std::fmt;
 use std::future::Future;
 use std::io::Read;
 use std::io;
+use std::marker::PhantomData;
 use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -23,7 +24,10 @@ use crate::{
     FutioTunables, RequestRecord, RequestRecorder, StreamWrapper, UniBodyBuf
 };
 
+#[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use crate::MemMapBuf;
+#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
+#[cfg(feature = "mmap")] use body_image::_mem_handle_ext::MemHandleExt;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Blocking {
@@ -98,6 +102,41 @@ impl BlockingArbiter for StatefulArbiter {
     fn state(&self) -> Blocking {
         self.state
     }
+}
+
+/// Trait for buffers conditionally handling conversions from `MemHandle<Mmap>`
+/// FIXME
+pub trait OmniBuf: Buf + 'static + From<Bytes> + Send + Sync + Unpin {
+    #[cfg(feature = "mmap")]
+    fn from_mmap(mmap: MemHandle<Mmap>) -> Result<Self, io::Error>;
+}
+
+impl OmniBuf for Bytes {
+    #[cfg(feature = "mmap")]
+    fn from_mmap(mmap: MemHandle<Mmap>) -> Result<Self, io::Error> {
+        match mmap.tmp_advise(
+            MemAdvice::Sequential,
+            || Ok(Bytes::copy_from_slice(&mmap[..])))
+        {
+            Ok(b) => {
+                debug!("MemMap copied to Bytes (len: {})", b.len());
+                Ok(b)
+            }
+            Err(e) => Err(e),
+        }
+
+    }
+}
+
+impl OmniBuf for UniBodyBuf {
+    #[cfg(feature = "mmap")]
+    fn from_mmap(mmap: MemHandle<Mmap>) -> Result<Self, io::Error> {
+        let buf = MemMapBuf::new(mmap);
+        buf.advise_sequential()?;
+        let _b = buf.bytes()[0];
+        debug!("MemMap prepared for sequential read (len: {})", buf.remaining());
+        Ok(UniBodyBuf::from_mmap(buf))
+    }
 
 }
 
@@ -116,18 +155,21 @@ impl BlockingArbiter for StatefulArbiter {
 /// for blocking reads from `FsRead` state and when dereferencing from `MemMap`
 /// state.
 #[derive(Debug)]
-pub struct OmniBodyImage<BA=LenientArbiter>
-    where BA: BlockingArbiter + Default + Unpin
+pub struct OmniBodyImage<B, BA=LenientArbiter>
+    where B: OmniBuf,
+          BA: BlockingArbiter + Default + Unpin
 {
     state: OmniBodyState,
     len: u64,
     consumed: u64,
     tune: FutioTunables,
     arbiter: BA,
+    buf_type: PhantomData<fn() -> B>,
 }
 
-impl<BA> OmniBodyImage<BA>
-    where BA: BlockingArbiter + Default + Unpin
+impl<B, BA> OmniBodyImage<B, BA>
+    where B: OmniBuf,
+          BA: BlockingArbiter + Default + Unpin
 {
     /// Wrap by consuming the `BodyImage` instance.
     ///
@@ -143,6 +185,7 @@ impl<BA> OmniBodyImage<BA>
                     consumed: 0,
                     tune,
                     arbiter: BA::default(),
+                    buf_type: PhantomData,
                 }
             }
             ExplodedImage::FsRead(rs) => {
@@ -152,23 +195,24 @@ impl<BA> OmniBodyImage<BA>
                     consumed: 0,
                     tune,
                     arbiter: BA::default(),
+                    buf_type: PhantomData,
                 }
             }
             #[cfg(feature = "mmap")]
             ExplodedImage::MemMap(mmap) => {
                 OmniBodyImage {
-                    state: OmniBodyState::MemMap(Some(MemMapBuf::new(mmap))),
+                    state: OmniBodyState::MemMap(Some(mmap)),
                     len,
                     consumed: 0,
                     tune,
                     arbiter: BA::default(),
+                    buf_type: PhantomData,
                 }
             }
         }
     }
 
-    fn poll_impl(&mut self) -> Poll<Option<<Self as Stream>::Item>>
-    {
+    fn poll_impl(&mut self) -> Poll<Option<<Self as Stream>::Item>> {
         let avail = self.len - self.consumed;
         if avail == 0 {
             return Poll::Ready(None);
@@ -189,7 +233,7 @@ impl<BA> OmniBodyImage<BA>
                 match iter.next() {
                     Some(b) => {
                         self.consumed += b.len() as u64;
-                        Poll::Ready(Some(Ok(UniBodyBuf::from_bytes(b))))
+                        Poll::Ready(Some(Ok(b.into())))
                     }
                     None => Poll::Ready(None),
                 }
@@ -212,7 +256,7 @@ impl<BA> OmniBodyImage<BA>
                             debug!("read chunk (len: {})", len);
                             self.consumed += len as u64;
                             break Poll::Ready(Some(Ok(
-                                UniBodyBuf::from_bytes(buf.freeze())
+                                buf.freeze().into()
                             )));
                         }
                         Err(e) => {
@@ -228,11 +272,13 @@ impl<BA> OmniBodyImage<BA>
             #[cfg(feature = "mmap")]
             OmniBodyState::MemMap(ref mut ob) => {
                 if let Some(mb) = ob.take() {
-                    mb.advise_sequential()?;
-                    let _b = mb.bytes()[0];
-                    self.consumed += mb.len() as u64;
-                    debug!("prepared MemMap (len: {})", mb.len());
-                    Poll::Ready(Some(Ok(UniBodyBuf::from_mmap(mb))))
+                    match B::from_mmap(mb) {
+                        Ok(buf) => {
+                            self.consumed += buf.remaining() as u64;
+                            Poll::Ready(Some(Ok(buf)))
+                        }
+                        Err(e) => Poll::Ready(Some(Err(e))),
+                    }
                 } else {
                     Poll::Ready(None)
                 }
@@ -241,8 +287,9 @@ impl<BA> OmniBodyImage<BA>
     }
 }
 
-impl<BA> StreamWrapper for OmniBodyImage<BA>
-    where BA: BlockingArbiter + Default + Unpin
+impl<B, BA> StreamWrapper for OmniBodyImage<B, BA>
+    where B: OmniBuf,
+          BA: BlockingArbiter + Default + Unpin
 {
     fn new(body: BodyImage, tune: FutioTunables) -> Self {
         OmniBodyImage::new(body, tune)
@@ -253,7 +300,7 @@ enum OmniBodyState {
     Ram(IntoIter<Bytes>),
     File(ReadSlice),
     #[cfg(feature = "mmap")]
-    MemMap(Option<MemMapBuf>),
+    MemMap(Option<MemHandle<Mmap>>),
 }
 
 impl fmt::Debug for OmniBodyState {
@@ -278,12 +325,11 @@ impl fmt::Debug for OmniBodyState {
     }
 }
 
-// FIXME: Make this generic over the Bytes/UniBodyBuf?
-
-impl<BA> Stream for OmniBodyImage<BA>
-    where BA: BlockingArbiter + Default + Unpin
+impl<B, BA> Stream for OmniBodyImage<B, BA>
+    where B: OmniBuf,
+          BA: BlockingArbiter + Default + Unpin
 {
-    type Item = Result<UniBodyBuf, io::Error>;
+    type Item = Result<B, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>)
         -> Poll<Option<Self::Item>>
@@ -292,10 +338,11 @@ impl<BA> Stream for OmniBodyImage<BA>
     }
 }
 
-impl<BA> http_body::Body for OmniBodyImage<BA>
-    where BA: BlockingArbiter + Default + Unpin
+impl<B, BA> http_body::Body for OmniBodyImage<B, BA>
+    where B: OmniBuf,
+          BA: BlockingArbiter + Default + Unpin
 {
-    type Data = UniBodyBuf;
+    type Data = B;
     type Error = io::Error;
 
     fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>)
@@ -319,13 +366,28 @@ impl<BA> http_body::Body for OmniBodyImage<BA>
     }
 }
 
-pub struct PermitWrapper {
-    image: OmniBodyImage<StatefulArbiter>,
+pub struct PermitBodyImage<B>
+    where B: OmniBuf
+{
+    image: OmniBodyImage<B, StatefulArbiter>,
     permit: Option<BlockingPermitFuture<'static>>
 }
 
-impl Stream for PermitWrapper {
-    type Item = Result<UniBodyBuf, io::Error>;
+impl<B> StreamWrapper for PermitBodyImage<B>
+    where B: OmniBuf
+{
+    fn new(body: BodyImage, tune: FutioTunables) -> Self {
+        PermitBodyImage {
+            image: OmniBodyImage::new(body, tune),
+            permit: None
+        }
+    }
+}
+
+impl<B> Stream for PermitBodyImage<B>
+    where B: OmniBuf
+{
+    type Item = Result<B, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Option<Self::Item>>
@@ -370,19 +432,66 @@ impl Stream for PermitWrapper {
     }
 }
 
-pub struct DispatchWrapper {
-    state: DispatchState
+impl<B> http_body::Body for PermitBodyImage<B>
+    where B: OmniBuf,
+{
+    type Data = B;
+    type Error = io::Error;
+
+    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Option<Result<Self::Data, Self::Error>>>
+    {
+        self.poll_next(cx)
+    }
+
+    fn poll_trailers(self: Pin<&mut Self>, _cx: &mut Context<'_>)
+        -> Poll<Result<Option<http::HeaderMap>, Self::Error>>
+    {
+        Poll::Ready(Ok(None))
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        http_body::Body::size_hint(&self.image)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        http_body::Body::is_end_stream(&self.image)
+    }
 }
 
-enum DispatchState {
-    Image(Option<OmniBodyImage<StatefulArbiter>>),
+pub struct DispatchBodyImage<B>
+    where B: OmniBuf
+{
+    state: DispatchState<B>,
+    len: u64,
+}
+
+enum DispatchState<B>
+    where B: OmniBuf
+{
+    Image(Option<OmniBodyImage<B, StatefulArbiter>>),
     Dispatch(Dispatched<(
-        Poll<Option<Result<UniBodyBuf, io::Error>>>,
-        OmniBodyImage<StatefulArbiter>)>),
+        Poll<Option<Result<B, io::Error>>>,
+        OmniBodyImage<B, StatefulArbiter>)>),
 }
 
-impl Stream for DispatchWrapper {
-    type Item = Result<UniBodyBuf, io::Error>;
+
+impl<B> StreamWrapper for DispatchBodyImage<B>
+    where B: OmniBuf
+{
+    fn new(body: BodyImage, tune: FutioTunables) -> Self {
+        let len = body.len();
+        DispatchBodyImage {
+            state: DispatchState::Image(Some(OmniBodyImage::new(body, tune))),
+            len,
+        }
+    }
+}
+
+impl<B> Stream for DispatchBodyImage<B>
+    where B: OmniBuf
+{
+    type Item = Result<B, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Option<Self::Item>>
@@ -409,6 +518,40 @@ impl Stream for DispatchWrapper {
                 debug_assert_eq!(ob.arbiter.state(), Blocking::Void);
                 this.state = DispatchState::Image(Some(ob));
                 res
+            }
+        }
+    }
+}
+
+impl<B> http_body::Body for DispatchBodyImage<B>
+    where B: OmniBuf,
+{
+    type Data = B;
+    type Error = io::Error;
+
+    fn poll_data(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Option<Result<Self::Data, Self::Error>>>
+    {
+        self.poll_next(cx)
+    }
+
+    fn poll_trailers(self: Pin<&mut Self>, _cx: &mut Context<'_>)
+        -> Poll<Result<Option<http::HeaderMap>, Self::Error>>
+    {
+        Poll::Ready(Ok(None))
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        http_body::SizeHint::with_exact(self.len)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match self.state {
+            DispatchState::Image(ref obi) => {
+                http_body::Body::is_end_stream(obi.as_ref().unwrap())
+            }
+            DispatchState::Dispatch(_) => {
+                false
             }
         }
     }
