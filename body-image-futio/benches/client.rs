@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use blocking_permit::{
-    DispatchPool, Semaphore,
+    DispatchPool, Semaphore, Semaphorish,
     register_dispatch_pool,
 };
 use bytes::Bytes;
@@ -33,7 +33,7 @@ use body_image::{BodyError, BodySink, BodyImage, Recorded, Tuner};
 use body_image_futio::*;
 
 lazy_static! {
-    static ref BLOCKING_SET: Semaphore = Semaphore::new(true, 3);
+    static ref BLOCKING_SET: Semaphore = Semaphore::default_new(3);
 }
 
 #[bench]
@@ -352,7 +352,8 @@ fn test_path() -> Result<PathBuf, Flaw> {
 
 fn th_runtime() -> Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(4)
+        .core_threads(2)
+        .max_threads(2+3)
         .threaded_scheduler()
         .enable_io()
         .enable_time()
@@ -362,7 +363,8 @@ fn th_runtime() -> Runtime {
 
 fn th_dispatch_runtime(pool: DispatchPool) -> Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(3)
+        .core_threads(2)
+        .max_threads(2+3)
         .threaded_scheduler()
         .enable_io()
         .enable_time()

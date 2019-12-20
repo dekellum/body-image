@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::net::TcpListener as StdTcpListener;
 use std::time::Duration;
 
-use blocking_permit::Semaphore;
+use blocking_permit::{Semaphore, Semaphorish};
 use bytes::Bytes;
 use futures_util::{
     future,
@@ -36,7 +36,7 @@ use crate::{
 use crate::logger::test_logger;
 
 lazy_static! {
-    static ref BLOCKING_TEST_SET: Semaphore = Semaphore::new(true, 2);
+    static ref BLOCKING_TEST_SET: Semaphore = Semaphore::default_new(2);
 }
 
 // Return a tuple of (serv: impl Future, url: String) that will service C
@@ -517,7 +517,8 @@ fn post_body_req<T>(url: &str, body: BodyImage, tune: FutioTunables)
 
 fn new_limited_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(2)
+        .core_threads(2)
+        .max_threads(2+2)
         .threaded_scheduler()
         .enable_io()
         .enable_time()

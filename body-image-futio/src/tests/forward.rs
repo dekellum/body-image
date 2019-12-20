@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use blocking_permit::{DispatchPool, Semaphore};
+use blocking_permit::{DispatchPool, Semaphore, Semaphorish};
 use bytes::Bytes;
 use futures_core::TryStream;
 use futures_util::stream::{FuturesUnordered, StreamExt, TryStreamExt};
@@ -19,7 +19,7 @@ use crate::logger::test_logger;
 use crate::{UniBodyBuf, UniBodyImage, UniBodySink};
 
 lazy_static! {
-    static ref BLOCKING_TEST_SET: Semaphore = Semaphore::new(true, 3);
+    static ref BLOCKING_TEST_SET: Semaphore = Semaphore::default_new(3);
 }
 
 fn register_dispatch() {
@@ -33,7 +33,8 @@ fn deregister_dispatch() {
 
 fn th_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(3)
+        .core_threads(2)
+        .max_threads(2+3)
         .threaded_scheduler()
         .build()
         .expect("threaded runtime build")
@@ -41,7 +42,8 @@ fn th_runtime() -> tokio::runtime::Runtime {
 
 fn local_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(1)
+        .core_threads(1)
+        .max_threads(1+3)
         .basic_scheduler()
         .build()
         .expect("local runtime build")

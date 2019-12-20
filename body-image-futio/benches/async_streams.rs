@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use blocking_permit::{
-    DispatchPool, Semaphore,
+    DispatchPool, Semaphore, Semaphorish,
     register_dispatch_pool, deregister_dispatch_pool
 };
 use futures_core::stream::Stream;
@@ -22,7 +22,7 @@ use body_image::{BodyError, BodySink, BodyImage, Tuner};
 use body_image_futio::*;
 
 lazy_static! {
-    static ref BLOCKING_SET: Semaphore = Semaphore::new(true, 2);
+    static ref BLOCKING_SET: Semaphore = Semaphore::default_new(2);
 }
 
 // `AsyncBodyImage` in `Ram`, pre-gathered (single, contiguous buffer) and
@@ -390,7 +390,8 @@ fn test_path() -> Result<PathBuf, Flaw> {
 
 fn th_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(3)
+        .core_threads(2)
+        .max_threads(2+2)
         .threaded_scheduler()
         .build()
         .expect("threaded runtime build")
@@ -398,7 +399,8 @@ fn th_runtime() -> tokio::runtime::Runtime {
 
 fn th_dispatch_runtime(pool: DispatchPool) -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(3)
+        .core_threads(2)
+        .max_threads(2)
         .threaded_scheduler()
         .on_thread_start(move || {
             register_dispatch_pool(pool.clone());
@@ -409,7 +411,8 @@ fn th_dispatch_runtime(pool: DispatchPool) -> tokio::runtime::Runtime {
 
 fn local_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new()
-        .num_threads(1)
+        .core_threads(1)
+        .max_threads(4)
         .basic_scheduler()
         .build()
         .expect("local runtime build")

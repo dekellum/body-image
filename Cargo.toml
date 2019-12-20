@@ -12,7 +12,7 @@ members = [
 "body-image" = { path = "body-image" }
 "body-image-futio" = { path = "body-image-futio" }
 
-blocking-permit = { git="https://github.com/dekellum/blocking-permit", branch="sync-semaphore" }
+blocking-permit = { git="https://github.com/dekellum/blocking-permit", branch="master" }
 olio = { git="https://github.com/dekellum/olio", branch="msrv-34" }
 hyperx = { git="https://github.com/dekellum/hyperx", branch="dev-1.0" }
 
