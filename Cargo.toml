@@ -13,8 +13,9 @@ members = [
 "body-image-futio" = { path = "body-image-futio" }
 
 blocking-permit = { git="https://github.com/dekellum/blocking-permit", branch="master" }
-olio = { git="https://github.com/dekellum/olio", branch="msrv-34" }
+olio = { git="https://github.com/dekellum/olio", branch="master" }
 hyperx = { git="https://github.com/dekellum/hyperx", branch="dev-1.0" }
+tao-log = { git="https://github.com/dekellum/tao-log", branch="master" }
 
 [profile.release]
 lto = "thin"
