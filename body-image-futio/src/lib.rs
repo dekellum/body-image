@@ -78,7 +78,13 @@ mod uni_sink;
 pub use uni_sink::UniBodySink;
 
 mod omni_image;
-pub use omni_image::OmniBodyImage;
+pub use omni_image::{
+    Blocking, BlockingArbiter, LenientArbiter,
+    OmniBuf, OmniBodyImage
+};
+
+mod omni_sink;
+pub use omni_sink::OmniBodySink;
 
 #[cfg(feature = "hyper_http")] mod fetch;
 #[cfg(feature = "hyper_http")] pub use self::fetch::{fetch, request_dialog};
