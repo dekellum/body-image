@@ -72,7 +72,7 @@ impl Default for StatefulArbiter {
 }
 
 impl StatefulArbiter {
-    fn set(&mut self, state: Blocking) {
+    pub(crate) fn set(&mut self, state: Blocking) {
         self.state = state;
     }
 }
