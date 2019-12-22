@@ -10,7 +10,7 @@ use std::task::{Context, Poll};
 use std::vec::IntoIter;
 
 use blocking_permit::{
-    blocking_permit_future, BlockingPermitFuture,
+    blocking_permit_future, SyncBlockingPermitFuture,
     dispatch_rx, Dispatched,
 };
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -370,7 +370,7 @@ pub struct PermitBodyImage<B>
     where B: OmniBuf
 {
     image: OmniBodyImage<B, StatefulArbiter>,
-    permit: Option<BlockingPermitFuture<'static>>
+    permit: Option<SyncBlockingPermitFuture<'static>>
 }
 
 impl<B> StreamWrapper for PermitBodyImage<B>
@@ -392,9 +392,9 @@ impl<B> Stream for PermitBodyImage<B>
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Option<Self::Item>>
     {
-        let this = unsafe { self.get_unchecked_mut() };
+        let this = self.get_mut();
         let permit = if let Some(ref mut pf) = this.permit {
-            let pf = unsafe { Pin::new_unchecked(pf) };
+            let pf = Pin::new(pf);
             match pf.poll(cx) {
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(Ok(p)) => {
@@ -409,13 +409,13 @@ impl<B> Stream for PermitBodyImage<B>
 
         if let Some(p) = permit {
             this.image.arbiter.set(Blocking::Once);
-            let image = unsafe { Pin::new_unchecked(&mut this.image) };
+            let image = Pin::new(&mut this.image);
             let res = p.run(|| image.poll_next(cx));
             debug_assert_eq!(this.image.arbiter.state(), Blocking::Void);
             res
         } else {
             let res = {
-                let image = unsafe { Pin::new_unchecked(&mut this.image) };
+                let image = Pin::new(&mut this.image);
                 image.poll_next(cx)
             };
 
@@ -425,7 +425,7 @@ impl<B> Stream for PermitBodyImage<B>
                 this.permit = Some(blocking_permit_future(
                     this.image.tune.blocking_semaphore()
                         .expect("blocking semaphore required!")
-                ));
+                ).make_sync());
             }
             res
         }
@@ -474,7 +474,6 @@ enum DispatchState<B>
         Poll<Option<Result<B, io::Error>>>,
         OmniBodyImage<B, StatefulArbiter>)>),
 }
-
 
 impl<B> StreamWrapper for DispatchBodyImage<B>
     where B: OmniBuf
@@ -554,5 +553,27 @@ impl<B> http_body::Body for DispatchBodyImage<B>
                 false
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn is_send<T: Send>() -> bool { true }
+    fn is_sync<T: Sync>() -> bool { true }
+
+    #[test]
+    fn test_send_sync() {
+        // In order for OmniBodyImage to work with hyper::Body::wrap_stream,
+        // it must be both Sync and Send
+        assert!(is_send::<OmniBodyImage<Bytes>>());
+        assert!(is_sync::<OmniBodyImage<Bytes>>());
+
+        assert!(is_send::<DispatchBodyImage<Bytes>>());
+        assert!(is_sync::<DispatchBodyImage<Bytes>>());
+
+        assert!(is_send::<PermitBodyImage<Bytes>>());
+        assert!(is_sync::<PermitBodyImage<Bytes>>());
     }
 }
