@@ -4,7 +4,7 @@ use std::task::{Context, Poll};
 
 use blocking_permit::{
     blocking_permit_future, BlockingPermitFuture,
-    dispatch_rx, Dispatched, is_dispatch_pool_registered
+    dispatch_rx, Dispatched,
 };
 use bytes::Bytes;
 use futures_sink::Sink;
@@ -65,9 +65,7 @@ impl<B, BA> OmniBodySink<B, BA>
     // This logically combines `Sink::poll_ready` and `Sink::start_send` into
     // one operation. If the item is returned, this is equivalent to
     // `Poll::Pending`, and the item will be later retried.
-    fn poll_send(&mut self, _cx: &mut Context<'_>, buf: B)
-        -> Result<Option<B>, FutioError>
-    {
+    fn poll_send(&mut self, buf: B) -> Result<Option<B>, FutioError> {
         if buf.remaining() == 0 {
             return Ok(None)
         }
@@ -105,6 +103,28 @@ impl<B, BA> OmniBodySink<B, BA>
 
         Ok(None)
     }
+
+    fn poll_flush_impl(&mut self) -> Poll<Result<(), FutioError>> {
+        if let Some(buf) = self.buf.take() {
+            match self.poll_send(buf) {
+                Ok(None) => Poll::Ready(Ok(())),
+                Ok(s @ Some(_)) => {
+                    self.buf = s;
+                    Poll::Pending
+                }
+                Err(e) => Poll::Ready(Err(e))
+            }
+        } else {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    fn send(&mut self, buf: B) -> Result<(), FutioError> {
+        assert!(self.buf.is_none());
+        self.buf = Some(buf);
+        Ok(())
+    }
+
 }
 
 impl<B, BA> SinkWrapper<B> for OmniBodySink<B, BA>
@@ -126,43 +146,28 @@ impl<B, BA> Sink<B> for OmniBodySink<B, BA>
 {
     type Error = FutioError;
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>)
+    fn poll_ready(self: Pin<&mut Self>, _cx: &mut Context<'_>)
         -> Poll<Result<(), FutioError>>
     {
-        self.poll_flush(cx)
+        self.get_mut().poll_flush_impl()
     }
 
     fn start_send(self: Pin<&mut Self>, buf: B)
         -> Result<(), FutioError>
     {
-        let this = unsafe { self.get_unchecked_mut() };
-        assert!(this.buf.is_none());
-        this.buf = Some(buf);
-        Ok(())
+        self.get_mut().send(buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>)
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>)
         -> Poll<Result<(), FutioError>>
     {
-        let this = unsafe { self.get_unchecked_mut() };
-        if let Some(buf) = this.buf.take() {
-            match this.poll_send(cx, buf) {
-                Ok(None) => Poll::Ready(Ok(())),
-                Ok(s @ Some(_)) => {
-                    this.buf = s;
-                    Poll::Pending
-                }
-                Err(e) => Poll::Ready(Err(e))
-            }
-        } else {
-            Poll::Ready(Ok(()))
-        }
+        self.get_mut().poll_flush_impl()
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>)
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>)
         -> Poll<Result<(), FutioError>>
     {
-        self.poll_flush(cx)
+        self.get_mut().poll_flush_impl()
     }
 }
 
@@ -173,12 +178,43 @@ pub struct PermitBodySink<B>
     permit: Option<BlockingPermitFuture<'static>>
 }
 
-macro_rules! with_permit {
-    ($this:expr, $cx:expr, $doit:ident) => {{
-        let this = $this;
+impl<B> SinkWrapper<B> for PermitBodySink<B>
+    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+{
+    fn new(body: BodySink, tune: FutioTunables) -> Self {
+        PermitBodySink {
+            sink: OmniBodySink::new(body, tune),
+            permit: None
+        }
+    }
+
+    fn into_inner(self) -> BodySink {
+        self.sink.into_inner()
+    }
+}
+
+impl<B> Sink<B> for PermitBodySink<B>
+    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+{
+    type Error = FutioError;
+
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Result<(), FutioError>>
+    {
+        self.poll_flush(cx)
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, buf: B) -> Result<(), FutioError> {
+        self.sink.send(buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Result<(), FutioError>>
+    {
+        let this = self.get_mut();
         let permit = if let Some(ref mut pf) = this.permit {
             let pf = Pin::new(pf);
-            match pf.poll($cx) {
+            match pf.poll(cx) {
                 Poll::Ready(Ok(p)) => {
                     this.permit = None;
                     Some(p)
@@ -197,16 +233,12 @@ macro_rules! with_permit {
 
         if let Some(p) = permit {
             this.sink.arbiter.set(Blocking::Once);
-            let sink = Pin::new(&mut this.sink);
-            let res = p.run(|| sink.$doit($cx));
+            let sink = &mut this.sink;
+            let res = p.run(|| sink.poll_flush_impl());
             debug_assert_eq!(this.sink.arbiter.state(), Blocking::Void);
             res
         } else {
-            let res = {
-                let sink = Pin::new(&mut this.sink);
-                sink.$doit($cx)
-            };
-
+            let res = this.sink.poll_flush_impl();
             if res.is_pending()
                 && this.sink.arbiter.state() == Blocking::Pending
             {
@@ -217,30 +249,6 @@ macro_rules! with_permit {
             }
             res
         }
-    }}
-}
-
-impl<B> Sink<B> for PermitBodySink<B>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
-{
-    type Error = FutioError;
-
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Result<(), FutioError>>
-    {
-        with_permit!(self.get_mut(), cx, poll_ready)
-    }
-
-    fn start_send(mut self: Pin<&mut Self>, buf: B)
-        -> Result<(), FutioError>
-    {
-        Pin::new(&mut self.sink).start_send(buf)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Result<(), FutioError>>
-    {
-        with_permit!(self.get_mut(), cx, poll_flush)
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>)
@@ -250,17 +258,101 @@ impl<B> Sink<B> for PermitBodySink<B>
     }
 }
 
-impl<B> SinkWrapper<B> for PermitBodySink<B>
+pub struct DispatchBodySink<B>
+    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+{
+    state: DispatchState<B>,
+}
+
+enum DispatchState<B>
+    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+{
+    Sink(Option<OmniBodySink<B, StatefulArbiter>>),
+    Dispatch(Dispatched<(
+        Poll<Result<(), FutioError>>,
+        OmniBodySink<B, StatefulArbiter>)>),
+}
+
+impl<B> SinkWrapper<B> for DispatchBodySink<B>
     where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
 {
     fn new(body: BodySink, tune: FutioTunables) -> Self {
-        PermitBodySink {
-            sink: OmniBodySink::new(body, tune),
-            permit: None
+        DispatchBodySink {
+            state: DispatchState::Sink(Some(OmniBodySink::new(body, tune))),
         }
     }
 
     fn into_inner(self) -> BodySink {
-        self.sink.into_inner()
+        match self.state {
+            DispatchState::Sink(sobs) => {
+                sobs.unwrap().into_inner()
+            }
+            DispatchState::Dispatch(_) => {
+                panic!("Can't recover inner BodySink from dispatched!");
+            }
+        }
+    }
+}
+
+impl<B> Sink<B> for DispatchBodySink<B>
+    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+{
+    type Error = FutioError;
+
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Result<(), FutioError>>
+    {
+        self.poll_flush(cx)
+    }
+
+    fn start_send(self: Pin<&mut Self>, buf: B) -> Result<(), FutioError> {
+        let this = self.get_mut();
+        match this.state {
+            DispatchState::Sink(ref mut obo) => {
+                obo.as_mut().unwrap().send(buf)
+            }
+            DispatchState::Dispatch(_) => {
+                // shouldn't happen
+                panic!("DispatchBodySink::start_send called while dispatched!")
+            }
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Result<(), FutioError>>
+    {
+        let this = self.get_mut();
+        match this.state {
+            DispatchState::Sink(ref mut obo) => {
+                let ob = obo.as_mut().unwrap();
+                let res = ob.poll_flush_impl();
+                if res.is_pending() && ob.arbiter.state() == Blocking::Pending {
+                    let mut ob = obo.take().unwrap();
+                    this.state = DispatchState::Dispatch(dispatch_rx(move || {
+                        (ob.poll_flush_impl(), ob)
+                    }).unwrap());
+                }
+                res
+            }
+            DispatchState::Dispatch(ref mut db) => {
+                let (res, ob) = match Pin::new(&mut *db).poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Err(e)) => {
+                        // FIXME: Improve this error?
+                        return Poll::Ready(Err(FutioError::Other(Box::new(e))));
+                    }
+                    Poll::Ready(Ok((res, ob))) => (res, ob),
+                };
+                debug_assert_eq!(ob.arbiter.state(), Blocking::Void);
+                this.state = DispatchState::Sink(Some(ob));
+                res
+            }
+        }
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>)
+        -> Poll<Result<(), FutioError>>
+    {
+        self.poll_flush(cx)
     }
 }
