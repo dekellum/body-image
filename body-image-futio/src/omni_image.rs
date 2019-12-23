@@ -556,6 +556,64 @@ impl<B> http_body::Body for DispatchBodyImage<B>
     }
 }
 
+impl<SW> RequestRecorder<SW> for http::request::Builder
+    where SW: StreamWrapper + http_body::Body + Send
+{
+    fn record(self) -> Result<RequestRecord<SW>, http::Error> {
+        let request = {
+            let body = BodyImage::empty();
+            // Tunables are unused for empty body, so default is sufficient.
+            let tune = FutioTunables::default();
+            self.body(SW::new(body, tune))?
+        };
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        let req_body = BodyImage::empty();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body }
+        })
+    }
+
+    fn record_body<BB>(self, body: BB) -> Result<RequestRecord<SW>, http::Error>
+        where BB: Into<Bytes>
+    {
+        let buf: Bytes = body.into();
+        let req_body = if buf.is_empty() {
+            BodyImage::empty()
+        } else {
+            BodyImage::from_slice(buf)
+        };
+        // Tunables are unused for Ram based body, so default is sufficient.
+        let tune = FutioTunables::default();
+        let request = self.body(SW::new(req_body.clone(), tune))?;
+
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body } })
+    }
+
+    fn record_body_image(self, body: BodyImage, tune: FutioTunables)
+        -> Result<RequestRecord<SW>, http::Error>
+    {
+        let request = self.body(SW::new(body.clone(), tune))?;
+        let method      = request.method().clone();
+        let url         = request.uri().clone();
+        let req_headers = request.headers().clone();
+
+        Ok(RequestRecord {
+            request,
+            prolog: Prolog { method, url, req_headers, req_body: body } })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
