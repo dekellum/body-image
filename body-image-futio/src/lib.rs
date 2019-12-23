@@ -80,7 +80,7 @@ pub use uni_sink::UniBodySink;
 mod omni_image;
 pub use omni_image::{
     Blocking, BlockingArbiter, LenientArbiter, StatefulArbiter,
-    OmniBuf, OmniBodyImage
+    OutputBuf, OmniBodyImage
 };
 
 mod omni_sink;

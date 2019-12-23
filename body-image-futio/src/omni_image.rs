@@ -104,14 +104,14 @@ impl BlockingArbiter for StatefulArbiter {
     }
 }
 
-/// Trait for buffers conditionally handling conversions from `MemHandle<Mmap>`
-/// FIXME
-pub trait OmniBuf: Buf + 'static + From<Bytes> + Send + Sync + Unpin {
+/// Trait for satisftying Stream output buffer requirments.
+pub trait OutputBuf: Buf + 'static + From<Bytes> + Send + Sync + Unpin {
+    /// Convert from a mmap.
     #[cfg(feature = "mmap")]
     fn from_mmap(mmap: MemHandle<Mmap>) -> Result<Self, io::Error>;
 }
 
-impl OmniBuf for Bytes {
+impl OutputBuf for Bytes {
     #[cfg(feature = "mmap")]
     fn from_mmap(mmap: MemHandle<Mmap>) -> Result<Self, io::Error> {
         match mmap.tmp_advise(
@@ -128,7 +128,7 @@ impl OmniBuf for Bytes {
     }
 }
 
-impl OmniBuf for UniBodyBuf {
+impl OutputBuf for UniBodyBuf {
     #[cfg(feature = "mmap")]
     fn from_mmap(mmap: MemHandle<Mmap>) -> Result<Self, io::Error> {
         let buf = MemMapBuf::new(mmap);
@@ -156,7 +156,7 @@ impl OmniBuf for UniBodyBuf {
 /// state.
 #[derive(Debug)]
 pub struct OmniBodyImage<B, BA=LenientArbiter>
-    where B: OmniBuf,
+    where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     state: OmniBodyState,
@@ -168,7 +168,7 @@ pub struct OmniBodyImage<B, BA=LenientArbiter>
 }
 
 impl<B, BA> OmniBodyImage<B, BA>
-    where B: OmniBuf,
+    where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     /// Wrap by consuming the `BodyImage` instance.
@@ -288,7 +288,7 @@ impl<B, BA> OmniBodyImage<B, BA>
 }
 
 impl<B, BA> StreamWrapper for OmniBodyImage<B, BA>
-    where B: OmniBuf,
+    where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     fn new(body: BodyImage, tune: FutioTunables) -> Self {
@@ -326,7 +326,7 @@ impl fmt::Debug for OmniBodyState {
 }
 
 impl<B, BA> Stream for OmniBodyImage<B, BA>
-    where B: OmniBuf,
+    where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     type Item = Result<B, io::Error>;
@@ -339,7 +339,7 @@ impl<B, BA> Stream for OmniBodyImage<B, BA>
 }
 
 impl<B, BA> http_body::Body for OmniBodyImage<B, BA>
-    where B: OmniBuf,
+    where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     type Data = B;
@@ -367,14 +367,14 @@ impl<B, BA> http_body::Body for OmniBodyImage<B, BA>
 }
 
 pub struct PermitBodyImage<B>
-    where B: OmniBuf
+    where B: OutputBuf
 {
     image: OmniBodyImage<B, StatefulArbiter>,
     permit: Option<SyncBlockingPermitFuture<'static>>
 }
 
 impl<B> StreamWrapper for PermitBodyImage<B>
-    where B: OmniBuf
+    where B: OutputBuf
 {
     fn new(body: BodyImage, tune: FutioTunables) -> Self {
         PermitBodyImage {
@@ -385,7 +385,7 @@ impl<B> StreamWrapper for PermitBodyImage<B>
 }
 
 impl<B> Stream for PermitBodyImage<B>
-    where B: OmniBuf
+    where B: OutputBuf
 {
     type Item = Result<B, io::Error>;
 
@@ -433,7 +433,7 @@ impl<B> Stream for PermitBodyImage<B>
 }
 
 impl<B> http_body::Body for PermitBodyImage<B>
-    where B: OmniBuf,
+    where B: OutputBuf,
 {
     type Data = B;
     type Error = io::Error;
@@ -460,14 +460,14 @@ impl<B> http_body::Body for PermitBodyImage<B>
 }
 
 pub struct DispatchBodyImage<B>
-    where B: OmniBuf
+    where B: OutputBuf
 {
     state: DispatchState<B>,
     len: u64,
 }
 
 enum DispatchState<B>
-    where B: OmniBuf
+    where B: OutputBuf
 {
     Image(Option<OmniBodyImage<B, StatefulArbiter>>),
     Dispatch(Dispatched<(
@@ -476,7 +476,7 @@ enum DispatchState<B>
 }
 
 impl<B> StreamWrapper for DispatchBodyImage<B>
-    where B: OmniBuf
+    where B: OutputBuf
 {
     fn new(body: BodyImage, tune: FutioTunables) -> Self {
         let len = body.len();
@@ -488,7 +488,7 @@ impl<B> StreamWrapper for DispatchBodyImage<B>
 }
 
 impl<B> Stream for DispatchBodyImage<B>
-    where B: OmniBuf
+    where B: OutputBuf
 {
     type Item = Result<B, io::Error>;
 
@@ -523,7 +523,7 @@ impl<B> Stream for DispatchBodyImage<B>
 }
 
 impl<B> http_body::Body for DispatchBodyImage<B>
-    where B: OmniBuf,
+    where B: OutputBuf,
 {
     type Data = B;
     type Error = io::Error;

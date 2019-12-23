@@ -6,7 +6,7 @@ use blocking_permit::{
     blocking_permit_future, BlockingPermitFuture,
     dispatch_rx, Dispatched,
 };
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use futures_sink::Sink;
 use tao_log::debug;
 
@@ -14,16 +14,20 @@ use body_image::{BodyError, BodySink};
 
 use crate::{
     Blocking, BlockingArbiter, LenientArbiter, StatefulArbiter,
-    FutioError, FutioTunables, SinkWrapper, OmniBuf,
+    FutioError, FutioTunables, SinkWrapper, UniBodyBuf,
 };
 
-// FIXME: Should our B bounds be different than OmniBuf?
-// (Don't need its extension method)
+/// Marker trait for satisfying Sink input buffer requirements.
+pub trait InputBuf: Buf + AsRef<[u8]> + Into<Bytes>
+    + 'static + Send + Sync + Unpin {}
 
-/// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This
-/// allows a `hyper::Body` (`Bytes` item) stream to be forwarded
+impl InputBuf for Bytes {}
+impl InputBuf for UniBodyBuf {}
+
+/// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This allows
+/// a `hyper::Body` (`Bytes` item) or `AsyncBodyStream` to be forwarded
 /// (e.g. via `futures::Stream::forward`) to a `BodySink`, in a fully
-/// asynchronous fashion. FIXME
+/// asynchronous fashion.
 ///
 /// `FutioTunables` are used during the streaming to decide when to write back
 /// a BodySink in `Ram` to `FsWrite`. This implementation uses permits or a
@@ -31,7 +35,7 @@ use crate::{
 /// `BodySink::write_all` (state `FsWrite`).
 #[derive(Debug)]
 pub struct OmniBodySink<B, BA=LenientArbiter>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>,
+    where B: InputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     body: BodySink,
@@ -41,7 +45,7 @@ pub struct OmniBodySink<B, BA=LenientArbiter>
 }
 
 impl<B, BA> OmniBodySink<B, BA>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>,
+    where B: InputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     /// Wrap by consuming a `BodySink` and `FutioTunables` instances.
@@ -128,7 +132,7 @@ impl<B, BA> OmniBodySink<B, BA>
 }
 
 impl<B, BA> SinkWrapper<B> for OmniBodySink<B, BA>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>,
+    where B: InputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     fn new(body: BodySink, tune: FutioTunables) -> Self {
@@ -141,7 +145,7 @@ impl<B, BA> SinkWrapper<B> for OmniBodySink<B, BA>
 }
 
 impl<B, BA> Sink<B> for OmniBodySink<B, BA>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>,
+    where B: InputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     type Error = FutioError;
@@ -172,14 +176,14 @@ impl<B, BA> Sink<B> for OmniBodySink<B, BA>
 }
 
 pub struct PermitBodySink<B>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>,
+    where B: InputBuf,
 {
     sink: OmniBodySink<B, StatefulArbiter>,
     permit: Option<BlockingPermitFuture<'static>>
 }
 
 impl<B> SinkWrapper<B> for PermitBodySink<B>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+    where B: InputBuf
 {
     fn new(body: BodySink, tune: FutioTunables) -> Self {
         PermitBodySink {
@@ -194,7 +198,7 @@ impl<B> SinkWrapper<B> for PermitBodySink<B>
 }
 
 impl<B> Sink<B> for PermitBodySink<B>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+    where B: InputBuf
 {
     type Error = FutioError;
 
@@ -259,13 +263,13 @@ impl<B> Sink<B> for PermitBodySink<B>
 }
 
 pub struct DispatchBodySink<B>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+    where B: InputBuf
 {
     state: DispatchState<B>,
 }
 
 enum DispatchState<B>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+    where B: InputBuf
 {
     Sink(Option<OmniBodySink<B, StatefulArbiter>>),
     Dispatch(Dispatched<(
@@ -274,7 +278,7 @@ enum DispatchState<B>
 }
 
 impl<B> SinkWrapper<B> for DispatchBodySink<B>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+    where B: InputBuf
 {
     fn new(body: BodySink, tune: FutioTunables) -> Self {
         DispatchBodySink {
@@ -295,7 +299,7 @@ impl<B> SinkWrapper<B> for DispatchBodySink<B>
 }
 
 impl<B> Sink<B> for DispatchBodySink<B>
-    where B: OmniBuf + Into<Bytes> + AsRef<[u8]>
+    where B: InputBuf
 {
     type Error = FutioError;
 
