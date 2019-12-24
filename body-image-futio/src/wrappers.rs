@@ -4,7 +4,10 @@ use futures_sink::Sink;
 
 use body_image::{BodyImage, BodySink, Prolog};
 
-use crate::{AsyncBodyImage, FutioTunables, RequestRecord};
+use crate::{FutioTunables, RequestRecord};
+
+#[cfg(feature = "hyper_http")]
+use crate::AsyncBodyImage;
 
 /// Trait for generic construction of `Stream` wrapper types.
 pub trait StreamWrapper: Stream {

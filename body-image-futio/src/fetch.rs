@@ -5,13 +5,23 @@ use futures_util::{
     future::{Either, FutureExt as _, TryFutureExt},
     stream::{StreamExt, TryStreamExt},
 };
+
 use hyperx::header::{ContentLength, TypedHeaders};
 
 use body_image::{BodySink, Dialog};
 
 use crate::{
-    AsyncBodySink, InDialog, Flaw, FutioError, FutioTunables,
-    Monolog, RequestRecord
+    AsyncBodySink,
+    BlockingPolicy,
+    DispatchBodySink,
+    Flaw,
+    FutioError,
+    FutioTunables,
+    InDialog,
+    Monolog,
+    PermitBodySink,
+    RequestRecord,
+    SinkWrapper,
 };
 
 /// Run an HTTP request to completion, returning the full `Dialog`. This
@@ -118,17 +128,35 @@ async fn resp_future(monolog: Monolog, tune: FutioTunables)
         None => Ok(BodySink::with_ram(tune.image().max_body_ram()))
     }?;
 
-    let mut async_body = AsyncBodySink::<Bytes>::new(bsink, tune);
-
-    body.err_into::<FutioError>()
-        .forward(&mut async_body)
-        .await?;
+    let res_body = match tune.blocking_policy() {
+        BlockingPolicy::Direct => {
+            let mut sink = AsyncBodySink::<Bytes>::new(bsink, tune);
+            body.err_into::<FutioError>()
+                .forward(&mut sink)
+                .await?;
+            sink.into_inner()
+        }
+        BlockingPolicy::Permit(_) => {
+            let mut sink = PermitBodySink::<Bytes>::new(bsink, tune);
+            body.err_into::<FutioError>()
+                .forward(&mut sink)
+                .await?;
+            sink.into_inner()
+        }
+        BlockingPolicy::Dispatch => {
+            let mut sink = DispatchBodySink::<Bytes>::new(bsink, tune);
+            body.err_into::<FutioError>()
+                .forward(&mut sink)
+                .await?;
+            sink.into_inner()
+        }
+    };
 
     Ok(InDialog {
         prolog:      monolog.prolog,
         version:     resp_parts.version,
         status:      resp_parts.status,
         res_headers: resp_parts.headers,
-        res_body:    async_body.into_inner()
+        res_body
     })
 }

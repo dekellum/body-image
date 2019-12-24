@@ -11,13 +11,15 @@ use body_image::{BodySink, BodyImage, Tuner};
 
 use crate::{
     AsyncBodyImage, AsyncBodySink,
+    BlockingPolicy,
     DispatchBodyImage, DispatchBodySink,
     PermitBodyImage, PermitBodySink,
     FutioError, FutioTuner,
     SinkWrapper, StreamWrapper,
-    UniBodyBuf
 };
 use crate::logger::test_logger;
+
+#[cfg(feature = "mmap")] use crate::UniBodyBuf;
 
 lazy_static! {
     static ref BLOCKING_TEST_SET: Semaphore = Semaphore::default_new(3);
@@ -57,7 +59,7 @@ fn empty_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
           St::Error: Into<FutioError>
 {
     let tune = FutioTuner::new()
-        .set_blocking_semaphore(&BLOCKING_TEST_SET)
+        .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
         .finish();
     let body = St::new(BodyImage::empty(), tune.clone());
 
@@ -84,7 +86,9 @@ fn transfer_empty_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = empty_task::<DispatchBodyImage<Bytes>, DispatchBodySink<Bytes>, _>();
+    let task = empty_task::<
+            DispatchBodyImage<Bytes>,
+            DispatchBodySink<Bytes>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -105,7 +109,7 @@ fn small_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
           St::Error: Into<FutioError>
 {
     let tune = FutioTuner::new()
-        .set_blocking_semaphore(&BLOCKING_TEST_SET)
+        .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
         .finish();
     let body = St::new(BodyImage::from_slice("body"), tune.clone());
 
@@ -132,7 +136,9 @@ fn transfer_small_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = small_task::<DispatchBodyImage<Bytes>, DispatchBodySink<Bytes>, _>();
+    let task = small_task::<
+            DispatchBodyImage<Bytes>,
+            DispatchBodySink<Bytes>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -154,7 +160,7 @@ fn fs_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 {
     let tune = FutioTuner::new()
         .set_image(Tuner::new().set_buffer_size_fs(173).finish())
-        .set_blocking_semaphore(&BLOCKING_TEST_SET)
+        .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
         .finish();
     let mut in_body = BodySink::with_fs(tune.image().temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
@@ -184,7 +190,9 @@ fn transfer_fs_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = fs_task::<DispatchBodyImage<Bytes>, DispatchBodySink<Bytes>, _>();
+    let task = fs_task::<
+            DispatchBodyImage<Bytes>,
+            DispatchBodySink<Bytes>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -219,7 +227,7 @@ fn fs_back_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
                 .set_max_body_ram(15_000)
                 .finish()
         )
-        .set_blocking_semaphore(&BLOCKING_TEST_SET)
+        .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
         .finish();
     let mut in_body = BodySink::with_fs(tune.image().temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
@@ -249,7 +257,9 @@ fn transfer_fs_back_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = fs_back_task::<DispatchBodyImage<Bytes>, DispatchBodySink<Bytes>, _>();
+    let task = fs_back_task::<
+            DispatchBodyImage<Bytes>,
+            DispatchBodySink<Bytes>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -259,7 +269,9 @@ fn transfer_fs_back_ct() {
 fn transfer_fs_back_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_back_task::<AsyncBodyImage<Bytes>, AsyncBodySink<Bytes>, _>();
+    let task = fs_back_task::<
+            AsyncBodyImage<Bytes>,
+            AsyncBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
@@ -267,7 +279,9 @@ fn transfer_fs_back_th() {
 fn transfer_fs_back_th_permit() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_back_task::<PermitBodyImage<Bytes>, PermitBodySink<Bytes>, _>();
+    let task = fs_back_task::<
+            PermitBodyImage<Bytes>,
+            PermitBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
@@ -276,7 +290,9 @@ fn transfer_fs_back_th_multi() {
     assert!(test_logger());
     let mut rt = th_runtime();
     let futures: FuturesUnordered<_> = (0..20).map(|_| {
-        rt.spawn(fs_back_task::<PermitBodyImage<Bytes>, PermitBodySink<Bytes>, _>())
+        rt.spawn(fs_back_task::<
+                PermitBodyImage<Bytes>,
+                PermitBodySink<Bytes>, _>())
     }).collect();
     let join = rt.spawn(async {
         let c = futures.collect::<Vec<_>>() .await;
@@ -299,7 +315,7 @@ fn fs_map_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
                 .set_max_body_ram(15_000)
                 .finish()
         )
-        .set_blocking_semaphore(&BLOCKING_TEST_SET)
+        .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
         .finish();
     let mut in_body = BodySink::with_fs(tune.image().temp_dir()).unwrap();
     in_body.write_all(vec![1; 24_000]).unwrap();
@@ -331,7 +347,9 @@ fn transfer_fs_map_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = fs_map_task::<DispatchBodyImage<UniBodyBuf>, DispatchBodySink<UniBodyBuf>, _>();
+    let task = fs_map_task::<
+            DispatchBodyImage<UniBodyBuf>,
+            DispatchBodySink<UniBodyBuf>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -342,7 +360,9 @@ fn transfer_fs_map_ct() {
 fn transfer_fs_map_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_map_task::<AsyncBodyImage<UniBodyBuf>, AsyncBodySink<UniBodyBuf>, _>();
+    let task = fs_map_task::<
+            AsyncBodyImage<UniBodyBuf>,
+            AsyncBodySink<UniBodyBuf>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
@@ -351,6 +371,8 @@ fn transfer_fs_map_th() {
 fn transfer_fs_map_th_permit() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_map_task::<PermitBodyImage<UniBodyBuf>, PermitBodySink<UniBodyBuf>, _>();
+    let task = fs_map_task::<
+            PermitBodyImage<UniBodyBuf>,
+            PermitBodySink<UniBodyBuf>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }

@@ -60,7 +60,7 @@ pub use decode::{decode_res_body, find_encodings, find_chunked};
 #[cfg(feature = "hyper_http")] pub use self::fetch::{fetch, request_dialog};
 
 mod tune;
-pub use tune::{FutioTunables, FutioTuner};
+pub use tune::{BlockingPolicy, FutioTunables, FutioTuner};
 
 mod sink;
 pub use sink::{InputBuf, AsyncBodySink, DispatchBodySink, PermitBodySink};

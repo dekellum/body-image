@@ -18,14 +18,6 @@ enum BufState {
 }
 
 impl UniBodyBuf {
-    pub(crate) fn empty() -> UniBodyBuf {
-        UniBodyBuf::from_bytes(Bytes::new())
-    }
-
-    pub(crate) fn from_bytes(b: Bytes) -> UniBodyBuf {
-        UniBodyBuf { buf: BufState::Bytes(b) }
-    }
-
     #[cfg(feature = "mmap")]
     pub(crate) fn from_mmap(mb: MemMapBuf) -> UniBodyBuf {
         UniBodyBuf { buf: BufState::MemMap(mb) }

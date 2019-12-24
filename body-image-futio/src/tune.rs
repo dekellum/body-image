@@ -11,7 +11,21 @@ pub struct FutioTunables {
     image: Tunables,
     res_timeout:     Option<Duration>,
     body_timeout:    Option<Duration>,
-    blocking_semaphore: Option<&'static Semaphore>,
+    blocking_policy: BlockingPolicy,
+}
+
+/// The policy for blocking operations.
+///
+/// * If a `BlockingPermit` should be acquired, then the a `Semaphore` reference
+///   is included.
+///
+/// * If `Dispatch` then it is required that a `DispatchPool` is registered on
+///   the applicable threads.
+#[derive(Debug, Copy, Clone)]
+pub enum BlockingPolicy {
+    Direct,
+    Permit(&'static Semaphore),
+    Dispatch,
 }
 
 impl FutioTunables {
@@ -21,7 +35,7 @@ impl FutioTunables {
             image: Tunables::new(),
             res_timeout:  None,
             body_timeout: Some(Duration::from_secs(60)),
-            blocking_semaphore: None,
+            blocking_policy: BlockingPolicy::Direct,
         }
     }
 
@@ -49,7 +63,15 @@ impl FutioTunables {
     ///
     /// Default: None
     pub fn blocking_semaphore(&self) -> Option<&'static Semaphore> {
-        self.blocking_semaphore
+        if let BlockingPolicy::Permit(sema) = self.blocking_policy {
+            Some(sema)
+        } else {
+            None
+        }
+    }
+
+    pub fn blocking_policy(&self) -> BlockingPolicy {
+        self.blocking_policy
     }
 }
 
@@ -103,12 +125,11 @@ impl FutioTuner {
         self
     }
 
-    /// Set `Sempahore reference for use in constraining the number of
-    /// concurrent blocking operations.
-    pub fn set_blocking_semaphore(&mut self, semaphore: &'static Semaphore)
+    /// Set policy for blocking.
+    pub fn set_blocking_policy(&mut self, policy: BlockingPolicy)
         -> &mut FutioTuner
     {
-        self.template.blocking_semaphore = Some(semaphore);
+        self.template.blocking_policy = policy;
         self
     }
 
