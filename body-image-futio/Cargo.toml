@@ -41,6 +41,7 @@ default = ["mmap", "brotli", "hyper_http"]
 mmap = ["memmap", "olio/mmap", "body-image/mmap"]
 may_fail = [] # Tests which may fail
 hyper_http = ["hyper", "hyper-tls"]
+tangential = [] # less interesting benchmarks
 
 [lib]
 doctest = false

@@ -234,6 +234,7 @@ fn stream_25_fsread_direct_ct(b: &mut Bencher) {
 }
 
 // `AsyncBodyImage` in `FsRead`, 8KiB buffer size
+#[cfg(feature = "tangential")]
 #[bench]
 fn stream_30_fsread_permit_8k(b: &mut Bencher) {
     let tune = FutioTuner::new()
@@ -250,6 +251,7 @@ fn stream_30_fsread_permit_8k(b: &mut Bencher) {
 }
 
 // `AsyncBodyImage` in `FsRead`, 128KiB buffer size
+#[cfg(feature = "tangential")]
 #[bench]
 fn stream_31_fsread_permit_128k(b: &mut Bencher) {
     let tune = FutioTuner::new()
@@ -266,6 +268,7 @@ fn stream_31_fsread_permit_128k(b: &mut Bencher) {
 }
 
 // `AsyncBodyImage` in `FsRead`, 1MiB buffer size
+#[cfg(feature = "tangential")]
 #[bench]
 fn stream_32_fsread_permit_1m(b: &mut Bencher) {
     let tune = FutioTuner::new()
@@ -282,6 +285,7 @@ fn stream_32_fsread_permit_1m(b: &mut Bencher) {
 }
 
 // `AsyncBodyImage` in `FsRead`, 4MiB buffer size
+#[cfg(feature = "tangential")]
 #[bench]
 fn stream_33_fsread_permit_4m(b: &mut Bencher) {
     let tune = FutioTuner::new()
@@ -300,7 +304,7 @@ fn stream_33_fsread_permit_4m(b: &mut Bencher) {
 // `AsyncBodyImage::<UniBodyBuf>` in `MemMap`, mmap once ahead-of-time, zero-copy
 #[bench]
 #[cfg(feature = "mmap")]
-fn stream_40_mmap_uni_pre(b: &mut Bencher) {
+fn stream_40_mmap_pre(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let mut body = sink_data(sink).unwrap();
@@ -315,7 +319,7 @@ fn stream_40_mmap_uni_pre(b: &mut Bencher) {
 // `AsyncBodyImage::<UniBodyBuf>` in `MemMap`, new mmap on each iteration, zero-copy
 #[bench]
 #[cfg(feature = "mmap")]
-fn stream_41_mmap_uni_direct(b: &mut Bencher) {
+fn stream_41_mmap_direct(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
@@ -331,7 +335,7 @@ fn stream_41_mmap_uni_direct(b: &mut Bencher) {
 // `AsyncBodyImage::<UniBodyBuf>` in `MemMap`, new mmap on each iteration, zero-copy
 #[bench]
 #[cfg(feature = "mmap")]
-fn stream_41_mmap_uni_permit(b: &mut Bencher) {
+fn stream_41_mmap_permit(b: &mut Bencher) {
     let tune = FutioTuner::new()
         .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_SET))
         .finish();
