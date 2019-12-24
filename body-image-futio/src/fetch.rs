@@ -1,5 +1,6 @@
 use std::future::Future;
 
+use bytes::Bytes;
 use futures_util::{
     future::{Either, FutureExt as _, TryFutureExt},
     stream::{StreamExt, TryStreamExt},
@@ -117,7 +118,7 @@ async fn resp_future(monolog: Monolog, tune: FutioTunables)
         None => Ok(BodySink::with_ram(tune.image().max_body_ram()))
     }?;
 
-    let mut async_body = AsyncBodySink::new(bsink, tune);
+    let mut async_body = AsyncBodySink::<Bytes>::new(bsink, tune);
 
     body.err_into::<FutioError>()
         .forward(&mut async_body)

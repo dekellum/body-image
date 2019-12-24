@@ -11,12 +11,13 @@ use body_image::{BodySink, BodyImage, Tuner};
 
 use crate::{
     AsyncBodyImage, AsyncBodySink,
+    DispatchBodyImage, DispatchBodySink,
+    PermitBodyImage, PermitBodySink,
     FutioError, FutioTuner,
-    SinkWrapper, StreamWrapper
+    SinkWrapper, StreamWrapper,
+    UniBodyBuf
 };
 use crate::logger::test_logger;
-
-use crate::{UniBodyBuf, UniBodyImage, UniBodySink};
 
 lazy_static! {
     static ref BLOCKING_TEST_SET: Semaphore = Semaphore::default_new(3);
@@ -83,7 +84,7 @@ fn transfer_empty_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = empty_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
+    let task = empty_task::<DispatchBodyImage<Bytes>, DispatchBodySink<Bytes>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -93,26 +94,7 @@ fn transfer_empty_ct() {
 fn transfer_empty_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = empty_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
-    rt.block_on(rt.spawn(task)).unwrap().unwrap();
-}
-
-#[test]
-fn transfer_uni_empty_ct() {
-    assert!(test_logger());
-    register_dispatch();
-    let mut rt = local_runtime();
-    let task = empty_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res = rt.block_on(task);
-    deregister_dispatch();
-    res.expect("task success");
-}
-
-#[test]
-fn transfer_uni_empty_th() {
-    assert!(test_logger());
-    let task = empty_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let mut rt = th_runtime();
+    let task = empty_task::<AsyncBodyImage<Bytes>, AsyncBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
@@ -150,7 +132,7 @@ fn transfer_small_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = small_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
+    let task = small_task::<DispatchBodyImage<Bytes>, DispatchBodySink<Bytes>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -160,26 +142,7 @@ fn transfer_small_ct() {
 fn transfer_small_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = small_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
-    rt.block_on(rt.spawn(task)).unwrap().unwrap();
-}
-
-#[test]
-fn transfer_uni_small_ct() {
-    assert!(test_logger());
-    register_dispatch();
-    let mut rt = local_runtime();
-    let task = small_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res = rt.block_on(task);
-    deregister_dispatch();
-    res.expect("task success");
-}
-
-#[test]
-fn transfer_uni_small_th() {
-    assert!(test_logger());
-    let mut rt = th_runtime();
-    let task = small_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let task = small_task::<AsyncBodyImage<Bytes>, AsyncBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
@@ -221,7 +184,7 @@ fn transfer_fs_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = fs_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
+    let task = fs_task::<DispatchBodyImage<Bytes>, DispatchBodySink<Bytes>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -231,26 +194,15 @@ fn transfer_fs_ct() {
 fn transfer_fs_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
+    let task = fs_task::<AsyncBodyImage<Bytes>, AsyncBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
 #[test]
-fn transfer_uni_fs_ct() {
-    assert!(test_logger());
-    register_dispatch();
-    let mut rt = local_runtime();
-    let task = fs_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res = rt.block_on(task);
-    deregister_dispatch();
-    res.expect("task success");
-}
-
-#[test]
-fn transfer_uni_fs_th() {
+fn transfer_fs_th_permit() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let task = fs_task::<PermitBodyImage<Bytes>, PermitBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
@@ -297,7 +249,7 @@ fn transfer_fs_back_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = fs_back_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
+    let task = fs_back_task::<DispatchBodyImage<Bytes>, DispatchBodySink<Bytes>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -307,7 +259,15 @@ fn transfer_fs_back_ct() {
 fn transfer_fs_back_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_back_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
+    let task = fs_back_task::<AsyncBodyImage<Bytes>, AsyncBodySink<Bytes>, _>();
+    rt.block_on(rt.spawn(task)).unwrap().unwrap();
+}
+
+#[test]
+fn transfer_fs_back_th_permit() {
+    assert!(test_logger());
+    let mut rt = th_runtime();
+    let task = fs_back_task::<PermitBodyImage<Bytes>, PermitBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
@@ -316,40 +276,7 @@ fn transfer_fs_back_th_multi() {
     assert!(test_logger());
     let mut rt = th_runtime();
     let futures: FuturesUnordered<_> = (0..20).map(|_| {
-        rt.spawn(fs_back_task::<AsyncBodyImage, AsyncBodySink, Bytes>())
-    }).collect();
-    let join = rt.spawn(async {
-        let c = futures.collect::<Vec<_>>() .await;
-        assert_eq!(20, c.iter().filter(|r| r.is_ok()).count());
-    });
-    rt.block_on(join).unwrap();
-}
-
-#[test]
-fn transfer_uni_fs_back_ct() {
-    assert!(test_logger());
-    register_dispatch();
-    let mut rt = local_runtime();
-    let task = fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res = rt.block_on(task);
-    deregister_dispatch();
-    res.expect("task success");
-}
-
-#[test]
-fn transfer_uni_fs_back_th() {
-    assert!(test_logger());
-    let mut rt = th_runtime();
-    let task = fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    rt.block_on(rt.spawn(task)).unwrap().unwrap();
-}
-
-#[test]
-fn transfer_uni_fs_back_th_multi() {
-    assert!(test_logger());
-    let mut rt = th_runtime();
-    let futures: FuturesUnordered<_> = (0..20).map(|_| {
-        rt.spawn(fs_back_task::<UniBodyImage, UniBodySink, UniBodyBuf>())
+        rt.spawn(fs_back_task::<PermitBodyImage<Bytes>, PermitBodySink<Bytes>, _>())
     }).collect();
     let join = rt.spawn(async {
         let c = futures.collect::<Vec<_>>() .await;
@@ -404,7 +331,7 @@ fn transfer_fs_map_ct() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = fs_map_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
+    let task = fs_map_task::<DispatchBodyImage<UniBodyBuf>, DispatchBodySink<UniBodyBuf>, _>();
     let res = rt.block_on(task);
     deregister_dispatch();
     res.expect("task success");
@@ -415,27 +342,15 @@ fn transfer_fs_map_ct() {
 fn transfer_fs_map_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_map_task::<AsyncBodyImage, AsyncBodySink, Bytes>();
+    let task = fs_map_task::<AsyncBodyImage<UniBodyBuf>, AsyncBodySink<UniBodyBuf>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
 
 #[test]
 #[cfg(feature = "mmap")]
-fn transfer_uni_fs_map_ct() {
-    assert!(test_logger());
-    register_dispatch();
-    let mut rt = local_runtime();
-    let task = fs_map_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
-    let res = rt.block_on(task);
-    deregister_dispatch();
-    res.expect("task success");
-}
-
-#[test]
-#[cfg(feature = "mmap")]
-fn transfer_uni_fs_map_th() {
+fn transfer_fs_map_th_permit() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_map_task::<UniBodyImage, UniBodySink, UniBodyBuf>();
+    let task = fs_map_task::<PermitBodyImage<UniBodyBuf>, PermitBodySink<UniBodyBuf>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }

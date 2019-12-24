@@ -29,8 +29,8 @@ use crate::{
     AsyncBodyImage, AsyncBodySink,
     Flaw, FutioError, FutioTunables, FutioTuner,
     RequestRecord, RequestRecorder,
-    UniBodyImage,
-    request_dialog, user_agent
+    request_dialog, user_agent,
+    UniBodyBuf
 };
 
 use crate::logger::test_logger;
@@ -104,7 +104,9 @@ fn post_echo_async_body() {
             .set_blocking_semaphore(&BLOCKING_TEST_SET)
             .finish();
         let body = fs_body_image(445);
-        let res = spawn(post_body_req::<AsyncBodyImage>(&url, body, tune))
+        let res = spawn(
+            post_body_req::<AsyncBodyImage<Bytes>>(&url, body, tune)
+        )
             .await
             .unwrap();
         let _ = jh .await;
@@ -133,7 +135,9 @@ fn post_echo_async_body_multi() {
             .finish();
         let futures: FuturesUnordered<_> = (0..20).map(|i| {
             let body = fs_body_image(445 + i);
-            spawn(post_body_req::<AsyncBodyImage>(&url, body, tune.clone()))
+            spawn(post_body_req::<AsyncBodyImage<Bytes>>(
+                &url, body, tune.clone()
+            ))
         }).collect();
         let res = futures.collect::<Vec<_>>() .await;
         let _ = jh. await;
@@ -155,7 +159,9 @@ fn post_echo_async_body_mmap_copy() {
             .finish();
         let mut body = fs_body_image(445);
         body.mem_map().unwrap();
-        let res = spawn(post_body_req::<AsyncBodyImage>(&url, body, tune))
+        let res = spawn(
+            post_body_req::<AsyncBodyImage<Bytes>>(&url, body, tune)
+        )
             .await
             .unwrap();
         let _ = jh .await;
@@ -184,7 +190,9 @@ fn post_echo_uni_body_mmap() {
             .set_blocking_semaphore(&BLOCKING_TEST_SET)
             .finish();
         let body = fs_body_image(194_767);
-        let res = spawn(post_body_req::<UniBodyImage>(&url, body, tune))
+        let res = spawn(post_body_req::<AsyncBodyImage<UniBodyBuf>>(
+            &url, body, tune
+        ))
             .await
             .unwrap();
         let _ = jh .await;
@@ -212,7 +220,7 @@ fn timeout_before_response() {
             .set_body_timeout(Duration::from_millis(600))
             .set_blocking_semaphore(&BLOCKING_TEST_SET)
             .finish();
-        let res = spawn(get_req::<AsyncBodyImage>(&url, tune))
+        let res = spawn(get_req::<AsyncBodyImage<Bytes>>(&url, tune))
             .await
             .unwrap();
         let _ = jh .await;
@@ -240,7 +248,7 @@ fn timeout_during_streaming() {
             .set_body_timeout(Duration::from_millis(600))
             .set_blocking_semaphore(&BLOCKING_TEST_SET)
             .finish();
-        let res = spawn(get_req::<AsyncBodyImage>(&url, tune))
+        let res = spawn(get_req::<AsyncBodyImage<Bytes>>(&url, tune))
             .await
             .unwrap();
         let _ = jh .await;
@@ -271,7 +279,7 @@ fn timeout_during_streaming_race() {
             .set_body_timeout(Duration::from_millis(600))
             .set_blocking_semaphore(&BLOCKING_TEST_SET)
             .finish();
-        let res = spawn(get_req::<AsyncBodyImage>(&url, tune))
+        let res = spawn(get_req::<AsyncBodyImage<Bytes>>(&url, tune))
             .await
             .unwrap();
         let _ = jh .await;
@@ -303,7 +311,7 @@ fn get_async_body_multi_server() {
         let connector = HttpConnector::new();
         let client = Client::builder().build(connector);
         let futures: FuturesUnordered<_> = (0..20).map(|_| {
-            let req: RequestRecord<AsyncBodyImage> = http::Request::builder()
+            let req: RequestRecord<AsyncBodyImage<Bytes>> = http::Request::builder()
                 .method(http::Method::GET)
                 .uri(&url)
                 .record()
@@ -341,7 +349,7 @@ async fn echo(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 }
 
 async fn echo_async(req: Request<Body>)
-    -> Result<Response<AsyncBodyImage>, FutioError>
+    -> Result<Response<AsyncBodyImage<Bytes>>, FutioError>
 {
     let tune = FutioTuner::new()
         .set_image(
@@ -352,7 +360,7 @@ async fn echo_async(req: Request<Body>)
         )
         .set_blocking_semaphore(&BLOCKING_TEST_SET)
         .finish();
-    let mut asink = AsyncBodySink::new(
+    let mut asink = AsyncBodySink::<Bytes>::new(
         BodySink::with_ram_buffers(4),
         tune
     );
@@ -375,7 +383,7 @@ async fn echo_async(req: Request<Body>)
 
 #[cfg(feature = "mmap")]
 async fn echo_uni_mmap(req: Request<Body>)
-    -> Result<Response<UniBodyImage>, FutioError>
+    -> Result<Response<AsyncBodyImage<UniBodyBuf>>, FutioError>
 {
     let tune = FutioTuner::new()
         .set_image(
@@ -386,7 +394,7 @@ async fn echo_uni_mmap(req: Request<Body>)
         )
         .set_blocking_semaphore(&BLOCKING_TEST_SET)
         .finish();
-    let mut asink = AsyncBodySink::new(
+    let mut asink = AsyncBodySink::<Bytes>::new(
         BodySink::with_ram_buffers(4),
         tune
     );
@@ -404,7 +412,10 @@ async fn echo_uni_mmap(req: Request<Body>)
 
     Ok(Response::builder()
        .status(200)
-       .body(debugv!("echo (mmap)", UniBodyImage::new(bi, tune)))
+       .body(debugv!(
+           "echo (mmap)",
+           AsyncBodyImage::<UniBodyBuf>::new(bi, tune)
+       ))
        .expect("response"))
 }
 
@@ -415,7 +426,7 @@ async fn delayed(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     let delay1 = tokio::time::delay_until(now + Duration::from_millis(100));
     let delay2 = tokio::time::delay_until(now + Duration::from_millis(900));
     delay1.await;
-    let rbody = AsyncBodyImage::new(bi, tune)
+    let rbody = AsyncBodyImage::<Bytes>::new(bi, tune)
         .chain(
             delay2
                 .map(|_| Ok(Bytes::new()))
@@ -464,7 +475,9 @@ fn body_server(body: BodyImage, tune: FutioTunables)
                 future::ok::<_, FutioError>(
                     Response::builder()
                         .status(200)
-                        .body(UniBodyImage::new(body.clone(), tune.clone()))
+                        .body(AsyncBodyImage::<UniBodyBuf>::new(
+                            body.clone(), tune.clone()
+                        ))
                         .expect("response")
                 )
             }))

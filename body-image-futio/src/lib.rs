@@ -1,12 +1,12 @@
 //! Asynchronous HTTP integration for _body-image_.
 //!
 //! The _body-image-futio_ crate integrates the _body-image_ crate with
-//! _futures_, _http_, _hyper_ 0.12.x., and _tokio_ crates for both client and
-//! server use.
+//! _futures_, _http_, _hyper_, and _tokio_ crates for both client and server
+//! use.
 //!
 //! * Trait [`RequestRecorder`](trait.RequestRecorder.html) extends
 //!   `http::request::Builder` for recording a
-//!   [`RequestRecord`](struct.RequestRecord.html) of varous body types, which
+//!   [`RequestRecord`](struct.RequestRecord.html) of various body types, which
 //!   can then be passed to `request_dialog` or `fetch`.
 //!
 //! * The [`fetch`](fn.fetch.html) function runs a `RequestRecord` and returns
@@ -24,11 +24,6 @@
 //! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
 //!   asynchronous output as a `Stream` and `http_body::Body`.
 //!
-//! * Alternatively, [`UniBodySink`](struct.UniBodySink.html) and
-//!   [`UniBodyImage`](struct.UniBodyImage.html) offer zero-copy `MemMap`
-//!   support, using the custom [`UniBodyBuf`](struct.UniBodyBuf.html) item
-//!   buffer type (instead of `Bytes`).
-//!
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
@@ -40,7 +35,6 @@ use std::fmt;
 use std::io;
 use std::time::Duration;
 
-use bytes::Bytes;
 use tao_log::warn;
 
 use body_image::{
@@ -56,38 +50,32 @@ use body_image::{Epilog, Dialog};
 /// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
-mod tune;
-pub use tune::{FutioTunables, FutioTuner};
+mod blocking;
+pub use blocking::{Blocking, BlockingArbiter, LenientArbiter, StatefulArbiter};
 
 mod decode;
 pub use decode::{decode_res_body, find_encodings, find_chunked};
 
-mod image;
-pub use image::{AsyncBodyImage, StreamWrapper};
+#[cfg(feature = "hyper_http")] mod fetch;
+#[cfg(feature = "hyper_http")] pub use self::fetch::{fetch, request_dialog};
+
+mod tune;
+pub use tune::{FutioTunables, FutioTuner};
 
 mod sink;
-pub use sink::{AsyncBodySink, SinkWrapper};
+pub use sink::{InputBuf, AsyncBodySink, DispatchBodySink, PermitBodySink};
+
+mod stream;
+pub use stream::{OutputBuf, AsyncBodyImage, DispatchBodyImage, PermitBodyImage};
 
 #[cfg(feature = "mmap")] mod mem_map_buf;
 #[cfg(feature = "mmap")] use mem_map_buf::MemMapBuf;
 
-mod uni_image;
-pub use uni_image::{UniBodyImage, UniBodyBuf};
+mod uni_body_buf;
+pub use uni_body_buf::UniBodyBuf;
 
-mod uni_sink;
-pub use uni_sink::UniBodySink;
-
-mod omni_image;
-pub use omni_image::{
-    Blocking, BlockingArbiter, LenientArbiter, StatefulArbiter,
-    OutputBuf, OmniBodyImage
-};
-
-mod omni_sink;
-pub use omni_sink::OmniBodySink;
-
-#[cfg(feature = "hyper_http")] mod fetch;
-#[cfg(feature = "hyper_http")] pub use self::fetch::{fetch, request_dialog};
+mod wrappers;
+pub use wrappers::{SinkWrapper, StreamWrapper, RequestRecorder};
 
 /// The crate version string.
 pub static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -292,94 +280,6 @@ impl InDialog {
                 res_decoded,
             }
         ))
-    }
-}
-
-/// Extension trait for `http::request::Builder`, to enable recording key
-/// portions of the request for the final `Dialog`.
-///
-/// Other request fields (`method`, `uri`, `headers`) are recorded by `clone`,
-/// after finishing the request.
-
-/// The request body is cloned in advance of finishing the request, though
-/// this is inexpensive via `Bytes::clone` or `BodyImage::clone`. Other
-/// request fields (`method`, `uri`, `headers`) are recorded by `clone`, after
-/// finishing the request.
-pub trait RequestRecorder<B>
-    where B: http_body::Body + Send
-{
-    /// Short-hand for completing the builder with an empty body, as is
-    /// the case with many HTTP request methods (e.g. GET).
-    fn record(self) -> Result<RequestRecord<B>, http::Error>;
-
-    /// Complete the builder with any body that can be converted to a (Ram)
-    /// `Bytes` buffer.
-    fn record_body<BB>(self, body: BB)
-        -> Result<RequestRecord<B>, http::Error>
-        where BB: Into<Bytes>;
-
-    /// Complete the builder with a `BodyImage` for the request body.
-    ///
-    /// *Note*: Both `BodyImage` and `FutioTunables` are `Clone` (inexpensive),
-    /// so that can be done beforehand to preserve owned copies.
-    fn record_body_image(self, body: BodyImage, tune: FutioTunables)
-        -> Result<RequestRecord<B>, http::Error>;
-}
-
-#[cfg(feature = "hyper_http")]
-impl RequestRecorder<hyper::Body> for http::request::Builder {
-    fn record(self) -> Result<RequestRecord<hyper::Body>, http::Error> {
-        let request = self.body(hyper::Body::empty())?;
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        let req_body = BodyImage::empty();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body }
-        })
-    }
-
-    fn record_body<BB>(self, body: BB)
-        -> Result<RequestRecord<hyper::Body>, http::Error>
-        where BB: Into<Bytes>
-    {
-        let buf: Bytes = body.into();
-        let buf_copy: Bytes = buf.clone();
-        let request = self.body(buf.into())?;
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        let req_body = if buf_copy.is_empty() {
-            BodyImage::empty()
-        } else {
-            BodyImage::from_slice(buf_copy)
-        };
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body } })
-    }
-
-    fn record_body_image(self, body: BodyImage, tune: FutioTunables)
-        -> Result<RequestRecord<hyper::Body>, http::Error>
-    {
-        let request = if !body.is_empty() {
-            let stream = AsyncBodyImage::new(body.clone(), tune);
-            self.body(hyper::Body::wrap_stream(stream))?
-        } else {
-            self.body(hyper::Body::empty())?
-        };
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body: body } })
     }
 }
 

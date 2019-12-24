@@ -18,91 +18,17 @@ use futures_core::stream::Stream;
 use olio::fs::rc::ReadSlice;
 use tao_log::{debug, warn};
 
-use body_image::{BodyImage, ExplodedImage, Prolog, };
+use body_image::{BodyImage, ExplodedImage};
 
 use crate::{
-    FutioTunables, RequestRecord, RequestRecorder, StreamWrapper, UniBodyBuf
+    Blocking, BlockingArbiter, LenientArbiter, StatefulArbiter,
+    FutioTunables, StreamWrapper, UniBodyBuf
 };
 
 #[cfg(feature = "mmap")] use memmap::Mmap;
 #[cfg(feature = "mmap")] use crate::MemMapBuf;
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
 #[cfg(feature = "mmap")] use body_image::_mem_handle_ext::MemHandleExt;
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum Blocking {
-    // Not requested nor allowed
-    Void,
-    // Requested Once
-    Pending,
-    // One blocking operation granted
-    Once,
-    // Any/all blocking operations perpetually granted
-    Always,
-}
-
-pub trait BlockingArbiter {
-    fn can_block(&mut self) -> bool;
-
-    fn state(&self) -> Blocking;
-}
-
-#[derive(Debug, Default)]
-pub struct LenientArbiter;
-
-impl BlockingArbiter for LenientArbiter {
-    fn can_block(&mut self) -> bool {
-        true
-    }
-
-    fn state(&self) -> Blocking {
-        Blocking::Always
-    }
-}
-
-#[derive(Debug)]
-pub struct StatefulArbiter {
-    state: Blocking
-}
-
-impl Default for StatefulArbiter {
-    fn default() -> Self {
-        StatefulArbiter { state: Blocking::Void }
-    }
-}
-
-impl StatefulArbiter {
-    pub(crate) fn set(&mut self, state: Blocking) {
-        self.state = state;
-    }
-}
-
-impl BlockingArbiter for StatefulArbiter {
-    // Return true if blocking is allowed, consuming any one-time
-    // allowance. Otherwise records that blocking has been requested.
-    fn can_block(&mut self) -> bool {
-        match self.state {
-            Blocking::Void => {
-                self.state = Blocking::Pending;
-                false
-            }
-            Blocking::Pending => {
-                false
-            }
-            Blocking::Once => {
-                self.state = Blocking::Void;
-                true
-            }
-            Blocking::Always => {
-                true
-            }
-        }
-    }
-
-    fn state(&self) -> Blocking {
-        self.state
-    }
-}
 
 /// Trait for satisftying Stream output buffer requirments.
 pub trait OutputBuf: Buf + 'static + From<Bytes> + Send + Sync + Unpin {
@@ -155,11 +81,11 @@ impl OutputBuf for UniBodyBuf {
 /// for blocking reads from `FsRead` state and when dereferencing from `MemMap`
 /// state.
 #[derive(Debug)]
-pub struct OmniBodyImage<B, BA=LenientArbiter>
+pub struct AsyncBodyImage<B, BA=LenientArbiter>
     where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
-    state: OmniBodyState,
+    state: AsyncBodyState,
     len: u64,
     consumed: u64,
     tune: FutioTunables,
@@ -167,7 +93,7 @@ pub struct OmniBodyImage<B, BA=LenientArbiter>
     buf_type: PhantomData<fn() -> B>,
 }
 
-impl<B, BA> OmniBodyImage<B, BA>
+impl<B, BA> AsyncBodyImage<B, BA>
     where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
@@ -179,8 +105,8 @@ impl<B, BA> OmniBodyImage<B, BA>
         let len = body.len();
         match body.explode() {
             ExplodedImage::Ram(v) => {
-                OmniBodyImage {
-                    state: OmniBodyState::Ram(v.into_iter()),
+                AsyncBodyImage {
+                    state: AsyncBodyState::Ram(v.into_iter()),
                     len,
                     consumed: 0,
                     tune,
@@ -189,8 +115,8 @@ impl<B, BA> OmniBodyImage<B, BA>
                 }
             }
             ExplodedImage::FsRead(rs) => {
-                OmniBodyImage {
-                    state: OmniBodyState::File(rs),
+                AsyncBodyImage {
+                    state: AsyncBodyState::File(rs),
                     len,
                     consumed: 0,
                     tune,
@@ -200,8 +126,8 @@ impl<B, BA> OmniBodyImage<B, BA>
             }
             #[cfg(feature = "mmap")]
             ExplodedImage::MemMap(mmap) => {
-                OmniBodyImage {
-                    state: OmniBodyState::MemMap(Some(mmap)),
+                AsyncBodyImage {
+                    state: AsyncBodyState::MemMap(Some(mmap)),
                     len,
                     consumed: 0,
                     tune,
@@ -220,7 +146,7 @@ impl<B, BA> OmniBodyImage<B, BA>
 
         // All states besides Ram require blocking
         match self.state {
-            OmniBodyState::Ram(_) => {}
+            AsyncBodyState::Ram(_) => {}
             _ => {
                 if !self.arbiter.can_block() {
                     return Poll::Pending;
@@ -229,7 +155,7 @@ impl<B, BA> OmniBodyImage<B, BA>
         }
 
         match self.state {
-            OmniBodyState::Ram(ref mut iter) => {
+            AsyncBodyState::Ram(ref mut iter) => {
                 match iter.next() {
                     Some(b) => {
                         self.consumed += b.len() as u64;
@@ -238,7 +164,7 @@ impl<B, BA> OmniBodyImage<B, BA>
                     None => Poll::Ready(None),
                 }
             }
-            OmniBodyState::File(ref mut rs) => {
+            AsyncBodyState::File(ref mut rs) => {
                 let rlen = cmp::min(
                     self.tune.image().buffer_size_fs() as u64,
                     avail
@@ -261,7 +187,7 @@ impl<B, BA> OmniBodyImage<B, BA>
                         }
                         Err(e) => {
                             if e.kind() == io::ErrorKind::Interrupted {
-                                warn!("OmniBodyImage: write interrupted");
+                                warn!("AsyncBodyImage: write interrupted");
                             } else {
                                 break Poll::Ready(Some(Err(e)));
                             }
@@ -270,7 +196,7 @@ impl<B, BA> OmniBodyImage<B, BA>
                 }
             }
             #[cfg(feature = "mmap")]
-            OmniBodyState::MemMap(ref mut ob) => {
+            AsyncBodyState::MemMap(ref mut ob) => {
                 if let Some(mb) = ob.take() {
                     match B::from_mmap(mb) {
                         Ok(buf) => {
@@ -287,36 +213,36 @@ impl<B, BA> OmniBodyImage<B, BA>
     }
 }
 
-impl<B, BA> StreamWrapper for OmniBodyImage<B, BA>
+impl<B, BA> StreamWrapper for AsyncBodyImage<B, BA>
     where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
     fn new(body: BodyImage, tune: FutioTunables) -> Self {
-        OmniBodyImage::new(body, tune)
+        AsyncBodyImage::new(body, tune)
     }
 }
 
-enum OmniBodyState {
+enum AsyncBodyState {
     Ram(IntoIter<Bytes>),
     File(ReadSlice),
     #[cfg(feature = "mmap")]
     MemMap(Option<MemHandle<Mmap>>),
 }
 
-impl fmt::Debug for OmniBodyState {
+impl fmt::Debug for AsyncBodyState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            OmniBodyState::Ram(_) => {
+            AsyncBodyState::Ram(_) => {
                 // Avoids showing all buffers as u8 lists
                 write!(f, "Ram(IntoIter<Bytes>)")
             }
-            OmniBodyState::File(ref rs) => {
+            AsyncBodyState::File(ref rs) => {
                 f.debug_struct("File")
                     .field("rs", rs)
                     .finish()
             }
             #[cfg(feature = "mmap")]
-            OmniBodyState::MemMap(ref ob) => {
+            AsyncBodyState::MemMap(ref ob) => {
                 f.debug_tuple("MemMap")
                     .field(ob)
                     .finish()
@@ -325,7 +251,7 @@ impl fmt::Debug for OmniBodyState {
     }
 }
 
-impl<B, BA> Stream for OmniBodyImage<B, BA>
+impl<B, BA> Stream for AsyncBodyImage<B, BA>
     where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
@@ -338,7 +264,7 @@ impl<B, BA> Stream for OmniBodyImage<B, BA>
     }
 }
 
-impl<B, BA> http_body::Body for OmniBodyImage<B, BA>
+impl<B, BA> http_body::Body for AsyncBodyImage<B, BA>
     where B: OutputBuf,
           BA: BlockingArbiter + Default + Unpin
 {
@@ -369,7 +295,7 @@ impl<B, BA> http_body::Body for OmniBodyImage<B, BA>
 pub struct PermitBodyImage<B>
     where B: OutputBuf
 {
-    image: OmniBodyImage<B, StatefulArbiter>,
+    image: AsyncBodyImage<B, StatefulArbiter>,
     permit: Option<SyncBlockingPermitFuture<'static>>
 }
 
@@ -378,7 +304,7 @@ impl<B> StreamWrapper for PermitBodyImage<B>
 {
     fn new(body: BodyImage, tune: FutioTunables) -> Self {
         PermitBodyImage {
-            image: OmniBodyImage::new(body, tune),
+            image: AsyncBodyImage::new(body, tune),
             permit: None
         }
     }
@@ -426,6 +352,9 @@ impl<B> Stream for PermitBodyImage<B>
                     this.image.tune.blocking_semaphore()
                         .expect("blocking semaphore required!")
                 ).make_sync());
+
+                // Recurse for correct waking
+                return Pin::new(this).poll_next(cx);
             }
             res
         }
@@ -469,10 +398,10 @@ pub struct DispatchBodyImage<B>
 enum DispatchState<B>
     where B: OutputBuf
 {
-    Image(Option<OmniBodyImage<B, StatefulArbiter>>),
+    Image(Option<AsyncBodyImage<B, StatefulArbiter>>),
     Dispatch(Dispatched<(
         Poll<Option<Result<B, io::Error>>>,
-        OmniBodyImage<B, StatefulArbiter>)>),
+        AsyncBodyImage<B, StatefulArbiter>)>),
 }
 
 impl<B> StreamWrapper for DispatchBodyImage<B>
@@ -481,7 +410,7 @@ impl<B> StreamWrapper for DispatchBodyImage<B>
     fn new(body: BodyImage, tune: FutioTunables) -> Self {
         let len = body.len();
         DispatchBodyImage {
-            state: DispatchState::Image(Some(OmniBodyImage::new(body, tune))),
+            state: DispatchState::Image(Some(AsyncBodyImage::new(body, tune))),
             len,
         }
     }
@@ -501,10 +430,14 @@ impl<B> Stream for DispatchBodyImage<B>
                 let ob = obo.as_mut().unwrap();
                 let res = ob.poll_impl();
                 if res.is_pending() && ob.arbiter.state() == Blocking::Pending {
+                    ob.arbiter.set(Blocking::Once);
                     let mut ob = obo.take().unwrap();
                     this.state = DispatchState::Dispatch(dispatch_rx(move || {
                         (ob.poll_impl(), ob)
                     }).unwrap());
+
+                    // Recurse for correct waking
+                    return Pin::new(this).poll_next(cx);
                 }
                 res
             }
@@ -556,64 +489,6 @@ impl<B> http_body::Body for DispatchBodyImage<B>
     }
 }
 
-impl<SW> RequestRecorder<SW> for http::request::Builder
-    where SW: StreamWrapper + http_body::Body + Send
-{
-    fn record(self) -> Result<RequestRecord<SW>, http::Error> {
-        let request = {
-            let body = BodyImage::empty();
-            // Tunables are unused for empty body, so default is sufficient.
-            let tune = FutioTunables::default();
-            self.body(SW::new(body, tune))?
-        };
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        let req_body = BodyImage::empty();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body }
-        })
-    }
-
-    fn record_body<BB>(self, body: BB) -> Result<RequestRecord<SW>, http::Error>
-        where BB: Into<Bytes>
-    {
-        let buf: Bytes = body.into();
-        let req_body = if buf.is_empty() {
-            BodyImage::empty()
-        } else {
-            BodyImage::from_slice(buf)
-        };
-        // Tunables are unused for Ram based body, so default is sufficient.
-        let tune = FutioTunables::default();
-        let request = self.body(SW::new(req_body.clone(), tune))?;
-
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body } })
-    }
-
-    fn record_body_image(self, body: BodyImage, tune: FutioTunables)
-        -> Result<RequestRecord<SW>, http::Error>
-    {
-        let request = self.body(SW::new(body.clone(), tune))?;
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body: body } })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -623,10 +498,10 @@ mod tests {
 
     #[test]
     fn test_send_sync() {
-        // In order for OmniBodyImage to work with hyper::Body::wrap_stream,
+        // In order for AsyncBodyImage to work with hyper::Body::wrap_stream,
         // it must be both Sync and Send
-        assert!(is_send::<OmniBodyImage<Bytes>>());
-        assert!(is_sync::<OmniBodyImage<Bytes>>());
+        assert!(is_send::<AsyncBodyImage<Bytes>>());
+        assert!(is_sync::<AsyncBodyImage<Bytes>>());
 
         assert!(is_send::<DispatchBodyImage<Bytes>>());
         assert!(is_sync::<DispatchBodyImage<Bytes>>());
