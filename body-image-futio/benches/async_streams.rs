@@ -19,7 +19,11 @@ use lazy_static::lazy_static;
 use rand::seq::SliceRandom;
 use test::Bencher;
 
-use body_image::{BodyError, BodySink, BodyImage, Tuner};
+use body_image::{BodyError, BodySink, BodyImage};
+
+#[cfg(feature = "tangential")]
+use body_image::Tuner;
+
 use body_image_futio::*;
 
 lazy_static! {
