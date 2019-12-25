@@ -426,7 +426,7 @@ async fn delayed(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     let now = tokio::time::Instant::now();
     let delay1 = tokio::time::delay_until(now + Duration::from_millis(100));
     let delay2 = tokio::time::delay_until(now + Duration::from_millis(900));
-    delay1.await;
+    delay1 .await;
     let rbody = AsyncBodyImage::<Bytes>::new(bi, tune)
         .chain(
             delay2
