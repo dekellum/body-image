@@ -128,6 +128,10 @@ async fn resp_future(monolog: Monolog, tune: FutioTunables)
         None => Ok(BodySink::with_ram(tune.image().max_body_ram()))
     }?;
 
+    // Regardless of policy, we always receive `Bytes` from hyper, so there is
+    // no advantage to converting to `UniBodyBuf` here. Memory mmapped buffers
+    // are never received.
+
     let res_body = match tune.blocking_policy() {
         BlockingPolicy::Direct => {
             let mut sink = AsyncBodySink::<Bytes>::new(bsink, tune);
