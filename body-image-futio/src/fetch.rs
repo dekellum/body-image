@@ -11,16 +11,8 @@ use hyperx::header::{ContentLength, TypedHeaders};
 use body_image::{BodySink, Dialog};
 
 use crate::{
-    AsyncBodySink,
-    BlockingPolicy,
-    DispatchBodySink,
-    Flaw,
-    FutioError,
-    FutioTunables,
-    InDialog,
-    Monolog,
-    PermitBodySink,
-    RequestRecord,
+    AsyncBodySink, BlockingPolicy, DispatchBodySink, Flaw, FutioError,
+    FutioTunables, InDialog, Monolog, PermitBodySink, RequestRecord,
     SinkWrapper,
 };
 
