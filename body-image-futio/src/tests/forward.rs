@@ -82,7 +82,7 @@ fn empty_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 }
 
 #[test]
-fn transfer_empty_ct() {
+fn transfer_empty_ct_dispatch() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
@@ -186,7 +186,7 @@ fn fs_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 }
 
 #[test]
-fn transfer_fs_ct() {
+fn transfer_fs_ct_dispatch() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
@@ -253,7 +253,7 @@ fn fs_back_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 }
 
 #[test]
-fn transfer_fs_back_ct() {
+fn transfer_fs_back_ct_dispatch() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
@@ -302,7 +302,7 @@ fn transfer_fs_back_th_multi() {
 }
 
 #[cfg(feature = "mmap")]
-fn fs_map_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
+fn mmap_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
     where St: StreamWrapper + TryStream + StreamExt,
           Sk: SinkWrapper<B> + Sink<B, Error=FutioError> + Unpin,
           B: From<<St as TryStream>::Ok>,
@@ -343,11 +343,11 @@ fn fs_map_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 
 #[test]
 #[cfg(feature = "mmap")]
-fn transfer_fs_map_ct() {
+fn transfer_mmap_ct_dispatch() {
     assert!(test_logger());
     register_dispatch();
     let mut rt = local_runtime();
-    let task = fs_map_task::<
+    let task = mmap_task::<
             DispatchBodyImage<UniBodyBuf>,
             DispatchBodySink<UniBodyBuf>, _>();
     let res = rt.block_on(task);
@@ -357,10 +357,10 @@ fn transfer_fs_map_ct() {
 
 #[test]
 #[cfg(feature = "mmap")]
-fn transfer_fs_map_th() {
+fn transfer_mmap_th() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_map_task::<
+    let task = mmap_task::<
             AsyncBodyImage<UniBodyBuf>,
             AsyncBodySink<UniBodyBuf>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
@@ -368,10 +368,10 @@ fn transfer_fs_map_th() {
 
 #[test]
 #[cfg(feature = "mmap")]
-fn transfer_fs_map_th_permit() {
+fn transfer_mmap_th_permit() {
     assert!(test_logger());
     let mut rt = th_runtime();
-    let task = fs_map_task::<
+    let task = mmap_task::<
             PermitBodyImage<UniBodyBuf>,
             PermitBodySink<UniBodyBuf>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
