@@ -121,7 +121,7 @@ async fn resp_future(monolog: Monolog, tune: FutioTunables)
     }?;
 
     // Regardless of policy, we always receive `Bytes` from hyper, so there is
-    // no advantage to converting to `UniBodyBuf` here. Memory mmapped buffers
+    // no advantage to converting to `UniBodyBuf` here. Memory mapped buffers
     // are never received.
 
     let res_body = match tune.blocking_policy() {

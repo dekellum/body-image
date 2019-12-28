@@ -4,7 +4,7 @@ use blocking_permit::Semaphore;
 use body_image::Tunables;
 
 /// An additional set of tuning constants for asynchronous I/O, extending the
-/// body-image `Tunables` set by composition.  Setters are available via
+/// body-image `Tunables` set.  Setters are available via
 /// [`FutioTuner`](struct.FutioTuner.html) (a builder type).
 #[derive(Debug, Clone)]
 pub struct FutioTunables {
@@ -15,16 +15,18 @@ pub struct FutioTunables {
 }
 
 /// The policy for blocking operations.
-///
-/// * If a `BlockingPermit` should be acquired, then the a `Semaphore` reference
-///   is included.
-///
-/// * If `Dispatch` then it is required that a `DispatchPool` is registered on
-///   the applicable threads.
 #[derive(Debug, Copy, Clone)]
 pub enum BlockingPolicy {
+    /// Always run blocking operations directly and without further
+    /// coordination.
     Direct,
+
+    /// Acquire a `BlockingPermit` from the referenced `Semaphore` and use this
+    /// to run the blocking operation on the _current_ thread.
     Permit(&'static Semaphore),
+
+    /// Dispatch blocking operations to the `DispatchPool` registered on the
+    /// current thread.
     Dispatch,
 }
 
@@ -70,6 +72,9 @@ impl FutioTunables {
         }
     }
 
+    /// Return the policy for any required blocking operations.
+    ///
+    /// Defautlt: `BlockingPolicy::Direct`
     pub fn blocking_policy(&self) -> BlockingPolicy {
         self.blocking_policy
     }
@@ -85,6 +90,8 @@ impl AsRef<Tunables> for FutioTunables {
     }
 }
 
+/// A builder for [`FutioTunables`]. Invariants are asserted in the various
+/// setters and `finish`.
 pub struct FutioTuner {
     template: FutioTunables
 }
@@ -125,7 +132,10 @@ impl FutioTuner {
         self
     }
 
-    /// Set policy for blocking.
+    /// Set policy for blocking. Note that below the highest level interfaces
+    /// such as `request_dialog` and `fetch`, setting this should be combined
+    /// with using the appropriate `Stream` or `Sink` types, e.g. using
+    /// `PermitBodyStream` with `BlockingPolicy::Permit`.
     pub fn set_blocking_policy(&mut self, policy: BlockingPolicy)
         -> &mut FutioTuner
     {

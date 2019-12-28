@@ -1,3 +1,5 @@
+
+/// All possible states of a [`BlockingArbiter`].
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Blocking {
     // Not requested nor allowed
@@ -10,7 +12,8 @@ pub enum Blocking {
     Always,
 }
 
-/// An arbiter for acceptable blocking.
+/// Trait for arbitration of where blocking operations are acceptable to the
+/// runtime.
 pub trait BlockingArbiter {
     /// Return true if blocking is allowed.
     ///
