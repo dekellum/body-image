@@ -457,7 +457,7 @@ fn fs_body_image(size: usize) -> BodyImage {
 fn ram_body_image(csize: usize, count: usize) -> BodyImage {
     let mut bs = BodySink::with_ram_buffers(count);
     for _ in 0..count {
-        bs.save(vec![1; csize]).expect("safe for Ram");
+        bs.push(vec![1; csize]).expect("safe for Ram");
     }
     bs.prepare().expect("safe for Ram")
 }

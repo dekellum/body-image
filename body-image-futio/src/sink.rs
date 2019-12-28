@@ -81,8 +81,8 @@ impl<B, BA> AsyncBodySink<B, BA>
         // Ram doesn't need blocking permit (early exit)
         if self.body.is_ram() && new_len <= self.tune.image().max_body_ram()
         {
-            debug!("to save buf (len: {})", buf.remaining());
-            self.body.save(buf).map_err(FutioError::from)?;
+            debug!("to push buf (len: {})", buf.remaining());
+            self.body.push(buf).map_err(FutioError::from)?;
             return Ok(None)
         };
 

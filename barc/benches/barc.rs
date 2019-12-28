@@ -84,13 +84,13 @@ fn write_read_large(fname: &PathBuf, strategy: &dyn CompressStrategy)
 
     let mut req_body = BodySink::with_ram_buffers(req_reps);
     for _ in 0..req_reps {
-        req_body.save(lorem_ipsum)?;
+        req_body.push(lorem_ipsum)?;
     }
     let req_body = req_body.prepare()?;
 
     let mut res_body = BodySink::with_ram_buffers(res_reps);
     for _ in 0..res_reps {
-        res_body.save(lorem_ipsum)?;
+        res_body.push(lorem_ipsum)?;
     }
     let res_body = res_body.prepare()?;
 
