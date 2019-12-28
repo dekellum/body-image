@@ -245,10 +245,20 @@ impl BodySink {
         self.len
     }
 
-    /// Save bytes by appending to `Ram` or writing to `FsWrite` file. When in
-    /// state `Ram` this may be more efficient than `write_all` if
-    /// `Into<Bytes>` doesn't copy.
+    /// Push `Bytes`-convertable buf to self in `Ram`, or by writing to
+    /// `FsWrite` file.
+    #[deprecated(since="2.0.0", note="renamed, use `push` instead")]
+    #[inline]
     pub fn save<T>(&mut self, buf: T) -> Result<(), BodyError>
+        where T: Into<Bytes>
+    {
+        self.push(buf)
+    }
+
+    /// Push `Bytes`-convertable buf to self in `Ram`, or by writing to an
+    /// `FsWrite` file. When in state `Ram` this will be more efficient than
+    /// `write_all` _if_ `Into<Bytes>` does not copy.
+    pub fn push<T>(&mut self, buf: T) -> Result<(), BodyError>
         where T: Into<Bytes>
     {
         let buf = buf.into();
@@ -268,7 +278,7 @@ impl BodySink {
     }
 
     /// Write all bytes to self.  When in state `FsWrite` this is copy free
-    /// and more optimal than `save`.
+    /// and more optimal than `push`.
     pub fn write_all<T>(&mut self, buf: T) -> Result<(), BodyError>
         where T: AsRef<[u8]>
     {
@@ -423,7 +433,7 @@ impl BodyImage {
         where T: Into<Bytes>
     {
         let mut bs = BodySink::with_ram_buffers(1);
-        bs.save(bytes).expect("safe for Ram");
+        bs.push(bytes).expect("safe for Ram");
         bs.prepare().expect("safe for Ram")
     }
 
@@ -642,7 +652,7 @@ impl BodyImage {
                 return read_to_body_fs(rin, body, tune)
             }
             debug!("Saved (Ram) buffer len {}", len);
-            body.save(buf.freeze())?;
+            body.push(buf.freeze())?;
         }
         let body = body.prepare()?;
         Ok(body)
@@ -1252,9 +1262,9 @@ mod body_tests {
     #[test]
     fn test_scattered_gather() {
         let mut body = BodySink::with_ram_buffers(2);
-        body.save(&b"hello"[..]).unwrap();
-        body.save(&b" "[..]).unwrap();
-        body.save(&b"world"[..]).unwrap();
+        body.push(&b"hello"[..]).unwrap();
+        body.push(&b" "[..]).unwrap();
+        body.push(&b"world"[..]).unwrap();
         let mut body = body.prepare().unwrap();
         body.gather();
         if let BodyReader::Contiguous(cursor) = body.reader() {
