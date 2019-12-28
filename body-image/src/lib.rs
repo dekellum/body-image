@@ -30,8 +30,8 @@
 //! serializing `Dialog` records. See also _[barc-cli]_.
 //!
 //! _[body-image-futio]:_ Asynchronous HTTP integration with _futures_, _http_,
-//! _hyper_ 0.12.x., and _tokio_ for `BodyImage`/`BodySink`, for both client
-//! and server use.
+//! _hyper_, and _tokio_ for `BodyImage`/`BodySink`, for both client and server
+//! use.
 //!
 //! [ws-readme]: https://github.com/dekellum/body-image
 //! [barc]: https://docs.rs/crate/barc
