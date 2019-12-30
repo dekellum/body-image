@@ -395,13 +395,16 @@ pub struct DispatchBodyImage<B>
     len: u64,
 }
 
+type DispatchReturn<B> = (
+    Poll<Option<Result<B, io::Error>>>,
+    AsyncBodyImage<B, StatefulArbiter>
+);
+
 enum DispatchState<B>
     where B: OutputBuf
 {
     Image(Option<AsyncBodyImage<B, StatefulArbiter>>),
-    Dispatch(Dispatched<(
-        Poll<Option<Result<B, io::Error>>>,
-        AsyncBodyImage<B, StatefulArbiter>)>),
+    Dispatch(Dispatched<DispatchReturn<B>>),
 }
 
 impl<B> StreamWrapper for DispatchBodyImage<B>

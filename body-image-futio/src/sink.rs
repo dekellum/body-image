@@ -269,13 +269,16 @@ pub struct DispatchBodySink<B>
     state: DispatchState<B>,
 }
 
+type DispatchReturn<B> = (
+    Poll<Result<(), FutioError>>,
+    AsyncBodySink<B, StatefulArbiter>
+);
+
 enum DispatchState<B>
     where B: InputBuf
 {
     Sink(Option<AsyncBodySink<B, StatefulArbiter>>),
-    Dispatch(Dispatched<(
-        Poll<Result<(), FutioError>>,
-        AsyncBodySink<B, StatefulArbiter>)>),
+    Dispatch(Dispatched<DispatchReturn<B>>),
 }
 
 impl<B> SinkWrapper<B> for DispatchBodySink<B>
