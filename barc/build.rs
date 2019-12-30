@@ -17,7 +17,7 @@ fn main() {
     }
 }
 
-fn join(ver: &Vec<u16>) -> String {
+fn join(ver: &[u16]) -> String {
     let mut out = String::new();
     for v in ver {
         if !out.is_empty() { out.push('.'); }
