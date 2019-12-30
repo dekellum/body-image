@@ -1,6 +1,8 @@
 use std::ops::Deref;
 use bytes::{Buf, Bytes};
 
+use tao_log::debug;
+
 #[cfg(feature = "mmap")] use crate::MemMapBuf;
 
 /// Provides zero-copy read access to both `Bytes` and `Mmap` memory
@@ -71,13 +73,21 @@ impl From<Bytes> for UniBodyBuf {
 }
 
 impl Into<Bytes> for UniBodyBuf {
+    /// Convert from `UniBodyBuf` to Bytes. This is a costly memory copy only
+    /// in the case of `MemMap` (*mmap* feature) to `Bytes`. This case is
+    /// logged and should be rare using normal configuration and high-level
+    /// API. For example, it could occur when a `Stream` of `UniBodyBuf` over
+    /// an `MemMap` `BodyImage` is forwarded to a Sink configured with a larger
+    /// `Tunables::max_body_ram`.  With the same maximums used to produce the
+    /// original image and output sink, this should not occur, as no conversion
+    /// is required when writing to `FsWrite` state.
     fn into(self) -> Bytes {
         match self.buf {
             BufState::Bytes(b) => b,
             #[cfg(feature = "mmap")]
-            BufState::MemMap(_mb) => {
-                panic!("FIXME: Don't do this so cheaply!");
-                // Bytes::copy_from_slice(&mb[..]),
+            BufState::MemMap(mb) => {
+                debug!("copying memory map slice to Bytes (len: {})", mb.len());
+                Bytes::copy_from_slice(&mb[..])
             }
         }
     }
