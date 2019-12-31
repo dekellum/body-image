@@ -245,41 +245,52 @@ impl BodySink {
         self.len
     }
 
-    /// Push `Bytes`-convertable buf to self in `Ram`, or by writing to
-    /// `FsWrite` file.
-    #[deprecated(since="2.0.0", note="renamed, use `push` instead")]
+    /// Push `Bytes`-convertable buffer to end of `Ram` vector, or by writing
+    /// to end of `FsWrite` file.
+    #[deprecated(since="2.0.0", note="use `push` or `write_all` instead")]
     #[inline]
     pub fn save<T>(&mut self, buf: T) -> Result<(), BodyError>
         where T: Into<Bytes>
     {
-        self.push(buf)
+        let buf = buf.into();
+        self.push(buf).map_err(BodyError::from)
     }
 
-    /// Push `Bytes`-convertable buf to self in `Ram`, or by writing to an
-    /// `FsWrite` file. When in state `Ram` this will be more efficient than
-    /// `write_all` _if_ `Into<Bytes>` does not copy.
-    pub fn push<T>(&mut self, buf: T) -> Result<(), BodyError>
-        where T: Into<Bytes>
+    /// Push `Bytes`-convertable buffer to end of `Ram` vector, or by writing
+    /// to end of `FsWrite` file.
+    ///
+    /// Note the additional `Into<Bytes>` bound vs `write_all`. When in state
+    /// `Ram`, `push` is more efficient than `write_all` _if_ `Into<Bytes>`
+    /// does not copy. When in state `FsWrite` it is the same.
+    pub fn push<T>(&mut self, buf: T) -> Result<(), io::Error>
+        where T: Into<Bytes> + AsRef<[u8]>
     {
-        let buf = buf.into();
-        let len = buf.len() as u64;
-        if len > 0 {
-            match self.state {
-                SinkState::Ram(ref mut v) => {
+        match self.state {
+            SinkState::Ram(ref mut v) => {
+                let buf = buf.into();
+                let len = buf.len() as u64;
+                if len > 0 {
                     v.push(buf);
-                }
-                SinkState::FsWrite(ref mut f) => {
-                    f.write_all(&buf)?;
+                    self.len += len;
                 }
             }
-            self.len += len;
+            SinkState::FsWrite(ref mut f) => {
+                let buf = buf.as_ref();
+                let len = buf.len() as u64;
+                if len > 0 {
+                    f.write_all(buf)?;
+                    self.len += len;
+                }
+            }
         }
         Ok(())
     }
 
-    /// Write all bytes to self.  When in state `FsWrite` this is copy free
-    /// and more optimal than `push`.
-    pub fn write_all<T>(&mut self, buf: T) -> Result<(), BodyError>
+    /// Write all bytes to end of self.
+    ///
+    /// Prefer `push` to this method if the additional bound is met. Only when
+    /// in state `FsWrite` is this method copy free.
+    pub fn write_all<T>(&mut self, buf: T) -> Result<(), io::Error>
         where T: AsRef<[u8]>
     {
         let buf = buf.as_ref();
@@ -433,8 +444,9 @@ impl BodyImage {
         where T: Into<Bytes>
     {
         let mut bs = BodySink::with_ram_buffers(1);
-        bs.push(bytes).expect("safe for Ram");
-        bs.prepare().expect("safe for Ram")
+        let buf = bytes.into();
+        bs.push(buf).expect("push is safe to Ram");
+        bs.prepare().expect("prepare is safe to Ram")
     }
 
     /// Create a new instance based on a `ReadSlice`. The `BodyImage::len`
