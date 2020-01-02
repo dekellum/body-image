@@ -4,6 +4,7 @@
 extern crate test; // Still required, see rust-lang/rust#55133
 
 use std::cmp;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -193,11 +194,21 @@ fn client_run<I, T, E>(
           T: AsRef<[u8]> + 'static,
           E: std::fmt::Debug + 'static
 {
-    let (url, shutdown_tx, srv_jh) = rt.enter(|| {
-        let sink = BodySink::with_ram_buffers(1024);
-        let body = sink_data(sink).unwrap();
-        body_server(body, FutioTunables::default())
-    });
+    // Use external server if provided URL in env var, else spawn our own, in
+    // process.
+    let (url, shutdown_tx, srv_jh) = if let Ok(uv)
+        = env::var("BENCH_SERVER_URL")
+    {
+        (uv, None, None)
+    } else {
+        let (url, tx, jh) = rt.enter(|| {
+            let sink = BodySink::with_ram_buffers(1024);
+            let body = sink_data(sink).unwrap();
+            body_server(body, FutioTunables::default())
+        });
+        (url, Some(tx), Some(jh))
+    };
+
     b.iter(|| {
         let tune = tune.clone();
         let url = url.clone();
@@ -230,10 +241,15 @@ fn client_run<I, T, E>(
         };
         rt.block_on(rt.spawn(job)).unwrap();
     });
-    shutdown_tx.send(()).unwrap();
-    rt.block_on(async {
-        srv_jh .await
-    }).unwrap().unwrap();
+
+    if let Some(tx) = shutdown_tx {
+        tx.send(()).unwrap();
+    }
+    if let Some(jh) = srv_jh {
+        rt.block_on(async {
+            jh .await
+        }).unwrap().unwrap();
+    }
 }
 
 fn body_server(body: BodyImage, tune: FutioTunables)
@@ -286,7 +302,7 @@ async fn summarize_stream<S, T, E>(stream: S)
     assert_eq!(len, 0x2000 * 1024);
 }
 
-/// Return a new body prepared for read, after writing 8MiB of data the the
+/// Return a new body prepared for read, after writing 8MiB of data to the
 /// given sink (of any state). All possible u8 values are randomly
 /// located within this body.
 fn sink_data(mut body: BodySink) -> Result<BodyImage, BodyError> {
