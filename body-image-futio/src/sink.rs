@@ -17,20 +17,24 @@ use crate::{
     FutioError, FutioTunables, SinkWrapper, UniBodyBuf,
 };
 
-/// Marker trait for satisfying Sink input buffer requirements.
+/// Trait qualifying `Sink<Item>` buffer requirements.
 pub trait InputBuf: Buf + AsRef<[u8]> + Into<Bytes>
     + 'static + Send + Sync + Unpin {}
 
 impl InputBuf for Bytes {}
 impl InputBuf for UniBodyBuf {}
 
-/// Adaptor for `BodySink` implementing the `futures::Sink` trait.  This allows
-/// a `hyper::Body` (`Bytes` item) or `AsyncBodyStream` to be forwarded
+/// Adaptor for `BodySink`, implementing the `futures::Sink` trait.
+///
+/// This allows a `hyper::Body` or any `AsyncBodyStream` to be forwarded
 /// (e.g. via `futures::Stream::forward`) to a `BodySink`, in a fully
 /// asynchronous fashion.
 ///
 /// `FutioTunables` are used during the streaming to decide when to write back
-/// a BodySink in `Ram` to `FsWrite`.
+/// a `BodySink` in `Ram` to `FsWrite`.
+///
+/// See also [`DispatchBodySink`] and [`PermitBodySink`] which provide
+/// additional coordination of blocking operations.
 #[derive(Debug)]
 pub struct AsyncBodySink<B, BA=LenientArbiter>
     where B: InputBuf,
@@ -66,7 +70,7 @@ impl<B, BA> AsyncBodySink<B, BA>
 
     // This logically combines `Sink::poll_ready` and `Sink::start_send` into
     // one operation. If the item is returned, this is equivalent to
-    // `Poll::Pending`, and the item will be later retried.
+    // `Poll::Pending`, and the item will be retried later.
     fn poll_send(&mut self, buf: B) -> Result<Option<B>, FutioError> {
         if buf.remaining() == 0 {
             return Ok(None)
@@ -173,6 +177,13 @@ impl<B, BA> Sink<B> for AsyncBodySink<B, BA>
     }
 }
 
+/// Extends [`AsyncBodySink`] by acquiring a blocking permit before performing
+/// any blocking file write operations.
+///
+/// The total number of concurrent blocking operations is constrained by the
+/// `Semaphore` referenced in
+/// [`BlockingPolicy::Permit`](crate::BlockingPolicy::Permit) from
+/// [`FutioTunables::blocking_policy`], which is required.
 pub struct PermitBodySink<B>
     where B: InputBuf,
 {
@@ -262,6 +273,10 @@ impl<B> Sink<B> for PermitBodySink<B>
     }
 }
 
+/// Extends [`AsyncBodySink`] by further dispatching any blocking file write
+/// operations to a `DispatchPool` registered with the current thread.
+///
+/// The implementation will panic if a `DispatchPool` is not registered.
 pub struct DispatchBodySink<B>
     where B: InputBuf
 {

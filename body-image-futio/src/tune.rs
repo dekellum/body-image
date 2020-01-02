@@ -4,8 +4,10 @@ use blocking_permit::Semaphore;
 use body_image::Tunables;
 
 /// An additional set of tuning constants for asynchronous I/O, extending the
-/// body-image `Tunables` set.  Setters are available via
-/// [`FutioTuner`](struct.FutioTuner.html) (a builder type).
+/// body-image `Tunables` set.
+///
+/// Setters are available via [`FutioTuner`](struct.FutioTuner.html) (a builder
+/// type).
 #[derive(Debug, Clone)]
 pub struct FutioTunables {
     image: Tunables,
@@ -60,7 +62,7 @@ impl FutioTunables {
         self.body_timeout
     }
 
-    /// Return a Sempahore reference for use in constraining the number of
+    /// Return a `Semaphore` reference for use in constraining the number of
     /// concurrent blocking operations.
     ///
     /// Default: None
@@ -74,7 +76,7 @@ impl FutioTunables {
 
     /// Return the policy for any required blocking operations.
     ///
-    /// Defautlt: `BlockingPolicy::Direct`
+    /// Default: `BlockingPolicy::Direct`
     pub fn blocking_policy(&self) -> BlockingPolicy {
         self.blocking_policy
     }
@@ -90,8 +92,9 @@ impl AsRef<Tunables> for FutioTunables {
     }
 }
 
-/// A builder for [`FutioTunables`]. Invariants are asserted in the various
-/// setters and `finish`.
+/// A builder for [`FutioTunables`].
+///
+/// Invariants are asserted in the various setters and `finish`.
 pub struct FutioTuner {
     template: FutioTunables
 }

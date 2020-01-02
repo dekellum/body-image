@@ -44,9 +44,9 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: FutioTunables)
 }
 
 /// Given a suitable `hyper::Client` and `RequestRecord`, return a
-/// `Future<Output=Result<Dialog, FutioError>>.  The provided `FutioTunables`
-/// governs timeout intervals (initial response and complete body) and if the
-/// response `BodyImage` will be in `Ram` or `FsRead`.
+/// `Future` with `Dialog` output.  The provided `FutioTunables`
+/// governs timeout intervals (initial response and complete body), if the
+/// response `BodyImage` will be in `Ram` or `FsRead`, and `BlockingPolicy`.
 pub fn request_dialog<CN, B>(
     client: &hyper::Client<CN, B>,
     rr: RequestRecord<B>,

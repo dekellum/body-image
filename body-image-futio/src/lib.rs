@@ -14,15 +14,15 @@
 //!   and runtime for `request_dialog`.
 //!
 //! * The [`request_dialog`](fn.request_dialog.html) function returns a
-//!   `Future<Item=Dialog>`, given a suitable `hyper::Client` reference and
-//!   `RequestRecord`. This function is thus more composable for complete
+//!   `Future` with `Dialog` output, given a suitable `hyper::Client` reference
+//!   and `RequestRecord`. This function is thus more composable for complete
 //!   _tokio_ applications.
-//!
-//! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
-//!   asynchronous input from a (e.g. `hyper::Body`) `Stream`.
 //!
 //! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
 //!   asynchronous output as a `Stream` and `http_body::Body`.
+//!
+//! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
+//!   asynchronous input from a (e.g. `hyper::Body`) `Stream`.
 //!
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the

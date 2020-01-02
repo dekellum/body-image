@@ -30,9 +30,9 @@ use crate::{
 #[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
 #[cfg(feature = "mmap")] use body_image::_mem_handle_ext::MemHandleExt;
 
-/// Trait for satisftying Stream output buffer requirments.
+/// Trait qualifying `Stream` Item-type buffer requirments.
 pub trait OutputBuf: Buf + 'static + From<Bytes> + Send + Sync + Unpin {
-    /// Convert from a mmap.
+    /// Convert from a `MemHandle<Mmap>`
     #[cfg(feature = "mmap")]
     fn from_mmap(mmap: MemHandle<Mmap>) -> Result<Self, io::Error>;
 }
@@ -66,20 +66,22 @@ impl OutputBuf for UniBodyBuf {
 
 }
 
-/// Adaptor for `BodyImage` implementing the `futures::Stream` and
-/// `http_body::Body` traits, using the custom
-/// [`UniBodyBuf`](struct.UniBodyBuf.html) item buffer type (instead of
-/// `Bytes`) for zero-copy `MemMap` support (*mmap* feature only).
+/// Adaptor for `BodyImage`, implementing the `futures::Stream` and
+/// `http_body::Body` traits.
 ///
-/// The `HttpBody` trait (plus `Send`) makes this usable with hyper as the `B`
+/// The `http_body::Body` trait makes this usable with hyper as the `B`
 /// body type of `http::Request<B>` (client) or `http::Response<B>`
 /// (server).
 ///
+/// The stream `Item` type is an `OutputBuf`, implemented here for `Bytes` or
+/// [`UniBodyBuf`](crate::UniBodyBuf). The later provides zero-copy `MemMap`
+/// support (*mmap feature only).
+///
 /// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
-/// state. `BodyImage` in `Ram` is made available with zero-copy using a
-/// consuming iterator.  This implementation uses permits or a dispatch pool
-/// for blocking reads from `FsRead` state and when dereferencing from `MemMap`
 /// state.
+///
+/// See also [`DispatchBodyImage`] and [`PermitBodyImage`] which provide
+/// additional coordination of blocking operations.
 #[derive(Debug)]
 pub struct AsyncBodyImage<B, BA=LenientArbiter>
     where B: OutputBuf,
@@ -292,6 +294,13 @@ impl<B, BA> http_body::Body for AsyncBodyImage<B, BA>
     }
 }
 
+/// Extends [`AsyncBodyImage`] by acquiring a blocking permit before performing
+/// any blocking file read operations.
+///
+/// The total number of concurrent blocking operations is constrained by the
+/// `Semaphore` referenced in
+/// [`BlockingPolicy::Permit`](crate::BlockingPolicy::Permit) from
+/// [`FutioTunables::blocking_policy`], which is required.
 pub struct PermitBodyImage<B>
     where B: OutputBuf
 {
@@ -388,6 +397,10 @@ impl<B> http_body::Body for PermitBodyImage<B>
     }
 }
 
+/// Extends [`AsyncBodyImage`] by further dispatching any blocking file read
+/// operations to a `DispatchPool` registered with the current thread.
+///
+/// The implementation will panic if a `DispatchPool` is not registered.
 pub struct DispatchBodyImage<B>
     where B: OutputBuf
 {
