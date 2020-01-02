@@ -1,12 +1,12 @@
 use std::ops::Deref;
 use bytes::{Buf, Bytes};
 
-use tao_log::debug;
+#[cfg(feature = "mmap")] use tao_log::debug;
 
 #[cfg(feature = "mmap")] use crate::MemMapBuf;
 
-/// Provides zero-copy read access to both `Bytes` and `Mmap` memory
-/// regions. Implements `bytes::Buf` (*mmap* feature only).
+/// Provides zero-copy read access to both `Bytes` and memory mapped regions
+/// (`MemMapBuf`). Implements `bytes::Buf` (*mmap* feature only).
 #[derive(Debug)]
 pub struct UniBodyBuf {
     buf: BufState
@@ -77,10 +77,10 @@ impl Into<Bytes> for UniBodyBuf {
     /// in the case of `MemMap` (*mmap* feature) to `Bytes`. This case is
     /// logged and should be rare using normal configuration and high-level
     /// API. For example, it could occur when a `Stream` of `UniBodyBuf` over
-    /// an `MemMap` `BodyImage` is forwarded to a Sink configured with a larger
-    /// `Tunables::max_body_ram`.  With the same maximums used to produce the
-    /// original image and output sink, this should not occur, as no conversion
-    /// is required when writing to `FsWrite` state.
+    /// an `MemMap` `BodyImage` is forwarded to a `Sink` configured with a
+    /// larger `Tunables::max_body_ram`.  With the same maximums used to
+    /// produce the original image and output sink, this should not occur, as
+    /// no conversion is required when writing to `FsWrite` state.
     fn into(self) -> Bytes {
         match self.buf {
             BufState::Bytes(b) => b,
