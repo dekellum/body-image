@@ -127,6 +127,10 @@ pub enum FutioError {
     /// `Brotli`, when the _brotli_ feature is not enabled.
     UnsupportedEncoding(Encoding),
 
+    /// A pending blocking permit or dispatched operation was canceled
+    /// before it was granted or completed.
+    OpCanceled(blocking_permit::Canceled),
+
     /// Other unclassified errors.
     Other(Flaw),
 
@@ -153,6 +157,8 @@ impl fmt::Display for FutioError {
                 write!(f, "Hyper error: {}", e),
             FutioError::UnsupportedEncoding(e) =>
                 write!(f, "Unsupported encoding: {}", e),
+            FutioError::OpCanceled(e) =>
+                write!(f, "Error: {}", e),
             FutioError::Other(ref flaw) =>
                 write!(f, "Other error: {}", flaw),
             FutioError::_FutureProof =>
@@ -168,6 +174,7 @@ impl StdError for FutioError {
             FutioError::Http(ref ht)         => Some(ht),
             #[cfg(feature = "hyper_http")]
             FutioError::Hyper(ref he)        => Some(he),
+            FutioError::OpCanceled(ref ce)   => Some(ce),
             FutioError::Other(ref flaw)      => Some(flaw.as_ref()),
             _ => None
         }

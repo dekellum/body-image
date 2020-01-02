@@ -222,8 +222,7 @@ impl<B> Sink<B> for PermitBodySink<B>
                     Some(p)
                 }
                 Poll::Ready(Err(e)) => {
-                    // FIXME: Improve this error?
-                    return Poll::Ready(Err(FutioError::Other(Box::new(e))));
+                    return Poll::Ready(Err(FutioError::OpCanceled(e)));
                 }
                 Poll::Pending => {
                     return Poll::Pending
@@ -350,8 +349,7 @@ impl<B> Sink<B> for DispatchBodySink<B>
                 let (res, ob) = match Pin::new(&mut *db).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Err(e)) => {
-                        // FIXME: Improve this error?
-                        return Poll::Ready(Err(FutioError::Other(Box::new(e))));
+                        return Poll::Ready(Err(FutioError::OpCanceled(e)));
                     }
                     Poll::Ready(Ok((res, ob))) => (res, ob),
                 };
