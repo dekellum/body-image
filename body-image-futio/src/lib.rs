@@ -27,6 +27,22 @@
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
+//!
+//! ## Optional Features
+//!
+//! The following features may be enabled or disabled at build time. All are
+//! enabled by default.
+//!
+//! _mmap:_ Adds zero-copy memory map support, via a [`UniBodyBuf`] type usable
+//! with all `Stream` and `Sink` types.
+//!
+//! _brotli:_ Adds the brotli compression algorithm to [`ACCEPT_ENCODINGS`] and
+//! decompression support in [`decode_res_body`].
+//!
+//! _hyper_http_: Adds Hyper based [`fetch`](fn.fetch.html) and
+//! [`request_dialog`](fn.request_dialog.html) methods, as well as a
+//! [`RequestRecorder`](trait.RequestRecorder.html) implementation for
+//! `hyper::Body` (its "default" `http_body::Body` type).
 
 #![warn(rust_2018_idioms)]
 
