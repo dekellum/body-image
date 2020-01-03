@@ -28,7 +28,7 @@ log        = { version=">=0.4.4, <0.5" }
 
 [features]
 default = ["mmap", "brotli", "futio"]
-futio   = ["hyper", "body-image-futio", "body-image-futio/hyper_http"]
+futio   = ["hyper", "body-image-futio", "body-image-futio/hyper-http"]
 mmap    = ["barc/mmap", "body-image/mmap", "body-image-futio/mmap"]
 brotli  = ["barc/brotli", "body-image-futio/brotli"]
 

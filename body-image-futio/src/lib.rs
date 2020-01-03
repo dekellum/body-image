@@ -39,7 +39,7 @@
 //! _brotli:_ Adds the brotli compression algorithm to [`ACCEPT_ENCODINGS`] and
 //! decompression support in [`decode_res_body`].
 //!
-//! _hyper_http_: Adds Hyper based [`fetch`](fn.fetch.html) and
+//! _hyper-http_: Adds Hyper based [`fetch`](fn.fetch.html) and
 //! [`request_dialog`](fn.request_dialog.html) methods, as well as a
 //! [`RequestRecorder`](trait.RequestRecorder.html) implementation for
 //! `hyper::Body` (its "default" `http_body::Body` type).
@@ -58,7 +58,7 @@ use body_image::{
     Prolog, RequestRecorded,
 };
 
-#[cfg(feature = "hyper_http")]
+#[cfg(feature = "hyper-http")]
 use body_image::{Epilog, Dialog};
 
 /// Conveniently compact type alias for dyn Trait `std::error::Error`. It is
@@ -72,8 +72,8 @@ pub use blocking::{Blocking, BlockingArbiter, LenientArbiter, StatefulArbiter};
 mod decode;
 pub use decode::{decode_res_body, find_encodings, find_chunked};
 
-#[cfg(feature = "hyper_http")] mod fetch;
-#[cfg(feature = "hyper_http")] pub use self::fetch::{fetch, request_dialog};
+#[cfg(feature = "hyper-http")] mod fetch;
+#[cfg(feature = "hyper-http")] pub use self::fetch::{fetch, request_dialog};
 
 mod tune;
 pub use tune::{BlockingPolicy, FutioTunables, FutioTuner};
@@ -136,7 +136,7 @@ pub enum FutioError {
     Http(http::Error),
 
     /// Error from _hyper_.
-    #[cfg(feature = "hyper_http")]
+    #[cfg(feature = "hyper-http")]
     Hyper(hyper::Error),
 
     /// Failed to decode an unsupported `Encoding`; such as `Compress`, or
@@ -168,7 +168,7 @@ impl fmt::Display for FutioError {
                 write!(f, "Response Content-Length too long: {}", l),
             FutioError::Http(ref e) =>
                 write!(f, "Http error: {}", e),
-            #[cfg(feature = "hyper_http")]
+            #[cfg(feature = "hyper-http")]
             FutioError::Hyper(ref e) =>
                 write!(f, "Hyper error: {}", e),
             FutioError::UnsupportedEncoding(e) =>
@@ -188,7 +188,7 @@ impl StdError for FutioError {
         match *self {
             FutioError::Body(ref be)         => Some(be),
             FutioError::Http(ref ht)         => Some(ht),
-            #[cfg(feature = "hyper_http")]
+            #[cfg(feature = "hyper-http")]
             FutioError::Hyper(ref he)        => Some(he),
             FutioError::OpCanceled(ref ce)   => Some(ce),
             FutioError::Other(ref flaw)      => Some(flaw.as_ref()),
@@ -209,7 +209,7 @@ impl From<http::Error> for FutioError {
     }
 }
 
-#[cfg(feature = "hyper_http")]
+#[cfg(feature = "hyper-http")]
 impl From<hyper::Error> for FutioError {
     fn from(err: hyper::Error) -> FutioError {
         FutioError::Hyper(err)
@@ -264,7 +264,7 @@ impl<B> RequestRecorded for RequestRecord<B> {
 
 /// Temporary `http::Response` wrapper, with preserved request
 /// recording.
-#[cfg(feature = "hyper_http")]
+#[cfg(feature = "hyper-http")]
 #[derive(Debug)]
 struct Monolog {
     prolog:       Prolog,
@@ -281,7 +281,7 @@ struct InDialog {
     res_body:     BodySink,
 }
 
-#[cfg(feature = "hyper_http")]
+#[cfg(feature = "hyper-http")]
 impl InDialog {
     // Convert to `Dialog` by preparing the response body and adding an
     // initial res_decoded for Chunked, if hyper handled chunked transfer
@@ -313,11 +313,11 @@ mod logger;
 mod tests {
     mod forward;
 
-    #[cfg(feature = "hyper_http")]
+    #[cfg(feature = "hyper-http")]
     mod server;
 
     /// These tests may fail because they depend on public web servers
-    #[cfg(all(feature = "hyper_http", feature = "may_fail"))]
+    #[cfg(all(feature = "hyper-http", feature = "may-fail"))]
     mod live;
 
     use tao_log::{debug, debugv};

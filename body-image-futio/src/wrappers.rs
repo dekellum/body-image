@@ -6,7 +6,7 @@ use body_image::{BodyImage, BodySink, Prolog};
 
 use crate::{FutioTunables, RequestRecord};
 
-#[cfg(feature = "hyper_http")]
+#[cfg(feature = "hyper-http")]
 use crate::AsyncBodyImage;
 
 /// Trait for generic construction of `Stream` wrapper types.
@@ -66,7 +66,7 @@ pub trait RequestRecorder<B>
         -> Result<RequestRecord<B>, http::Error>;
 }
 
-#[cfg(feature = "hyper_http")]
+#[cfg(feature = "hyper-http")]
 impl RequestRecorder<hyper::Body> for http::request::Builder {
     fn record(self) -> Result<RequestRecord<hyper::Body>, http::Error> {
         let request = self.body(hyper::Body::empty())?;

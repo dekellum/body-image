@@ -266,7 +266,7 @@ fn timeout_during_streaming() {
     }
 }
 
-#[cfg(feature = "may_fail")]
+#[cfg(feature = "may-fail")]
 #[test]
 fn timeout_during_streaming_race() {
     assert!(test_logger());
