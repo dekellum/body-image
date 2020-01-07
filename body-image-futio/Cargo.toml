@@ -38,9 +38,10 @@ blocking-permit = { version=">=0.1.0, <0.2", default-features=false, features=["
 
 [features]
 default = ["mmap", "brotli", "hyper-http"]
-mmap = ["memmap", "olio/mmap", "body-image/mmap"]
-may-fail = [] # Tests which may fail
 hyper-http = ["hyper", "hyper-tls"]
+mmap = ["memmap", "olio/mmap", "body-image/mmap"]
+
+may-fail = [] # Tests which may fail
 tangential = [] # less interesting benchmarks
 
 [lib]
