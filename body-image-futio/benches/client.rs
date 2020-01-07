@@ -33,33 +33,45 @@ use tokio::runtime::Runtime;
 use body_image::{BodyError, BodySink, BodyImage, Recorded, Tuner};
 use body_image_futio::*;
 
+const CORE_THREADS: usize      =   2;
+const EXTRA_THREADS: usize     =   2;
+const BATCH: usize             =  16;
+
 lazy_static! {
-    static ref BLOCKING_SET: Semaphore = Semaphore::default_new(3);
+    static ref BLOCKING_SET: Semaphore = Semaphore::default_new(EXTRA_THREADS);
 }
 
 #[bench]
 fn client_01_ram(b: &mut Bencher) {
-    let rt = th_runtime();
+    let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
-        .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_SET))
         .finish();
-    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, false, b);
+    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
+}
+
+#[bench]
+fn client_01_ram_gather(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
+        .finish();
+    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::Gather, b);
 }
 
 #[cfg(feature = "tangential")]
 #[bench]
 fn client_02_ram_uni(b: &mut Bencher) {
-    let rt = th_runtime();
+    let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
         .finish();
-    client_run::<AsyncBodyImage<UniBodyBuf>, _, _>(rt, tune, false, b);
+    client_run::<AsyncBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::AsIs, b);
 }
 
 #[bench]
 fn client_10_fs_direct(b: &mut Bencher) {
-    let rt = th_runtime();
+    let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -69,12 +81,12 @@ fn client_10_fs_direct(b: &mut Bencher) {
         )
         .set_blocking_policy(BlockingPolicy::Direct)
         .finish();
-    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, false, b);
+    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
 }
 
 #[bench]
 fn client_10_fs_permit(b: &mut Bencher) {
-    let rt = th_runtime();
+    let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -84,7 +96,7 @@ fn client_10_fs_permit(b: &mut Bencher) {
         )
         .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_SET))
         .finish();
-    client_run::<PermitBodyImage<Bytes>, _, _>(rt, tune, false, b);
+    client_run::<PermitBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
 }
 
 #[cfg(feature = "tangential")]
@@ -101,12 +113,12 @@ fn client_11_fs_dispatch1(b: &mut Bencher) {
         )
         .set_blocking_policy(BlockingPolicy::Dispatch)
         .finish();
-    client_run::<DispatchBodyImage<Bytes>, _, _>(rt, tune, false, b);
+    client_run::<DispatchBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
 }
 
 #[bench]
-fn client_12_fs_dispatch2(b: &mut Bencher) {
-    let pool = DispatchPool::builder().pool_size(2).create();
+fn client_12_fs_dispatch(b: &mut Bencher) {
+    let pool = DispatchPool::builder().pool_size(EXTRA_THREADS).create();
     let rt = th_dispatch_runtime(pool);
     let tune = FutioTuner::new()
         .set_image(
@@ -117,9 +129,10 @@ fn client_12_fs_dispatch2(b: &mut Bencher) {
         )
         .set_blocking_policy(BlockingPolicy::Dispatch)
         .finish();
-    client_run::<DispatchBodyImage<Bytes>, _, _>(rt, tune, false, b);
+    client_run::<DispatchBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
 }
 
+#[cfg(feature = "tangential")]
 #[bench]
 fn client_12_fs_dispatch3(b: &mut Bencher) {
     let pool = DispatchPool::builder().pool_size(3).create();
@@ -133,29 +146,13 @@ fn client_12_fs_dispatch3(b: &mut Bencher) {
         )
         .set_blocking_policy(BlockingPolicy::Dispatch)
         .finish();
-    client_run::<DispatchBodyImage<Bytes>, _, _>(rt, tune, false, b);
+    client_run::<DispatchBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
 }
 
 #[cfg(feature = "mmap")]
 #[bench]
-fn client_15_mmap_copy(b: &mut Bencher) {
-    let rt = th_runtime();
-    let tune = FutioTuner::new()
-        .set_image(
-            Tuner::new()
-                .set_temp_dir(test_path().unwrap())
-                .set_max_body_ram(0)
-                .finish()
-        )
-        .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_SET))
-        .finish();
-    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, true, b);
-}
-
-#[cfg(feature = "mmap")]
-#[bench]
-fn client_16_mmap_direct(b: &mut Bencher) {
-    let rt = th_runtime();
+fn client_15_mmap_direct_copy(b: &mut Bencher) {
+    let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -165,13 +162,13 @@ fn client_16_mmap_direct(b: &mut Bencher) {
         )
         .set_blocking_policy(BlockingPolicy::Direct)
         .finish();
-    client_run::<AsyncBodyImage<UniBodyBuf>, _, _>(rt, tune, true, b);
+    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::Mmap, b);
 }
 
 #[cfg(feature = "mmap")]
 #[bench]
-fn client_17_mmap_permit(b: &mut Bencher) {
-    let rt = th_runtime();
+fn client_15_mmap_permit_copy(b: &mut Bencher) {
+    let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -181,13 +178,53 @@ fn client_17_mmap_permit(b: &mut Bencher) {
         )
         .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_SET))
         .finish();
-    client_run::<PermitBodyImage<UniBodyBuf>, _, _>(rt, tune, true, b);
+    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::Mmap, b);
+}
+
+#[cfg(feature = "mmap")]
+#[bench]
+fn client_16_mmap_direct(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Direct)
+        .finish();
+    client_run::<AsyncBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
+}
+
+#[cfg(feature = "mmap")]
+#[bench]
+fn client_17_mmap_permit(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_SET))
+        .finish();
+    client_run::<PermitBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
+}
+
+#[derive(Copy, Clone)]
+enum ClientOp {
+    AsIs,
+    #[cfg(feature = "mmap")]
+    Mmap,
+    Gather
 }
 
 fn client_run<I, T, E>(
     mut rt: Runtime,
     tune: FutioTunables,
-    mmap: bool,
+    op: ClientOp,
     b: &mut Bencher)
     where I: StreamWrapper + Send,
           I: Stream<Item = Result<T, E>> + StreamExt + Send + 'static,
@@ -215,9 +252,9 @@ fn client_run<I, T, E>(
         let connector = HttpConnector::new();
         let client = Client::builder().build(connector);
         let job = async move {
-            let futures: FuturesUnordered<_> = (0..20).map(|_| {
+            let futures: FuturesUnordered<_> = (0..BATCH).map(|_| {
                 let tune2 = tune.clone();
-                let mmap = mmap;
+                let op = op;
                 // Empty request body, type doesn't matter.
                 let req: RequestRecord<AsyncBodyImage<Bytes>> =
                     http::Request::builder()
@@ -228,16 +265,22 @@ fn client_run<I, T, E>(
                 let req = request_dialog(&client, req, tune.clone())
                     .then(move |r| {
                         let mut body = r.unwrap().res_body().clone();
-                        #[cfg(feature = "mmap")] {
-                            if mmap {
+                        match op {
+                            ClientOp::AsIs => {},
+                            #[cfg(feature = "mmap")]
+                            ClientOp::Mmap => {
                                 body.mem_map().unwrap();
+                            }
+                            ClientOp::Gather => {
+                                body.gather();
                             }
                         }
                         summarize_stream(I::new(body, tune2))
                     });
                 spawn(req)
             }).collect();
-            futures.collect::<Vec<_>>() .await
+            let c = futures.collect::<Vec<_>>() .await;
+            assert_eq!(BATCH, c.iter().filter(|r| r.is_ok()).count());
         };
         rt.block_on(rt.spawn(job)).unwrap();
     });
@@ -325,10 +368,10 @@ fn test_path() -> Result<PathBuf, Flaw> {
     Ok(tpath.to_path_buf())
 }
 
-fn th_runtime() -> Runtime {
+fn th_direct_runtime() -> Runtime {
     tokio::runtime::Builder::new()
-        .core_threads(2)
-        .max_threads(2+3)
+        .core_threads(CORE_THREADS+EXTRA_THREADS)
+        .max_threads(CORE_THREADS+EXTRA_THREADS)
         .threaded_scheduler()
         .enable_io()
         .enable_time()
@@ -338,8 +381,8 @@ fn th_runtime() -> Runtime {
 
 fn th_dispatch_runtime(pool: DispatchPool) -> Runtime {
     tokio::runtime::Builder::new()
-        .core_threads(2)
-        .max_threads(2+3)
+        .core_threads(CORE_THREADS)
+        .max_threads(CORE_THREADS+EXTRA_THREADS)
         .threaded_scheduler()
         .enable_io()
         .enable_time()
