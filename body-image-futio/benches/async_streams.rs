@@ -207,7 +207,7 @@ fn stream_23_fsread_dispatch1_ct(b: &mut Bencher) {
 // runtime, dispatch queue length 0.
 #[bench]
 fn stream_24_fsread_dispatch1_ct_ql0(b: &mut Bencher) {
-    let pool = DispatchPool::builder().pool_size(1).queue_length(0).create();
+    let pool = DispatchPool::builder().queue_length(0).create();
     register_dispatch_pool(pool);
     let tune = FutioTuner::new()
         // not essential, but consistent
