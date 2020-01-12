@@ -866,13 +866,13 @@ pub struct Epilog {
 /// `Display`/`ToString` representation as per the HTTP header value.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum Encoding {
-    /// `Chunked` is typically applied or removed by HTTP client and server
-    /// implementations, even minimal ones.
+    /// `Chunked` (transfer encoding) is typically applied or removed by HTTP
+    /// client and server implementations—even minimal ones.
     Chunked,
     Deflate,
     Gzip,
     Brotli,
-    /// This obsolete LZW format, is not generally used or supported
+    /// This obsolete LZW format is not generally used or supported
     /// currently, but is included for error reporting.
     Compress,
     /// May be used to explicitly indicate that an encoding previously applied
