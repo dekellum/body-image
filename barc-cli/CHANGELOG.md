@@ -1,5 +1,5 @@
-## 1.4.0 (TBD)
-* Upgrade to body-image, barc, and body-image-futio 1.4.0 (TBD) with interface
+## 2.0.0 (TBD)
+* Upgrade to body-image, barc, and body-image-futio 2.0.0 with interface
   changes (e.g. `FutioTunables`, `TryFrom`).
 
 * Upgrade to http 0.2.0 (MSRV 1.39.0)

@@ -1,8 +1,8 @@
-## 1.4.0 (TBD)
+## 2.0.0 (TBD)
 * Change `Compress` implementations default `check_identity` to true (was
   previously introduced, in 1.1.0, with default false for interoperability).
 
-* Upgrade to body-image 1.4.0 including interface change (e.g. `push`).
+* Upgrade to body-image 2.0.0 including interface change (e.g. `push`).
 
 * Upgrade to http 0.2.0 and bytes 0.5.2 (MSRV 1.39.0)
 

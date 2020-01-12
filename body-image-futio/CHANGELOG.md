@@ -1,4 +1,4 @@
-## 1.4.0 (TBD)
+## 2.0.0 (TBD)
 * `AsyncBodyImage` and `AsyncBodySink` are now generic over `Item` type
   (e.g. `Bytes` or `UniBodyBuf`). The prior `UniBodyImage` and `UniBodySink`
   types are removed (replaced with use of `UniBodyBuf` generic parameter).
@@ -16,7 +16,7 @@
   now be cloned without allocation, most interfaces using it are now
   pass-by-value (move).
 
-* Upgrade to body-image 1.4.0 including interface changes
+* Upgrade to body-image 2.0.0 including interface changes
   (e.g. `push`, `Tunables`).
 
 * Upgrade to http 0.2.0 and bytes 0.5.2 (MSRV 1.39.0)
