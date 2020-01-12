@@ -68,8 +68,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "blocking-permit"
-version = "0.2.0"
-source = "git+https://github.com/dekellum/blocking-permit#923bddda886b96eeb3ae26afc41ec0de5282a2ce"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "futures-core 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -94,7 +94,7 @@ dependencies = [
 name = "body-image-futio"
 version = "2.0.0"
 dependencies = [
- "blocking-permit 0.2.0 (git+https://github.com/dekellum/blocking-permit)",
+ "blocking-permit 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "body-image 2.0.0",
  "brotli 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "brotli-decompressor 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -990,7 +990,7 @@ dependencies = [
 "checksum autocfg 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "1d49d90015b3c36167a20fe2810c5cd875ad504b39cff3d4eae7977e6b7c1cb2"
 "checksum base64 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b41b7ea54a0c9d92199de89e20e58d49f02f8e699814ef3fdf266f6f748d15c7"
 "checksum bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
-"checksum blocking-permit 0.2.0 (git+https://github.com/dekellum/blocking-permit)" = "<none>"
+"checksum blocking-permit 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "55a667644ea87cb5b643ce2776c992be7d770911e6210904b55c4893d49e8795"
 "checksum brotli 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7f29919120f08613aadcd4383764e00526fc9f18b6c0895814faeed0dd78613e"
 "checksum brotli-decompressor 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2a9f2b517b96b19d8f91c1ff5b1cf498e688850b32eae5d58e02d15c4d4fdc0c"
 "checksum bytes 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "10004c15deb332055f7a4a208190aed362cf9a7c2f6ab70a305fba50e1105f38"
