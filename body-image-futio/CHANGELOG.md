@@ -1,3 +1,48 @@
+## 1.4.0 (TBD)
+* `AsyncBodyImage` and `AsyncBodySink` are now generic over `Item` type
+  (e.g. `Bytes` or `UniBodyBuf`). The prior `UniBodyImage` and `UniBodySink`
+  types are removed (replaced with use of `UniBodyBuf` generic parameter).
+
+* Introduce wrapper types `DispatchBodyImage`, `PermitBodyImage`,
+  `DispatchBodySink`, `PermitBodySink` with additional coordination when
+  blocking operations (e.g. filesystem reads and writes) are required.
+
+* Introduce `StreamWrapper` and `SinkWrapper` traits for generic use of all
+  above listed `Stream` and `Sink` types.
+
+* Introduce `FutioTunables` composing, and `FutioTuner` extending, body-image
+  `Tunables` and `Tuner` respectively; with options moved/added and used here:
+  `res_timeout`, `body_timeout`, `blocking_policy`. As this `FutioTunables` can
+  now be cloned without allocation, most interfaces using it are now
+  pass-by-value (move).
+
+* Upgrade to body-image 1.4.0 including interface changes
+  (e.g. `push`, `Tunables`).
+
+* Upgrade to http 0.2.0 and bytes 0.5.2 (MSRV 1.39.0)
+
+* Upgrade to olio 1.3.0 (MSRV 1.34.0)
+
+* Upgrade to tao-log 1.0.0 (MSRV 1.32.0)
+
+* Update to flate2 [1.0.4, 1.1), dropping the constraint introduced in 1.3.0
+  (MSRV 1.34.0)
+
+* Upgrade to hyper 0.13.1, hyper-tls 0.4.0
+  (MSRV 1.39.0, now optional behind hyper-http feature gate)
+
+* Upgrade to hyperx 1.0.0 (MSRV 1.39.0)
+
+* Upgrade to futures-* 0.3.1 (using minimal sub-crates)
+
+* Upgrade to tokio 0.2.6 (MSRV 1.39.0, using minimal features)
+
+* Add hyper-http feature to gate hyper dependency.
+
+* Add brotli-decompressor >= 2.1.2 min transitive upgrade
+
+* Minimum supported rust version is now 1.39.0 (per above upgrades).
+
 ## 1.3.0 (2019-10-1)
 * Fix build.rs for `rustc --version` not including git metadata.
 

@@ -6,11 +6,11 @@
 [![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
 
 The _body-image-futio_ crate integrates the _body-image_ crate with _futures_,
-_http_, _hyper_ 0.12.x., and _tokio_ crates for both client and server use.
+_http_, _hyper_, and _tokio_ crates for both client and server use.
 
 ## Minimum supported rust version
 
-MSRV := 1.32.0
+MSRV := 1.39.0
 
 The crate will fail fast on any lower rustc (via a build.rs version
 check) and is also CI tested on this version.

@@ -1,5 +1,5 @@
 //! The `barc` command line tool
-#![deny(dead_code, unused_imports)]
+
 #![warn(rust_2018_idioms)]
 
 use std::error::Error as StdError;

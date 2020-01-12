@@ -1,3 +1,15 @@
+## 1.4.0 (TBD)
+* Upgrade to body-image, barc, and body-image-futio 1.4.0 (TBD) with interface
+  changes (e.g. `FutioTunables`, `TryFrom`).
+
+* Upgrade to http 0.2.0 (MSRV 1.39.0)
+
+* Upgrade to hyper 0.13.1 (MSRV 1.39.0, optional behind futio feature gate)
+
+* With MSRV update, drop `TryFrom` workarounds and use the `std` trait.
+
+* Minimum supported rust version is now 1.39.0 (per above upgrades).
+
 ## 1.3.0 (2019-10-1)
 * Fix build.rs for `rustc --version` not including git metadata.
 

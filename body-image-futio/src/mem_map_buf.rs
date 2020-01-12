@@ -22,8 +22,7 @@ impl MemMapBuf {
     /// and that agressive read-ahead is warranted.
     pub(crate) fn advise_sequential(&self) -> Result<(), io::Error> {
         let _new_advice = self.mm.advise(MemAdvice::Sequential)?;
-        #[cfg(unix)]
-        {
+        #[cfg(unix)] {
             debug!("MemMapBuf advise Sequential, obtained {:?}", _new_advice);
         }
         Ok(())

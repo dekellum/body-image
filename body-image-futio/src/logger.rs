@@ -1,8 +1,8 @@
-use std;
 use std::sync::Once;
+use std::borrow::Cow;
 
-use fern;
 use tao_log::log;
+
 use crate::Flaw;
 
 pub fn test_logger() -> bool {
@@ -25,7 +25,10 @@ fn setup_logger(level: u32) -> Result<(), Flaw> {
     let mut disp = fern::Dispatch::new()
         .format(|out, message, record| {
             let t = std::thread::current();
-            let tn = t.name().unwrap_or("-");
+            let mut tn = Cow::from(t.name().unwrap_or("-"));
+            if tn == "tokio-runtime-worker" {
+                tn = Cow::from(format!("{}-{:?}", tn, t.id()))
+            }
             out.finish(format_args!(
                 "{} {} {}: {}",
                 record.level(), record.target(), tn, message
@@ -40,9 +43,9 @@ fn setup_logger(level: u32) -> Result<(), Flaw> {
     };
     if level < 2 {
         disp = disp
-            .level_for("hyper::proto",  log::LevelFilter::Info)
-            .level_for("tokio_core",    log::LevelFilter::Info)
-            .level_for("tokio_reactor", log::LevelFilter::Info);
+            .level_for("hyper::proto",   log::LevelFilter::Info)
+            .level_for("tokio_net",      log::LevelFilter::Info)
+            .level_for("tokio_executor", log::LevelFilter::Info);
     }
 
     disp.chain(std::io::stderr())

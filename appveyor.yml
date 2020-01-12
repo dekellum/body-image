@@ -2,7 +2,7 @@ os: Visual Studio 2015
 
 environment:
   matrix:
-    - channel: 1.32.0
+    - channel: 1.39.0
       target: x86_64-pc-windows-msvc
     - channel: stable
       target: x86_64-pc-windows-msvc
@@ -32,6 +32,7 @@ test_script:
   - 'cargo test  --manifest-path body-image-futio/Cargo.toml --no-default-features'
   - 'cargo test  --manifest-path body-image-futio/Cargo.toml --no-default-features --features mmap'
   - 'cargo test  --manifest-path body-image-futio/Cargo.toml --no-default-features --features brotli'
+  - 'cargo test  --manifest-path body-image-futio/Cargo.toml'
   - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features'
   - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features --features mmap'
   - 'cargo build --manifest-path barc-cli/Cargo.toml --no-default-features --features brotli'

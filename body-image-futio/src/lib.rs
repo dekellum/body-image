@@ -1,12 +1,12 @@
 //! Asynchronous HTTP integration for _body-image_.
 //!
 //! The _body-image-futio_ crate integrates the _body-image_ crate with
-//! _futures_, _http_, _hyper_ 0.12.x., and _tokio_ crates for both client and
-//! server use.
+//! _futures_, _http_, _hyper_, and _tokio_ crates for both client and server
+//! use.
 //!
 //! * Trait [`RequestRecorder`](trait.RequestRecorder.html) extends
 //!   `http::request::Builder` for recording a
-//!   [`RequestRecord`](struct.RequestRecord.html) of varous body types, which
+//!   [`RequestRecord`](struct.RequestRecord.html) of various body types, which
 //!   can then be passed to `request_dialog` or `fetch`.
 //!
 //! * The [`fetch`](fn.fetch.html) function runs a `RequestRecord` and returns
@@ -14,73 +14,84 @@
 //!   and runtime for `request_dialog`.
 //!
 //! * The [`request_dialog`](fn.request_dialog.html) function returns a
-//!   `Future<Item=Dialog>`, given a suitable `hyper::Client` reference and
-//!   `RequestRecord`. This function is thus more composable for complete
+//!   `Future` with `Dialog` output, given a suitable `hyper::Client` reference
+//!   and `RequestRecord`. This function is thus more composable for complete
 //!   _tokio_ applications.
+//!
+//! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
+//!   asynchronous output as a `Stream` and `http_body::Body`.
 //!
 //! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
 //!   asynchronous input from a (e.g. `hyper::Body`) `Stream`.
 //!
-//! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
-//!   asynchronous output as a `Stream` and `hyper::body::Payload`.
-//!
-//! * Alternatively, [`UniBodySink`](struct.UniBodySink.html) and
-//!   [`UniBodyImage`](struct.UniBodyImage.html) offer zero-copy `MemMap`
-//!   support, using the custom [`UniBodyBuf`](struct.UniBodyBuf.html) item
-//!   buffer type (instead of the `hyper::Chunk` or `Bytes`).
-//!
 //! * The [`decode_res_body`](fn.decode_res_body.html) and associated
 //!   functions will decompress any supported Transfer/Content-Encoding of the
 //!   response body and update the `Dialog` accordingly.
+//!
+//! ## Optional Features
+//!
+//! The following features may be enabled or disabled at build time. All are
+//! enabled by default.
+//!
+//! _mmap:_ Adds zero-copy memory map support, via a [`UniBodyBuf`] type usable
+//! with all `Stream` and `Sink` types.
+//!
+//! _brotli:_ Adds the brotli compression algorithm to [`ACCEPT_ENCODINGS`] and
+//! decompression support in [`decode_res_body`].
+//!
+//! _hyper-http_: Adds Hyper based [`fetch`](fn.fetch.html) and
+//! [`request_dialog`](fn.request_dialog.html) methods, as well as a
+//! [`RequestRecorder`](trait.RequestRecorder.html) implementation for
+//! `hyper::Body` (its "default" `http_body::Body` type).
 
-#![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
 use std::error::Error as StdError;
 use std::fmt;
 use std::io;
-use std::mem;
 use std::time::Duration;
 
-use bytes::Bytes;
-use futures::{future, Future, Stream};
-use futures::future::Either;
-use http;
-use hyper;
-use hyper_tls;
-use hyperx::header::{ContentLength, TypedHeaders};
 use tao_log::warn;
-use tokio;
-use tokio::timer::timeout;
-use tokio::util::FutureExt;
 
 use body_image::{
     BodyImage, BodySink, BodyError, Encoding,
-    Epilog, Prolog, Dialog, RequestRecorded, Tunables,
+    Prolog, RequestRecorded,
 };
+
+#[cfg(feature = "hyper-http")]
+use body_image::{Epilog, Dialog};
 
 /// Conveniently compact type alias for dyn Trait `std::error::Error`. It is
 /// possible to query and downcast the type via methods of
 /// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
+mod blocking;
+pub use blocking::{Blocking, BlockingArbiter, LenientArbiter, StatefulArbiter};
+
 mod decode;
 pub use decode::{decode_res_body, find_encodings, find_chunked};
 
-mod image;
-pub use image::AsyncBodyImage;
+#[cfg(feature = "hyper-http")] mod fetch;
+#[cfg(feature = "hyper-http")] pub use self::fetch::{fetch, request_dialog};
+
+mod tune;
+pub use tune::{BlockingPolicy, FutioTunables, FutioTuner};
 
 mod sink;
-pub use sink::AsyncBodySink;
+pub use sink::{InputBuf, AsyncBodySink, DispatchBodySink, PermitBodySink};
+
+mod stream;
+pub use stream::{OutputBuf, AsyncBodyImage, DispatchBodyImage, PermitBodyImage};
 
 #[cfg(feature = "mmap")] mod mem_map_buf;
 #[cfg(feature = "mmap")] use mem_map_buf::MemMapBuf;
 
-#[cfg(feature = "mmap")] mod uni_image;
-#[cfg(feature = "mmap")] pub use uni_image::{UniBodyImage, UniBodyBuf};
+mod uni_body_buf;
+pub use uni_body_buf::UniBodyBuf;
 
-#[cfg(feature = "mmap")] mod uni_sink;
-#[cfg(feature = "mmap")] pub use uni_sink::UniBodySink;
+mod wrappers;
+pub use wrappers::{SinkWrapper, StreamWrapper, RequestRecorder};
 
 /// The crate version string.
 pub static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -110,12 +121,12 @@ pub enum FutioError {
     /// Error from `BodySink` or `BodyImage`.
     Body(BodyError),
 
-    /// The `Tunables::res_timeout` duration was reached before receiving the
-    /// initial response.
+    /// The `FutioTunables::res_timeout` duration was reached before receiving
+    /// the initial response.
     ResponseTimeout(Duration),
 
-    /// The `Tunables::body_timeout` duration was reached before receiving the
-    /// complete response body.
+    /// The `FutioTunables::body_timeout` duration was reached before receiving
+    /// the complete response body.
     BodyTimeout(Duration),
 
     /// The content-length header exceeded `Tunables::max_body`.
@@ -125,11 +136,16 @@ pub enum FutioError {
     Http(http::Error),
 
     /// Error from _hyper_.
+    #[cfg(feature = "hyper-http")]
     Hyper(hyper::Error),
 
     /// Failed to decode an unsupported `Encoding`; such as `Compress`, or
     /// `Brotli`, when the _brotli_ feature is not enabled.
     UnsupportedEncoding(Encoding),
+
+    /// A pending blocking permit or dispatched operation was canceled
+    /// before it was granted or completed.
+    OpCanceled(blocking_permit::Canceled),
 
     /// Other unclassified errors.
     Other(Flaw),
@@ -152,10 +168,13 @@ impl fmt::Display for FutioError {
                 write!(f, "Response Content-Length too long: {}", l),
             FutioError::Http(ref e) =>
                 write!(f, "Http error: {}", e),
+            #[cfg(feature = "hyper-http")]
             FutioError::Hyper(ref e) =>
                 write!(f, "Hyper error: {}", e),
             FutioError::UnsupportedEncoding(e) =>
                 write!(f, "Unsupported encoding: {}", e),
+            FutioError::OpCanceled(e) =>
+                write!(f, "Error: {}", e),
             FutioError::Other(ref flaw) =>
                 write!(f, "Other error: {}", flaw),
             FutioError::_FutureProof =>
@@ -169,7 +188,9 @@ impl StdError for FutioError {
         match *self {
             FutioError::Body(ref be)         => Some(be),
             FutioError::Http(ref ht)         => Some(ht),
+            #[cfg(feature = "hyper-http")]
             FutioError::Hyper(ref he)        => Some(he),
+            FutioError::OpCanceled(ref ce)   => Some(ce),
             FutioError::Other(ref flaw)      => Some(flaw.as_ref()),
             _ => None
         }
@@ -188,6 +209,7 @@ impl From<http::Error> for FutioError {
     }
 }
 
+#[cfg(feature = "hyper-http")]
 impl From<hyper::Error> for FutioError {
     fn from(err: hyper::Error) -> FutioError {
         FutioError::Hyper(err)
@@ -204,140 +226,11 @@ impl From<io::Error> for FutioError {
 // `FutioError::Other`, as that could easily lead to misclassification.
 // Instead it should be manually constructed.
 
-/// Run an HTTP request to completion, returning the full `Dialog`. This
-/// function constructs a default *tokio* `Runtime`,
-/// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
-/// internally, waiting with timeout, and dropping these on completion.
-pub fn fetch<B>(rr: RequestRecord<B>, tune: &Tunables)
-    -> Result<Dialog, FutioError>
-    where B: hyper::body::Payload + Send
-{
-    let mut rt = tokio::runtime::Builder::new()
-        .name_prefix("tpool-")
-        .core_threads(2)
-        .blocking_threads(2)
-        .build()
-        .unwrap();
-    let connector = hyper_tls::HttpsConnector::new(1 /*DNS threads*/)
-        .map_err(|e| FutioError::Other(Box::new(e)))?;
-    let client = hyper::Client::builder().build(connector);
-    rt.block_on(request_dialog(&client, rr, tune))
-    // Drop of `rt`, here, is equivalent to shutdown_now and wait
-}
-
-/// Given a suitable `hyper::Client` and `RequestRecord`, return a
-/// `Future<Item=Dialog>`.  The provided `Tunables` governs timeout intervals
-/// (initial response and complete body) and if the response `BodyImage` will
-/// be in `Ram` or `FsRead`.
-pub fn request_dialog<CN, B>(
-    client: &hyper::Client<CN, B>,
-    rr: RequestRecord<B>,
-    tune: &Tunables)
-    -> impl Future<Item=Dialog, Error=FutioError> + Send
-    where CN: hyper::client::connect::Connect + Sync + 'static,
-          B: hyper::body::Payload + Send
-{
-    let prolog = rr.prolog;
-    let tune = tune.clone();
-
-    let res_timeout = tune.res_timeout();
-    let body_timeout = tune.body_timeout();
-
-    let futr = client
-        .request(rr.request)
-        .from_err::<FutioError>()
-        .map(|response| Monolog { prolog, response });
-
-    let futr = if let Some(t) = res_timeout {
-        Either::A(futr
-            .timeout(t)
-            .map_err(move |te| {
-                map_timeout(te, || FutioError::ResponseTimeout(t))
-            })
-        )
-    } else {
-        Either::B(futr)
-    };
-
-    let futr = futr.and_then(|monolog| resp_future(monolog, tune));
-
-    let futr = if let Some(t) = body_timeout {
-        Either::A(futr
-            .timeout(t)
-            .map_err(move |te| {
-                map_timeout(te, || FutioError::BodyTimeout(t))
-            })
-        )
-    } else {
-        Either::B(futr)
-    };
-
-    futr.and_then(InDialog::prepare)
-}
-
-fn map_timeout<F>(te: timeout::Error<FutioError>, on_elapsed: F) -> FutioError
-    where F: FnOnce() -> FutioError
-{
-    if te.is_elapsed() {
-        on_elapsed()
-    } else if te.is_timer() {
-        FutioError::Other(te.into_timer().unwrap().into())
-    } else {
-        te.into_inner().expect("inner")
-    }
-}
-
 /// Return a generic HTTP user-agent header value for the crate, with version
 pub fn user_agent() -> String {
     format!("Mozilla/5.0 (compatible; body-image {}; \
              +https://crates.io/crates/body-image)",
             VERSION)
-}
-
-fn resp_future(monolog: Monolog, tune: Tunables)
-    -> impl Future<Item=InDialog, Error=FutioError> + Send
-{
-    let (resp_parts, body) = monolog.response.into_parts();
-
-    // Result<BodySink> based on CONTENT_LENGTH header.
-    let bsink = match resp_parts.headers.try_decode::<ContentLength>() {
-        Some(Ok(ContentLength(l))) => {
-            if l > tune.max_body() {
-                Err(FutioError::ContentLengthTooLong(l))
-            } else if l > tune.max_body_ram() {
-                BodySink::with_fs(tune.temp_dir()).map_err(FutioError::from)
-            } else {
-                Ok(BodySink::with_ram(l))
-            }
-        },
-        Some(Err(e)) => Err(FutioError::Other(Box::new(e))),
-        None => Ok(BodySink::with_ram(tune.max_body_ram()))
-    };
-
-    // Unwrap BodySink, returning any error as Future
-    let bsink = match bsink {
-        Ok(b) => b,
-        Err(e) => { return Either::A(future::err(e)); }
-    };
-
-    let async_body = AsyncBodySink::new(bsink, tune);
-
-    let mut in_dialog = InDialog {
-        prolog:      monolog.prolog,
-        version:     resp_parts.version,
-        status:      resp_parts.status,
-        res_headers: resp_parts.headers,
-        res_body:    BodySink::empty() // tmp, swap'ed below.
-    };
-
-    Either::B(
-        body.from_err::<FutioError>()
-            .forward(async_body)
-            .and_then(|(_strm, mut async_body)| {
-                mem::swap(async_body.body_mut(), &mut in_dialog.res_body);
-                Ok(in_dialog)
-            })
-    )
 }
 
 /// An `http::Request` and recording. Note that other important getter
@@ -371,6 +264,7 @@ impl<B> RequestRecorded for RequestRecord<B> {
 
 /// Temporary `http::Response` wrapper, with preserved request
 /// recording.
+#[cfg(feature = "hyper-http")]
 #[derive(Debug)]
 struct Monolog {
     prolog:       Prolog,
@@ -387,6 +281,7 @@ struct InDialog {
     res_body:     BodySink,
 }
 
+#[cfg(feature = "hyper-http")]
 impl InDialog {
     // Convert to `Dialog` by preparing the response body and adding an
     // initial res_decoded for Chunked, if hyper handled chunked transfer
@@ -411,100 +306,19 @@ impl InDialog {
     }
 }
 
-/// Extension trait for `http::request::Builder`, to enable recording key
-/// portions of the request for the final `Dialog`.
-///
-/// Other request fields (`method`, `uri`, `headers`) are recorded by `clone`,
-/// after finishing the request.
-
-/// The request body is cloned in advance of finishing the request, though
-/// this is inexpensive via `Bytes::clone` or `BodyImage::clone`. Other
-/// request fields (`method`, `uri`, `headers`) are recorded by `clone`, after
-/// finishing the request.
-pub trait RequestRecorder<B>
-    where B: hyper::body::Payload + Send
-{
-    /// Short-hand for completing the builder with an empty body, as is
-    /// the case with many HTTP request methods (e.g. GET).
-    fn record(&mut self) -> Result<RequestRecord<B>, http::Error>;
-
-    /// Complete the builder with any body that can be converted to a (Ram)
-    /// `Bytes` buffer.
-    fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<B>, http::Error>
-        where BB: Into<Bytes>;
-
-    /// Complete the builder with a `BodyImage` for the request body.
-    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<B>, http::Error>;
-}
-
-impl RequestRecorder<hyper::Body> for http::request::Builder {
-    fn record(&mut self) -> Result<RequestRecord<hyper::Body>, http::Error> {
-        let request = self.body(hyper::Body::empty())?;
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        let req_body = BodyImage::empty();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body }
-        })
-    }
-
-    fn record_body<BB>(&mut self, body: BB)
-        -> Result<RequestRecord<hyper::Body>, http::Error>
-        where BB: Into<Bytes>
-    {
-        let buf: Bytes = body.into();
-        let buf_copy: Bytes = buf.clone();
-        let request = self.body(buf.into())?;
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        let req_body = if buf_copy.is_empty() {
-            BodyImage::empty()
-        } else {
-            BodyImage::from_slice(buf_copy)
-        };
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body } })
-    }
-
-    fn record_body_image(&mut self, body: BodyImage, tune: &Tunables)
-        -> Result<RequestRecord<hyper::Body>, http::Error>
-    {
-        let request = if !body.is_empty() {
-            let stream = AsyncBodyImage::new(body.clone(), tune);
-            self.body(hyper::Body::wrap_stream(stream))?
-        } else {
-            self.body(hyper::Body::empty())?
-        };
-        let method      = request.method().clone();
-        let url         = request.uri().clone();
-        let req_headers = request.headers().clone();
-
-        Ok(RequestRecord {
-            request,
-            prolog: Prolog { method, url, req_headers, req_body: body } })
-    }
-}
-
 #[cfg(test)]
 mod logger;
 
 #[cfg(test)]
-mod futio_tests {
-    #[cfg(feature = "mmap")]        mod futures;
-                                    mod server;
+mod tests {
+    mod forward;
+
+    #[cfg(feature = "hyper-http")]
+    mod server;
 
     /// These tests may fail because they depend on public web servers
-    #[cfg(feature = "may_fail")]    mod live;
+    #[cfg(all(feature = "hyper-http", feature = "may-fail"))]
+    mod live;
 
     use tao_log::{debug, debugv};
     use super::{FutioError, Flaw};

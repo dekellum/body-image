@@ -7,13 +7,9 @@ use std::io::{Read, Write};
 use flate2::Compression as GzCompression;
 use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
-use http;
 use http::header::HeaderName;
 use tao_log::{debug, trace};
 use olio::fs::rc::ReadSlice;
-
-#[cfg(feature = "brotli")]
-use brotli;
 
 use crate::{ BarcError, MetaRecorded, hname_meta_res_decoded };
 
@@ -188,7 +184,7 @@ impl GzipCompressStrategy {
     /// For example, `body_image_futio::decode_res_body` as of crate version
     /// 1.1.0, will set this value on an original `Dialog`, which is preserved
     /// when converted to a `Record` for barc write.
-    /// Default: false (may change in the future)
+    /// Default: true (changed in 2.0.0)
     pub fn set_check_identity(mut self, check: bool) -> Self {
         self.check_identity = check;
         self
@@ -199,7 +195,7 @@ impl Default for GzipCompressStrategy {
     fn default() -> Self {
         Self { min_len: 4 * 1024,
                compression_level: 6,
-               check_identity: false }
+               check_identity: true }
     }
 }
 
@@ -258,7 +254,7 @@ impl BrotliCompressStrategy {
     /// For example, `body_image_futio::decode_res_body` as of crate version
     /// 1.1.0, will set this value on an original `Dialog`, which is preserved
     /// when converted to a `Record` for barc write.
-    /// Default: false (may change in the future)
+    /// Default: true (changed in 2.0.0)
     pub fn set_check_identity(mut self, check: bool) -> Self {
         self.check_identity = check;
         self
@@ -270,7 +266,7 @@ impl Default for BrotliCompressStrategy {
     fn default() -> Self {
         Self { min_len: 1024,
                compression_level: 6,
-               check_identity: false }
+               check_identity: true }
     }
 }
 

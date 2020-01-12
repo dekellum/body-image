@@ -1,11 +1,10 @@
-use http;
-use hyper;
+use std::convert::TryFrom;
 
-use barc::{BarcFile, CompressStrategy, Record, TryFrom};
-use body_image::Tunables;
+use barc::{BarcFile, CompressStrategy, Record};
 use body_image_futio::{
     ACCEPT_ENCODINGS, BROWSE_ACCEPT, decode_res_body, fetch,
-    FutioError, RequestRecord, RequestRecorder, user_agent
+    FutioError, FutioTunables,
+    RequestRecord, RequestRecorder, user_agent
 };
 
 use crate::{Flaw, quit};
@@ -28,11 +27,11 @@ pub(crate) fn record(
         .uri(url)
         .record()?;
 
-    let tune = Tunables::new();
-    let mut dialog = fetch(req, &tune)?;
+    let tune = FutioTunables::new();
+    let mut dialog = fetch(req, tune.clone())?;
 
     if decode {
-        match decode_res_body(&mut dialog, &tune) {
+        match decode_res_body(&mut dialog, tune.image()) {
             Ok(_) => {}
             Err(FutioError::UnsupportedEncoding(enc)) => {
                 quit!("Unsupported encoding {}; \

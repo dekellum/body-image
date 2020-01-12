@@ -1,3 +1,23 @@
+## 1.4.0 (TBD)
+* `BodySink::save` is deprecated in preference to a new `BodySink::push`
+  method, a better name and with copy-avoiding additional generic bounds.
+
+* Move some `Tunables` (and associated `Tuner` setters) that were unused here,
+  to `FutioTunables` of the body-image-futio crate, including: `res_timeout and
+  `body_timeout`.
+
+* Improve `Tunables::clone` efficiency by using `Arc<Path>` as representation of
+  `temp_dir` and add `Tunables::temp_dir_rc`.
+
+* Remove BodyReader::as_read, (`BodyReader` implements `Read` directly)
+  deprecated since 1.1.0
+
+* Upgrade to http 0.2.0 and bytes 0.5.2 (MSRV 1.39.0)
+
+* Upgrade to olio 1.3.0 (MSRV 1.34.0)
+
+* Minimum supported rust version is now 1.39.0 (per above upgrades).
+
 ## 1.3.0 (2019-10-1)
 * Fix build.rs for `rustc --version` not including git metadata.
 

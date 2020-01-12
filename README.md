@@ -15,8 +15,8 @@ to a temporary file, and optionally memory mapped. This effectively enables
 trading some file I/O cost in return for supporting significantly larger bodies
 without risk of exhausting RAM.
 
-The _[body-image-futio]_ crate integrates the _body-image_ crate with _futures_,
-_http_, _hyper_ 0.12.x., and _tokio_ for both client and server use.
+The _[body-image-futio]_ crate integrates the _body-image_ crate with
+_futures_, _http_, _hyper_, and _tokio_ for both client and server use.
 
 The _[barc]_ crate provides the **B**ody **Arc**hive (BARC) container file
 format, reader and writer. This supports high fidelity and human readable

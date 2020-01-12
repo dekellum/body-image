@@ -30,15 +30,14 @@
 //! serializing `Dialog` records. See also _[barc-cli]_.
 //!
 //! _[body-image-futio]:_ Asynchronous HTTP integration with _futures_, _http_,
-//! _hyper_ 0.12.x., and _tokio_ for `BodyImage`/`BodySink`, for both client
-//! and server use.
+//! _hyper_, and _tokio_ for `BodyImage`/`BodySink`, for both client and server
+//! use.
 //!
 //! [ws-readme]: https://github.com/dekellum/body-image
 //! [barc]: https://docs.rs/crate/barc
 //! [barc-cli]: https://docs.rs/crate/barc-cli
 //! [body-image-futio]: https://docs.rs/crate/body-image-futio
 
-#![deny(dead_code, unused_imports)]
 #![warn(rust_2018_idioms)]
 
 use std::error::Error as StdError;
@@ -48,13 +47,11 @@ use std::fs::File;
 use std::io;
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 use bytes::{Bytes, BytesMut, BufMut};
 
-use http;
 use log::{debug, warn};
 use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
@@ -248,31 +245,52 @@ impl BodySink {
         self.len
     }
 
-    /// Save bytes by appending to `Ram` or writing to `FsWrite` file. When in
-    /// state `Ram` this may be more efficient than `write_all` if
-    /// `Into<Bytes>` doesn't copy.
+    /// Push `Bytes`-convertable buffer to end of `Ram` vector, or by writing
+    /// to end of `FsWrite` file.
+    #[deprecated(since="2.0.0", note="use `push` or `write_all` instead")]
+    #[inline]
     pub fn save<T>(&mut self, buf: T) -> Result<(), BodyError>
         where T: Into<Bytes>
     {
         let buf = buf.into();
-        let len = buf.len() as u64;
-        if len > 0 {
-            match self.state {
-                SinkState::Ram(ref mut v) => {
+        self.push(buf).map_err(BodyError::from)
+    }
+
+    /// Push `Bytes`-convertable buffer to end of `Ram` vector, or by writing
+    /// to end of `FsWrite` file.
+    ///
+    /// Note the additional `Into<Bytes>` bound vs `write_all`. When in state
+    /// `Ram`, `push` is more efficient than `write_all` _if_ `Into<Bytes>`
+    /// does not copy. When in state `FsWrite` it is the same.
+    pub fn push<T>(&mut self, buf: T) -> Result<(), io::Error>
+        where T: Into<Bytes> + AsRef<[u8]>
+    {
+        match self.state {
+            SinkState::Ram(ref mut v) => {
+                let buf = buf.into();
+                let len = buf.len() as u64;
+                if len > 0 {
                     v.push(buf);
-                }
-                SinkState::FsWrite(ref mut f) => {
-                    f.write_all(&buf)?;
+                    self.len += len;
                 }
             }
-            self.len += len;
+            SinkState::FsWrite(ref mut f) => {
+                let buf = buf.as_ref();
+                let len = buf.len() as u64;
+                if len > 0 {
+                    f.write_all(buf)?;
+                    self.len += len;
+                }
+            }
         }
         Ok(())
     }
 
-    /// Write all bytes to self.  When in state `FsWrite` this is copy free
-    /// and more optimal than `save`.
-    pub fn write_all<T>(&mut self, buf: T) -> Result<(), BodyError>
+    /// Write all bytes to end of self.
+    ///
+    /// Prefer `push` to this method if the additional bound is met. Only when
+    /// in state `FsWrite` is this method copy free.
+    pub fn write_all<T>(&mut self, buf: T) -> Result<(), io::Error>
         where T: AsRef<[u8]>
     {
         let buf = buf.as_ref();
@@ -280,7 +298,7 @@ impl BodySink {
         if len > 0 {
             match self.state {
                 SinkState::Ram(ref mut v) => {
-                    v.push(buf.into());
+                    v.push(Bytes::copy_from_slice(buf));
                 }
                 SinkState::FsWrite(ref mut f) => {
                     f.write_all(buf)?;
@@ -426,8 +444,9 @@ impl BodyImage {
         where T: Into<Bytes>
     {
         let mut bs = BodySink::with_ram_buffers(1);
-        bs.save(bytes).expect("safe for Ram");
-        bs.prepare().expect("safe for Ram")
+        let buf = bytes.into();
+        bs.push(buf).expect("push is safe to Ram");
+        bs.prepare().expect("prepare is safe to Ram")
     }
 
     /// Create a new instance based on a `ReadSlice`. The `BodyImage::len`
@@ -606,7 +625,11 @@ impl BodyImage {
         'eof: loop {
             let mut buf = BytesMut::with_capacity(tune.buffer_size_ram());
             'fill: loop {
-                let len = match rin.read(unsafe { buf.bytes_mut() }) {
+                let b = unsafe {
+                    &mut *(buf.bytes_mut()
+                           as *mut [mem::MaybeUninit<u8>] as *mut [u8])
+                };
+                let len = match rin.read(b) {
                     Ok(len) => len,
                     Err(e) => {
                         if e.kind() == ErrorKind::Interrupted {
@@ -641,7 +664,7 @@ impl BodyImage {
                 return read_to_body_fs(rin, body, tune)
             }
             debug!("Saved (Ram) buffer len {}", len);
-            body.save(buf.freeze())?;
+            body.push(buf.freeze())?;
         }
         let body = body.prepare()?;
         Ok(body)
@@ -716,7 +739,10 @@ fn read_to_body_fs<R>(r: &mut R, mut body: BodySink, tune: &Tunables)
     let mut size: u64 = 0;
     let mut buf = BytesMut::with_capacity(tune.buffer_size_fs());
     loop {
-        let len = match r.read(unsafe { buf.bytes_mut() }) {
+        let b = unsafe {
+            &mut *(buf.bytes_mut() as *mut [mem::MaybeUninit<u8>] as *mut [u8])
+        };
+        let len = match r.read(b) {
             Ok(l) => l,
             Err(e) => {
                 if e.kind() == ErrorKind::Interrupted {
@@ -815,18 +841,6 @@ impl<'a> Read for BodyReader<'a> {
     }
 }
 
-impl<'a> BodyReader<'a> {
-    /// Return the `Read` reference.
-    #[deprecated(since="1.1.0", note="BodyReader now implements Read directly")]
-    pub fn as_read(&mut self) -> &mut dyn Read {
-        match *self {
-            BodyReader::Contiguous(ref mut cursor) => cursor,
-            BodyReader::Scattered(ref mut gatherer) => gatherer,
-            BodyReader::FileSlice(ref mut rslice) => rslice,
-        }
-    }
-}
-
 /// Extract of an HTTP request.
 ///
 /// Alternate spelling of _prologue_.
@@ -852,13 +866,13 @@ pub struct Epilog {
 /// `Display`/`ToString` representation as per the HTTP header value.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum Encoding {
-    /// `Chunked` is typically applied or removed by HTTP client and server
-    /// implementations, even minimal ones.
+    /// `Chunked` (transfer encoding) is typically applied or removed by HTTP
+    /// client and server implementations—even minimal ones.
     Chunked,
     Deflate,
     Gzip,
     Brotli,
-    /// This obsolete LZW format, is not generally used or supported
+    /// This obsolete LZW format is not generally used or supported
     /// currently, but is included for error reporting.
     Compress,
     /// May be used to explicitly indicate that an encoding previously applied
@@ -985,9 +999,7 @@ pub struct Tunables {
     size_estimate_deflate:   u16,
     size_estimate_gzip:      u16,
     size_estimate_brotli:    u16,
-    temp_dir:                PathBuf,
-    res_timeout:             Option<Duration>,
-    body_timeout:            Option<Duration>,
+    temp_dir:                Arc<Path>,
 }
 
 impl Tunables {
@@ -1001,9 +1013,7 @@ impl Tunables {
             size_estimate_deflate:       4,
             size_estimate_gzip:          5,
             size_estimate_brotli:        6,
-            temp_dir:     env::temp_dir(),
-            res_timeout:  None,
-            body_timeout: Some(Duration::from_secs(60)),
+            temp_dir: env::temp_dir().into(),
         }
     }
 
@@ -1056,17 +1066,12 @@ impl Tunables {
         &self.temp_dir
     }
 
-    /// Return the maximum initial response timeout interval.
-    /// Default: None (e.g. unset)
-    pub fn res_timeout(&self) -> Option<Duration> {
-        self.res_timeout
+    /// Return a reference to the directory path in which to write temporary
+    /// (`BodyImage`) files.  Default: `std::env::temp_dir()`
+    pub fn temp_dir_rc(&self) -> Arc<Path> {
+        self.temp_dir.clone()
     }
 
-    /// Return the maximum streaming body timeout interval.
-    /// Default: 60 seconds
-    pub fn body_timeout(&self) -> Option<Duration> {
-        self.body_timeout
-    }
 }
 
 impl Default for Tunables {
@@ -1147,40 +1152,12 @@ impl Tuner {
         self
     }
 
-    /// Set the maximum initial response timeout interval.
-    pub fn set_res_timeout(&mut self, dur: Duration) -> &mut Tuner {
-        self.template.res_timeout = Some(dur);
-        self
-    }
-
-    /// Unset (e.g. disable) response timeout
-    pub fn unset_res_timeout(&mut self) -> &mut Tuner {
-        self.template.res_timeout = None;
-        self
-    }
-
-    /// Set the maximum streaming body timeout interval.
-    pub fn set_body_timeout(&mut self, dur: Duration) -> &mut Tuner {
-        self.template.body_timeout = Some(dur);
-        self
-    }
-
-    /// Unset (e.g. disable) body timeout
-    pub fn unset_body_timeout(&mut self) -> &mut Tuner {
-        self.template.body_timeout = None;
-        self
-    }
-
     /// Finish building, asserting any remaining invariants, and return a new
     /// `Tunables` instance.
     pub fn finish(&self) -> Tunables {
         let t = self.template.clone();
         assert!(t.max_body_ram <= t.max_body,
                 "max_body_ram can't be greater than max_body");
-        if t.res_timeout.is_some() && t.body_timeout.is_some() {
-            assert!(t.res_timeout.unwrap() <= t.body_timeout.unwrap(),
-                    "res_timeout can't be greater than body_timeout");
-        }
         t
     }
 }
@@ -1285,9 +1262,9 @@ mod body_tests {
     #[test]
     fn test_scattered_gather() {
         let mut body = BodySink::with_ram_buffers(2);
-        body.save(&b"hello"[..]).unwrap();
-        body.save(&b" "[..]).unwrap();
-        body.save(&b"world"[..]).unwrap();
+        body.push(&b"hello"[..]).unwrap();
+        body.push(&b" "[..]).unwrap();
+        body.push(&b"world"[..]).unwrap();
         let mut body = body.prepare().unwrap();
         body.gather();
         if let BodyReader::Contiguous(cursor) = body.reader() {

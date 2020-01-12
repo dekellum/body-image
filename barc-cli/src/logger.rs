@@ -1,8 +1,3 @@
-use std;
-
-use fern;
-use log;
-
 use crate::Flaw;
 
 pub fn setup_logger(level: u32) -> Result<(), Flaw> {

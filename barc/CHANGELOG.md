@@ -1,3 +1,23 @@
+## 1.4.0 (TBD)
+* Change `Compress` implementations default `check_identity` to true (was
+  previously introduced, in 1.1.0, with default false for interoperability).
+
+* Upgrade to body-image 1.4.0 including interface change (e.g. `push`).
+
+* Upgrade to http 0.2.0 and bytes 0.5.2 (MSRV 1.39.0)
+
+* Upgrade to olio 1.3.0 (MSRV 1.34.0)
+
+* Upgrade to tao-log 1.0.0
+
+* Update to flate2 [1.0.4, 1.1) dropping constraint introduced in 1.3.0.
+
+* Add brotli-decompressor >= 2.1.2 min transitive upgrade
+
+* With MSRV update, drop `TryFrom` workarounds (MSRV 1.34.0)
+
+* Minimum supported rust version is now 1.39.0 (per above upgrades).
+
 ## 1.3.0 (2019-10-1)
 * Fix build.rs for `rustc --version` not including git metadata.
 
