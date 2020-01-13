@@ -1,4 +1,4 @@
-## 2.0.0 (TBD)
+## 2.0.0 (2020-1-13)
 * Upgrade to body-image, barc, and body-image-futio 2.0.0 with interface
   changes (e.g. `FutioTunables`, `TryFrom`).
 

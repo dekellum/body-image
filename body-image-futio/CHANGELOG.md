@@ -1,4 +1,4 @@
-## 2.0.0 (TBD)
+## 2.0.0 (2020-1-13)
 * `AsyncBodyImage` and `AsyncBodySink` are now generic over `Item` type
   (e.g. `Bytes` or `UniBodyBuf`). The prior `UniBodyImage` and `UniBodySink`
   types are removed (replaced with use of `UniBodyBuf` generic parameter).

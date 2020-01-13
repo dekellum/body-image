@@ -1,4 +1,4 @@
-## 2.0.0 (TBD)
+## 2.0.0 (2020-1-13)
 * Change `Compress` implementations default `check_identity` to true (was
   previously introduced, in 1.1.0, with default false for interoperability).
 

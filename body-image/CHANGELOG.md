@@ -1,4 +1,4 @@
-## 2.0.0 (TBD)
+## 2.0.0 (2020-1-13)
 * `BodySink::save` is deprecated in preference to a new `BodySink::push`
   method, a better name and with copy-avoiding additional generic bounds.
 
