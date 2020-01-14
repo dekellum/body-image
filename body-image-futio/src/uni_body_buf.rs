@@ -1,9 +1,12 @@
 use std::ops::Deref;
 use bytes::{Buf, Bytes};
 
-#[cfg(feature = "mmap")] use tao_log::debug;
+#[cfg(feature = "mmap")]
+use {
+    tao_log::debug,
 
-#[cfg(feature = "mmap")] use crate::MemMapBuf;
+    crate::MemMapBuf,
+};
 
 /// Provides zero-copy read access to both `Bytes` and memory mapped regions
 /// (`MemMapBuf`). Implements `bytes::Buf` (*mmap* feature only).
