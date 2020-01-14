@@ -25,10 +25,15 @@ use crate::{
     FutioTunables, StreamWrapper, UniBodyBuf
 };
 
-#[cfg(feature = "mmap")] use memmap::Mmap;
-#[cfg(feature = "mmap")] use crate::MemMapBuf;
-#[cfg(feature = "mmap")] use olio::mem::{MemAdvice, MemHandle};
-#[cfg(feature = "mmap")] use body_image::_mem_handle_ext::MemHandleExt;
+#[cfg(feature = "mmap")]
+use {
+    memmap::Mmap,
+    olio::mem::{MemAdvice, MemHandle},
+
+    body_image::_mem_handle_ext::MemHandleExt,
+
+    crate::MemMapBuf,
+};
 
 /// Trait qualifying `Stream` Item-type buffer requirments.
 pub trait OutputBuf: Buf + 'static + From<Bytes> + Send + Sync + Unpin {
