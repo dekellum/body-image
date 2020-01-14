@@ -49,7 +49,7 @@ pub struct AsyncBodySink<B, BA=LenientArbiter>
 
 macro_rules! try_write {
     ($w:expr, $buf:ident) => {{
-        if let Err(e) = ($w) {
+        if let Err(e) = $w {
             if e.kind() == io::ErrorKind::Interrupted {
                 warn!("AsyncBodySink: write interrupted");
                 return Ok(Some($buf));
