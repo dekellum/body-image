@@ -1,4 +1,6 @@
 ## 2.0.1 (TBD)
+* Fix blocking I/O interrupt handling for `AsyncBodySink`. Fix logging of
+  interrupt for `AsyncBodyStream`.
 
 ## 2.0.0 (2020-1-13)
 * `AsyncBodyImage` and `AsyncBodySink` are now generic over `Item` type
