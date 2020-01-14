@@ -194,7 +194,7 @@ impl<B, BA> AsyncBodyImage<B, BA>
                         }
                         Err(e) => {
                             if e.kind() == io::ErrorKind::Interrupted {
-                                warn!("AsyncBodyImage: write interrupted");
+                                warn!("AsyncBodyImage: read interrupted");
                             } else {
                                 break Poll::Ready(Some(Err(e)));
                             }
