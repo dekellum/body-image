@@ -319,7 +319,7 @@ impl BodySink {
     /// error result is returned (e.g. opening or writing to the file), self
     /// will be empty and in the `Ram` state. There is no practical recovery
     /// for the original body.
-    pub fn write_back<P>(&mut self, dir: P) -> Result<&mut Self, io::Error>
+    pub fn write_back<P>(&mut self, dir: P) -> Result<&mut Self, BodyError>
         where P: AsRef<Path>
     {
         if self.is_ram() {
