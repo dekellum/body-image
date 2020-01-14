@@ -100,16 +100,8 @@ impl<B, BA> AsyncBodySink<B, BA>
         // If still Ram at this point, needs to be written back
         if self.body.is_ram() {
             debug!("to write back file (blocking, len: {})", new_len);
-            let res = self.body.write_back(self.tune.image().temp_dir());
-            if let Err(BodyError::Io(e)) = res {
-                if e.kind() == io::ErrorKind::Interrupted {
-                    warn!("AsyncBodySink: write_back interrupted");
-                    return Ok(Some(buf));
-                } else {
-                    return Err(e.into());
-                }
-            }
-            res?;
+            self.body.write_back(self.tune.image().temp_dir())?;
+            // Any interrupt in prior is unrecoverable, so propigate it.
         }
 
         // Now write the buf
