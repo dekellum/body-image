@@ -47,19 +47,6 @@ pub struct AsyncBodySink<B, BA=LenientArbiter>
     buf: Option<B>
 }
 
-macro_rules! try_write {
-    ($w:expr, $buf:ident) => {{
-        if let Err(e) = $w {
-            if e.kind() == io::ErrorKind::Interrupted {
-                warn!("AsyncBodySink: write interrupted");
-                return Ok(Some($buf));
-            } else {
-                return Err(e.into());
-            }
-        }
-    }}
-}
-
 impl<B, BA> AsyncBodySink<B, BA>
     where B: InputBuf,
           BA: BlockingArbiter + Default + Unpin
@@ -113,12 +100,28 @@ impl<B, BA> AsyncBodySink<B, BA>
         // If still Ram at this point, needs to be written back
         if self.body.is_ram() {
             debug!("to write back file (blocking, len: {})", new_len);
-            try_write!(self.body.write_back(self.tune.image().temp_dir()), buf);
+            let res = self.body.write_back(self.tune.image().temp_dir());
+            if let Err(BodyError::Io(e)) = res {
+                if e.kind() == io::ErrorKind::Interrupted {
+                    warn!("AsyncBodySink: write_back interrupted");
+                    return Ok(Some(buf));
+                } else {
+                    return Err(e.into());
+                }
+            }
+            res?;
         }
 
         // Now write the buf
         debug!("to write buf (blocking, len: {})", buf.remaining());
-        try_write!(self.body.write_all(&buf), buf);
+        if let Err(e) = self.body.write_all(&buf) {
+            if e.kind() == io::ErrorKind::Interrupted {
+                warn!("AsyncBodySink: write interrupted");
+                return Ok(Some(buf));
+            } else {
+                return Err(e.into());
+            }
+        }
 
         Ok(None)
     }
