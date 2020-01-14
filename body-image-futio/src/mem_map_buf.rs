@@ -19,7 +19,7 @@ impl MemMapBuf {
     }
 
     /// Advise that we will be sequentially accessing the memory map region,
-    /// and that agressive read-ahead is warranted.
+    /// and that aggressive read-ahead is warranted.
     pub(crate) fn advise_sequential(&self) -> Result<(), io::Error> {
         let _new_advice = self.mm.advise(MemAdvice::Sequential)?;
         #[cfg(unix)] {
