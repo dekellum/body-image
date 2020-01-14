@@ -896,12 +896,12 @@ impl fmt::Display for Encoding {
 /// An HTTP request and response recording.
 ///
 /// This composed type has private fields but offers getters, mutable getters
-/// and setter methods. Several import getter methods are are found in trait
+/// and setter methods. Several important getter methods are found in trait
 /// implementations [`RequestRecorded`](#impl-RequestRecorded) and
 /// [`Recorded`](#impl-Recorded).
 ///
 /// It may be constructed via the `Prolog` and `Epilog` public structs and the
-/// [`explode`](#method.explode) method used to extract the same.
+/// [`explode`](#method.explode) method can be used to extract the same.
 #[derive(Clone, Debug)]
 pub struct Dialog {
     pro: Prolog,
