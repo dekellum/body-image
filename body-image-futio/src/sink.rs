@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -8,7 +9,7 @@ use blocking_permit::{
 };
 use bytes::{Buf, Bytes};
 use futures_sink::Sink;
-use tao_log::debug;
+use tao_log::{debug, warn};
 
 use body_image::{BodyError, BodySink};
 
@@ -83,10 +84,9 @@ impl<B, BA> AsyncBodySink<B, BA>
         }
 
         // Ram doesn't need blocking permit (early exit)
-        if self.body.is_ram() && new_len <= self.tune.image().max_body_ram()
-        {
+        if self.body.is_ram() && new_len <= self.tune.image().max_body_ram() {
             debug!("to push buf (len: {})", buf.remaining());
-            self.body.push(buf).map_err(FutioError::from)?;
+            self.body.push(buf)?; // No interrupts for RAM
             return Ok(None)
         };
 
@@ -101,11 +101,19 @@ impl<B, BA> AsyncBodySink<B, BA>
         if self.body.is_ram() {
             debug!("to write back file (blocking, len: {})", new_len);
             self.body.write_back(self.tune.image().temp_dir())?;
+            // Any interrupt in prior is unrecoverable, so propigate it.
         }
 
         // Now write the buf
         debug!("to write buf (blocking, len: {})", buf.remaining());
-        self.body.write_all(&buf)?;
+        if let Err(e) = self.body.write_all(&buf) {
+            if e.kind() == io::ErrorKind::Interrupted {
+                warn!("AsyncBodySink: write interrupted");
+                return Ok(Some(buf));
+            } else {
+                return Err(e.into());
+            }
+        }
 
         Ok(None)
     }
@@ -118,7 +126,7 @@ impl<B, BA> AsyncBodySink<B, BA>
                     self.buf = s;
                     Poll::Pending
                 }
-                Err(e) => Poll::Ready(Err(e))
+                Err(e) => Poll::Ready(Err(e)),
             }
         } else {
             Poll::Ready(Ok(()))
