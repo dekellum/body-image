@@ -48,7 +48,7 @@ version = "2.0.0"
 dependencies = [
  "barc 2.0.0",
  "body-image 2.0.0",
- "body-image-futio 2.0.0",
+ "body-image-futio 2.0.1",
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "fern 0.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "http 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "body-image-futio"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "blocking-permit 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "body-image 2.0.0",
