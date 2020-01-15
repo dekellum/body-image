@@ -2,6 +2,14 @@
 * Fix blocking I/O interrupt handling for `AsyncBodySink`. Fix logging of
   interrupt for `AsyncBodyStream`.
 
+* Extend blocking-permit dependency to include 1.1.0, for its improved
+  run-on-caller ordering.  Add warnings to `DispatchBodyImage` and
+  `DisptachBodySink` regarding the risk of out-of-order reads/writes if the
+  pool is configured with more than one thread.
+
+* Additional benchmarks and use of bounded
+  `blocking-permit::DispatchPoolBuilder::queue_length`.
+
 ## 2.0.0 (2020-1-13)
 * `AsyncBodyImage` and `AsyncBodySink` are now generic over `Item` type
   (e.g. `Bytes` or `UniBodyBuf`). The prior `UniBodyImage` and `UniBodySink`

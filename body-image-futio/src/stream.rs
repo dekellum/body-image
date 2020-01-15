@@ -405,7 +405,9 @@ impl<B> http_body::Body for PermitBodyImage<B>
 /// Extends [`AsyncBodyImage`] by further dispatching any blocking file read
 /// operations to a `DispatchPool` registered with the current thread.
 ///
-/// The implementation will panic if a `DispatchPool` is not registered.
+/// The implementation will panic if a `DispatchPool` is not registered. Note
+/// the risk of out-of-order reads if configured with a `DispatchPool` of more
+/// then one thread!
 pub struct DispatchBodyImage<B>
     where B: OutputBuf
 {
