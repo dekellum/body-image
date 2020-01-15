@@ -34,7 +34,7 @@ tao-log    = { version=">=1.0.0, <1.1" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }
 olio       = { version=">=1.3.0, <1.4", default-features=false }
 tokio      = { version=">=0.2.6, <0.3", features=["blocking"] }
-blocking-permit = { version=">=1.0.0, <1.1", default-features=false, features=["tokio-omnibus"] }
+blocking-permit = { version=">=1.0.0, <1.2", default-features=false, features=["tokio-omnibus"] }
 
 [features]
 default = ["mmap", "brotli", "hyper-http"]
