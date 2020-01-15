@@ -9,8 +9,12 @@ use std::path::{Path, PathBuf};
 
 use blocking_permit::{
     DispatchPool, Semaphore, Semaphorish,
-    register_dispatch_pool, deregister_dispatch_pool
+    register_dispatch_pool
 };
+
+#[cfg(feature = "tangential")]
+use blocking_permit::deregister_dispatch_pool;
+
 use bytes::Bytes;
 use futures_core::stream::Stream;
 use futures_util::future;
@@ -125,7 +129,7 @@ fn stream_21_fsread_dispatch1(b: &mut Bencher) {
         .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let pool = DispatchPool::builder().pool_size(1).create();
+    let pool = DispatchPool::builder().pool_size(1).queue_length(4).create();
     let mut rt = th_dispatch_runtime(pool);
     b.iter(|| {
         let stream = DispatchBodyImage::<Bytes>::new(body.clone(), tune.clone());
@@ -134,7 +138,8 @@ fn stream_21_fsread_dispatch1(b: &mut Bencher) {
 }
 
 // `AsyncBodyImage::<UniBodyBuf>` in `FsRead`, default buffer size (64K), threaded runtime,
-// dispatch pool.
+// dispatch pool. Risks out of order writes!
+#[cfg(feature = "tangential")]
 #[bench]
 fn stream_21_fsread_dispatch2(b: &mut Bencher) {
     let tune = FutioTuner::new()
@@ -143,7 +148,7 @@ fn stream_21_fsread_dispatch2(b: &mut Bencher) {
         .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let pool = DispatchPool::builder().pool_size(2).create();
+    let pool = DispatchPool::builder().pool_size(2).queue_length(4).create();
     let mut rt = th_dispatch_runtime(pool);
     b.iter(|| {
         let stream = DispatchBodyImage::<Bytes>::new(body.clone(), tune.clone());
@@ -153,6 +158,7 @@ fn stream_21_fsread_dispatch2(b: &mut Bencher) {
 
 // `AsyncBodyImage::<UniBodyBuf>` in `FsRead`, default buffer size (64K), threaded runtime,
 // dispatch queue length 0.
+#[cfg(feature = "tangential")]
 #[bench]
 fn stream_22_fsread_dispatch1_ql0(b: &mut Bencher) {
     let tune = FutioTuner::new()
@@ -185,9 +191,10 @@ fn stream_22_fsread_uni_direct(b: &mut Bencher) {
 
 // `AsyncBodyImage::<UniBodyBuf>` in `FsRead`, default buffer size (64K), current thread
 // runtime, dispatch pool
+#[cfg(feature = "tangential")]
 #[bench]
 fn stream_23_fsread_dispatch1_ct(b: &mut Bencher) {
-    let pool = DispatchPool::builder().pool_size(1).create();
+    let pool = DispatchPool::builder().pool_size(1).queue_length(4).create();
     register_dispatch_pool(pool);
     let tune = FutioTuner::new()
         // not essential, but consistent
@@ -205,6 +212,7 @@ fn stream_23_fsread_dispatch1_ct(b: &mut Bencher) {
 
 // `AsyncBodyImage::<UniBodyBuf>` in `FsRead`, default buffer size (64K), current thread
 // runtime, dispatch queue length 0.
+#[cfg(feature = "tangential")]
 #[bench]
 fn stream_24_fsread_dispatch1_ct_ql0(b: &mut Bencher) {
     let pool = DispatchPool::builder().queue_length(0).create();

@@ -7,8 +7,9 @@
   `DisptachBodySink` regarding the risk of out-of-order reads/writes if the
   pool is configured with more than one thread.
 
-* Additional benchmarks and use of bounded
-  `blocking-permit::DispatchPoolBuilder::queue_length`.
+* Additional benchmarks with use of bounded
+  `blocking-permit::DispatchPoolBuilder::queue_length` and preference to one
+  dispatch thread, to avoid out-of-order writes.
 
 ## 2.0.0 (2020-1-13)
 * `AsyncBodyImage` and `AsyncBodySink` are now generic over `Item` type
