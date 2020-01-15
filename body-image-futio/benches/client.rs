@@ -102,7 +102,10 @@ fn client_10_fs_permit(b: &mut Bencher) {
 #[cfg(feature = "tangential")]
 #[bench]
 fn client_11_fs_dispatch1(b: &mut Bencher) {
-    let pool = DispatchPool::builder().pool_size(1).create();
+    let pool = DispatchPool::builder()
+        .pool_size(1)
+        .queue_length(EXTRA_THREADS)
+        .create();
     let rt = th_dispatch_runtime(pool);
     let tune = FutioTuner::new()
         .set_image(
@@ -118,7 +121,10 @@ fn client_11_fs_dispatch1(b: &mut Bencher) {
 
 #[bench]
 fn client_12_fs_dispatch(b: &mut Bencher) {
-    let pool = DispatchPool::builder().pool_size(EXTRA_THREADS).create();
+    let pool = DispatchPool::builder()
+        .pool_size(EXTRA_THREADS)
+        .queue_length(EXTRA_THREADS)
+        .create();
     let rt = th_dispatch_runtime(pool);
     let tune = FutioTuner::new()
         .set_image(
@@ -135,7 +141,10 @@ fn client_12_fs_dispatch(b: &mut Bencher) {
 #[cfg(feature = "tangential")]
 #[bench]
 fn client_12_fs_dispatch3(b: &mut Bencher) {
-    let pool = DispatchPool::builder().pool_size(3).create();
+    let pool = DispatchPool::builder()
+        .pool_size(3)
+        .queue_length(EXTRA_THREADS)
+        .create();
     let rt = th_dispatch_runtime(pool);
     let tune = FutioTuner::new()
         .set_image(
@@ -211,6 +220,26 @@ fn client_17_mmap_permit(b: &mut Bencher) {
         .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_SET))
         .finish();
     client_run::<PermitBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
+}
+
+#[cfg(feature = "mmap")]
+#[bench]
+fn client_18_mmap_dispatch(b: &mut Bencher) {
+    let pool = DispatchPool::builder()
+        .pool_size(EXTRA_THREADS)
+        .queue_length(EXTRA_THREADS)
+        .create();
+    let rt = th_dispatch_runtime(pool);
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Dispatch)
+        .finish();
+    client_run::<DispatchBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
 }
 
 #[derive(Copy, Clone)]
@@ -382,7 +411,7 @@ fn th_direct_runtime() -> Runtime {
 fn th_dispatch_runtime(pool: DispatchPool) -> Runtime {
     tokio::runtime::Builder::new()
         .core_threads(CORE_THREADS)
-        .max_threads(CORE_THREADS+EXTRA_THREADS)
+        .max_threads(CORE_THREADS)
         .threaded_scheduler()
         .enable_io()
         .enable_time()
