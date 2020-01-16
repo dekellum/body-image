@@ -1,3 +1,11 @@
+## 2.0.2 (2020-1-16)
+* Correct and clarify why there is, actually, no practical risk of out-of-order
+  reads/writes with the `DispatchBodyImage` and `DisptachBodySink` types,
+  respectively. The 2.0.1 release overstated this risk.
+
+* Restore benchmarks erroneously removed in 2.0.1 for multiple-dispatch pool
+  threads.
+
 ## 2.0.1 (2020-1-15)
 * Fix blocking I/O interrupt handling for `AsyncBodySink`. Fix logging of
   interrupt for `AsyncBodyStream`.
