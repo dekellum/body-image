@@ -99,6 +99,7 @@ fn client_10_fs_permit(b: &mut Bencher) {
     client_run::<PermitBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
 }
 
+#[cfg(feature = "tangential")]
 #[bench]
 fn client_11_fs_dispatch1(b: &mut Bencher) {
     let pool = DispatchPool::builder()
@@ -118,10 +119,8 @@ fn client_11_fs_dispatch1(b: &mut Bencher) {
     client_run::<DispatchBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
 }
 
-// Risks out of order writes
-#[cfg(feature = "tangential")]
 #[bench]
-fn client_12_fs_dispatch_n(b: &mut Bencher) {
+fn client_12_fs_dispatch(b: &mut Bencher) {
     let pool = DispatchPool::builder()
         .pool_size(EXTRA_THREADS)
         .queue_length(EXTRA_THREADS)
@@ -139,7 +138,6 @@ fn client_12_fs_dispatch_n(b: &mut Bencher) {
     client_run::<DispatchBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
 }
 
-// Risks out of order writes
 #[cfg(feature = "tangential")]
 #[bench]
 fn client_12_fs_dispatch3(b: &mut Bencher) {
@@ -226,9 +224,9 @@ fn client_17_mmap_permit(b: &mut Bencher) {
 
 #[cfg(feature = "mmap")]
 #[bench]
-fn client_18_mmap_dispatch1(b: &mut Bencher) {
+fn client_18_mmap_dispatch(b: &mut Bencher) {
     let pool = DispatchPool::builder()
-        .pool_size(1)
+        .pool_size(EXTRA_THREADS)
         .queue_length(EXTRA_THREADS)
         .create();
     let rt = th_dispatch_runtime(pool);
