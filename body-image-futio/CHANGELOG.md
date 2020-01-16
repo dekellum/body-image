@@ -1,4 +1,4 @@
-## 2.0.1 (TBD)
+## 2.0.1 (2020-1-15)
 * Fix blocking I/O interrupt handling for `AsyncBodySink`. Fix logging of
   interrupt for `AsyncBodyStream`.
 
