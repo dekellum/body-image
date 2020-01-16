@@ -279,7 +279,9 @@ fn client_run<I, T, E>(
         let tune = tune.clone();
         let url = url.clone();
         let connector = HttpConnector::new();
-        let client = Client::builder().build(connector);
+        let client = Client::builder()
+            .http1_max_buf_size(64 * 1024)
+            .build(connector);
         let job = async move {
             let futures: FuturesUnordered<_> = (0..BATCH).map(|_| {
                 let tune2 = tune.clone();
