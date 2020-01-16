@@ -406,8 +406,8 @@ impl<B> http_body::Body for PermitBodyImage<B>
 /// operations to a `DispatchPool` registered with the current thread.
 ///
 /// The implementation will panic if a `DispatchPool` is not registered. Note
-/// the risk of out-of-order reads if configured with a `DispatchPool` of more
-/// then one thread!
+/// that each instance will have, at most, 1 pending dispatched read operation
+/// `Future`, that it drives to completion before making new reads.
 pub struct DispatchBodyImage<B>
     where B: OutputBuf
 {

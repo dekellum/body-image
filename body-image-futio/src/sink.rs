@@ -284,9 +284,12 @@ impl<B> Sink<B> for PermitBodySink<B>
 /// Extends [`AsyncBodySink`] by further dispatching any blocking file write
 /// operations to a `DispatchPool` registered with the current thread.
 ///
-/// The implementation will panic if a `DispatchPool` is not registered.  Note
-/// the risk of out-of-order writes if configured with a `DispatchPool` of
-/// more then one thread!
+/// The implementation will panic if a `DispatchPool` is not registered. Note
+/// that any risk of out-of-order writes (for example, via 2+ dispatch threads)
+/// is avoided, because each instance will have, at most, 1 pending dispatch
+/// write operation `Future`, that it drives to completion before accepting
+/// further input buffers. Also the underlying `BodySink` is owned for the life
+/// of the instance and is not a cloneable handle.
 pub struct DispatchBodySink<B>
     where B: InputBuf
 {
