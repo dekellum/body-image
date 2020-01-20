@@ -6,9 +6,9 @@ use futures_util::{
     stream::{StreamExt, TryStreamExt},
 };
 
-use hyperx::header::{ContentLength, TypedHeaders};
-
+use blocking_permit::Cleaver;
 use body_image::{BodySink, Dialog};
+use hyperx::header::{ContentLength, TypedHeaders};
 
 use crate::{
     AsyncBodySink, BlockingPolicy, DispatchBodySink, Flaw, FutioError,
@@ -126,23 +126,26 @@ async fn resp_future(monolog: Monolog, tune: FutioTunables)
 
     let body = body.err_into::<FutioError>();
 
+    let body = if let Some(nz) = tune.max_stream_item_len() {
+        Either::Left(Cleaver::new(body, nz.into()))
+    } else {
+        Either::Right(body)
+    };
+
     let res_body = match tune.blocking_policy() {
         BlockingPolicy::Direct => {
             let mut sink = AsyncBodySink::<Bytes>::new(bsink, tune);
-            body.forward(&mut sink)
-                .await?;
+            body.forward(&mut sink) .await?;
             sink.into_inner()
         }
         BlockingPolicy::Permit(_) => {
             let mut sink = PermitBodySink::<Bytes>::new(bsink, tune);
-            body.forward(&mut sink)
-                .await?;
+            body.forward(&mut sink) .await?;
             sink.into_inner()
         }
         BlockingPolicy::Dispatch => {
             let mut sink = DispatchBodySink::<Bytes>::new(bsink, tune);
-            body.forward(&mut sink)
-                .await?;
+            body.forward(&mut sink) .await?;
             sink.into_inner()
         }
     };

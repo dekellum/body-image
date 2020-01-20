@@ -75,6 +75,7 @@ fn post_echo_body() {
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
             .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
+            .set_max_stream_item_len(283)
             .finish();
         let body = fs_body_image(445);
         let res = spawn(post_body_req::<Body>(&url, body, tune))

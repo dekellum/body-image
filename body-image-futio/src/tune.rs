@@ -1,5 +1,5 @@
+use std::num::NonZeroUsize;
 use std::time::Duration;
-
 use blocking_permit::Semaphore;
 use body_image::Tunables;
 
@@ -14,6 +14,7 @@ pub struct FutioTunables {
     res_timeout:     Option<Duration>,
     body_timeout:    Option<Duration>,
     blocking_policy: BlockingPolicy,
+    max_stream_item_len: Option<NonZeroUsize>,
 }
 
 /// The policy for blocking operations.
@@ -40,6 +41,7 @@ impl FutioTunables {
             res_timeout:  None,
             body_timeout: Some(Duration::from_secs(60)),
             blocking_policy: BlockingPolicy::Direct,
+            max_stream_item_len: None,
         }
     }
 
@@ -79,6 +81,14 @@ impl FutioTunables {
     /// Default: `BlockingPolicy::Direct`
     pub fn blocking_policy(&self) -> BlockingPolicy {
         self.blocking_policy
+    }
+
+    /// Return the maximum allowed buffer length per body `Stream<Item>`, if
+    /// set.
+    ///
+    /// Default: None
+    pub fn max_stream_item_len(&self) -> Option<NonZeroUsize> {
+        self.max_stream_item_len
     }
 }
 
@@ -143,6 +153,19 @@ impl FutioTuner {
         -> &mut FutioTuner
     {
         self.template.blocking_policy = policy;
+        self
+    }
+
+    /// Return the maximum allowed buffer length per body `Stream<Item>`, if
+    /// set.
+    ///
+    /// Default: None
+    pub fn set_max_stream_item_len(&mut self, max: usize)
+        -> &mut FutioTuner
+    {
+        self.template.max_stream_item_len = Some(
+            NonZeroUsize::new(max).expect("non zero")
+        );
         self
     }
 
