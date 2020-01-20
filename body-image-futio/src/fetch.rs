@@ -124,25 +124,24 @@ async fn resp_future(monolog: Monolog, tune: FutioTunables)
     // no advantage to converting to `UniBodyBuf` here. Memory mapped buffers
     // are never received.
 
+    let body = body.err_into::<FutioError>();
+
     let res_body = match tune.blocking_policy() {
         BlockingPolicy::Direct => {
             let mut sink = AsyncBodySink::<Bytes>::new(bsink, tune);
-            body.err_into::<FutioError>()
-                .forward(&mut sink)
+            body.forward(&mut sink)
                 .await?;
             sink.into_inner()
         }
         BlockingPolicy::Permit(_) => {
             let mut sink = PermitBodySink::<Bytes>::new(bsink, tune);
-            body.err_into::<FutioError>()
-                .forward(&mut sink)
+            body.forward(&mut sink)
                 .await?;
             sink.into_inner()
         }
         BlockingPolicy::Dispatch => {
             let mut sink = DispatchBodySink::<Bytes>::new(bsink, tune);
-            body.err_into::<FutioError>()
-                .forward(&mut sink)
+            body.forward(&mut sink)
                 .await?;
             sink.into_inner()
         }
