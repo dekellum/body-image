@@ -73,9 +73,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "blocking-permit"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
+version = "1.2.0"
+source = "git+https://github.com/dekellum/blocking-permit?branch=dev#33fac1e6f2060d6630e7bf9222bee0d0539744b1"
 dependencies = [
+ "bytes 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-core 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -99,7 +100,7 @@ dependencies = [
 name = "body-image-futio"
 version = "2.0.2"
 dependencies = [
- "blocking-permit 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "blocking-permit 1.2.0 (git+https://github.com/dekellum/blocking-permit?branch=dev)",
  "body-image 2.0.0",
  "brotli 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "brotli-decompressor 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -996,7 +997,7 @@ dependencies = [
 "checksum autocfg 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f8aac770f1885fd7e387acedd76065302551364496e46b3dd00860b2f8359b9d"
 "checksum base64 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b41b7ea54a0c9d92199de89e20e58d49f02f8e699814ef3fdf266f6f748d15c7"
 "checksum bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
-"checksum blocking-permit 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8d56822b0f0f74431be777a0d0123edae6f20037fa92ce574f8f0fc78958f2ed"
+"checksum blocking-permit 1.2.0 (git+https://github.com/dekellum/blocking-permit?branch=dev)" = "<none>"
 "checksum brotli 3.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7f29919120f08613aadcd4383764e00526fc9f18b6c0895814faeed0dd78613e"
 "checksum brotli-decompressor 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2a9f2b517b96b19d8f91c1ff5b1cf498e688850b32eae5d58e02d15c4d4fdc0c"
 "checksum bytes 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "10004c15deb332055f7a4a208190aed362cf9a7c2f6ab70a305fba50e1105f38"
