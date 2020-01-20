@@ -192,6 +192,7 @@ impl<B, BA> Sink<B> for AsyncBodySink<B, BA>
 /// `Semaphore` referenced in
 /// [`BlockingPolicy::Permit`](crate::BlockingPolicy::Permit) from
 /// [`FutioTunables::blocking_policy`], which is required.
+#[derive(Debug)]
 pub struct PermitBodySink<B>
     where B: InputBuf,
 {
@@ -290,6 +291,7 @@ impl<B> Sink<B> for PermitBodySink<B>
 /// write operation `Future`, that it drives to completion before accepting
 /// further input buffers. Also the underlying `BodySink` is owned for the life
 /// of the instance and is not a cloneable handle.
+#[derive(Debug)]
 pub struct DispatchBodySink<B>
     where B: InputBuf
 {
@@ -301,6 +303,7 @@ type DispatchReturn<B> = (
     AsyncBodySink<B, StatefulArbiter>
 );
 
+#[derive(Debug)]
 enum DispatchState<B>
     where B: InputBuf
 {

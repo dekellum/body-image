@@ -306,6 +306,7 @@ impl<B, BA> http_body::Body for AsyncBodyImage<B, BA>
 /// `Semaphore` referenced in
 /// [`BlockingPolicy::Permit`](crate::BlockingPolicy::Permit) from
 /// [`FutioTunables::blocking_policy`], which is required.
+#[derive(Debug)]
 pub struct PermitBodyImage<B>
     where B: OutputBuf
 {
@@ -408,6 +409,7 @@ impl<B> http_body::Body for PermitBodyImage<B>
 /// The implementation will panic if a `DispatchPool` is not registered. Note
 /// that each instance will have, at most, 1 pending dispatched read operation
 /// `Future`, that it drives to completion before making new reads.
+#[derive(Debug)]
 pub struct DispatchBodyImage<B>
     where B: OutputBuf
 {
@@ -420,6 +422,7 @@ type DispatchReturn<B> = (
     AsyncBodyImage<B, StatefulArbiter>
 );
 
+#[derive(Debug)]
 enum DispatchState<B>
     where B: OutputBuf
 {
