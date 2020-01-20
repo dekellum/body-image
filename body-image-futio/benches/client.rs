@@ -85,6 +85,39 @@ fn client_10_fs_direct(b: &mut Bencher) {
 }
 
 #[bench]
+fn client_10_fs_direct_64k(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Direct)
+        .set_max_stream_item_len(64 * 1024)
+        .finish();
+    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
+}
+
+#[bench]
+fn client_10_fs_direct_512k(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .set_buffer_size_fs(512 * 1024)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Direct)
+        .set_max_stream_item_len(512 * 1024)
+        .finish();
+    client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
+}
+
+#[bench]
 fn client_10_fs_permit(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
@@ -202,6 +235,41 @@ fn client_16_mmap_direct(b: &mut Bencher) {
                 .finish()
         )
         .set_blocking_policy(BlockingPolicy::Direct)
+        .finish();
+    client_run::<AsyncBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
+}
+
+#[cfg(feature = "mmap")]
+#[bench]
+fn client_16_mmap_direct_64k(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Direct)
+        .set_max_stream_item_len(64 * 1024)
+        .finish();
+    client_run::<AsyncBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
+}
+
+#[cfg(feature = "mmap")]
+#[bench]
+fn client_16_mmap_direct_512k(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .set_buffer_size_fs(512 * 1024)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Direct)
+        .set_max_stream_item_len(512 * 1024)
         .finish();
     client_run::<AsyncBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
 }
