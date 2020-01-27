@@ -87,6 +87,7 @@ impl OutputBuf for UniBodyBuf {
 ///
 /// See also [`DispatchBodyImage`] and [`PermitBodyImage`] which provide
 /// additional coordination of blocking operations.
+#[must_use = "streams do nothing unless polled"]
 #[derive(Debug)]
 pub struct AsyncBodyImage<B, BA=LenientArbiter>
     where B: OutputBuf,
@@ -306,6 +307,7 @@ impl<B, BA> http_body::Body for AsyncBodyImage<B, BA>
 /// `Semaphore` referenced in
 /// [`BlockingPolicy::Permit`](crate::BlockingPolicy::Permit) from
 /// [`FutioTunables::blocking_policy`], which is required.
+#[must_use = "streams do nothing unless polled"]
 #[derive(Debug)]
 pub struct PermitBodyImage<B>
     where B: OutputBuf
@@ -409,6 +411,7 @@ impl<B> http_body::Body for PermitBodyImage<B>
 /// The implementation will panic if a `DispatchPool` is not registered. Note
 /// that each instance will have, at most, 1 pending dispatched read operation
 /// `Future`, that it drives to completion before making new reads.
+#[must_use = "streams do nothing unless polled"]
 #[derive(Debug)]
 pub struct DispatchBodyImage<B>
     where B: OutputBuf

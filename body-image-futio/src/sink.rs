@@ -36,6 +36,7 @@ impl InputBuf for UniBodyBuf {}
 ///
 /// See also [`DispatchBodySink`] and [`PermitBodySink`] which provide
 /// additional coordination of blocking operations.
+#[must_use = "sinks do nothing unless polled"]
 #[derive(Debug)]
 pub struct AsyncBodySink<B, BA=LenientArbiter>
     where B: InputBuf,
@@ -192,6 +193,7 @@ impl<B, BA> Sink<B> for AsyncBodySink<B, BA>
 /// `Semaphore` referenced in
 /// [`BlockingPolicy::Permit`](crate::BlockingPolicy::Permit) from
 /// [`FutioTunables::blocking_policy`], which is required.
+#[must_use = "sinks do nothing unless polled"]
 #[derive(Debug)]
 pub struct PermitBodySink<B>
     where B: InputBuf,
@@ -291,6 +293,7 @@ impl<B> Sink<B> for PermitBodySink<B>
 /// write operation `Future`, that it drives to completion before accepting
 /// further input buffers. Also the underlying `BodySink` is owned for the life
 /// of the instance and is not a cloneable handle.
+#[must_use = "sinks do nothing unless polled"]
 #[derive(Debug)]
 pub struct DispatchBodySink<B>
     where B: InputBuf
