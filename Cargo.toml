@@ -12,8 +12,6 @@ members = [
 "body-image" = { path = "body-image" }
 "body-image-futio" = { path = "body-image-futio" }
 
-"blocking-permit" = { path = "/home/david/src/blocking-permit" }
-
 [profile.release]
 lto = "thin"
 incremental = false

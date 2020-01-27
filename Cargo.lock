@@ -988,10 +988,6 @@ dependencies = [
  "winapi-build 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
-[[patch.unused]]
-name = "blocking-permit"
-version = "1.2.0"
-
 [metadata]
 "checksum adler32 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "5d2e7343e7fc9de883d1b0341e0b13970f764c14101234857d2ddafa1cb1cac2"
 "checksum alloc-no-stdlib 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "5192ec435945d87bc2f70992b4d818154b5feede43c09fb7592146374eac90a6"
