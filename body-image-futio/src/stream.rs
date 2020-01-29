@@ -12,6 +12,7 @@ use std::vec::IntoIter;
 use blocking_permit::{
     blocking_permit_future, SyncBlockingPermitFuture,
     dispatch_rx, Dispatched,
+    YieldStream,
 };
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures_core::stream::Stream;
@@ -227,6 +228,25 @@ impl<B, BA> StreamWrapper for AsyncBodyImage<B, BA>
 {
     fn new(body: BodyImage, tune: FutioTunables) -> Self {
         AsyncBodyImage::new(body, tune)
+    }
+}
+
+/// Extends [`AsyncBodyImage`] by periodically yielding.
+///
+/// Extends [`AsyncBodyImage`] by always yielding from `Stream::poll_next` (by
+/// returning `Poll::Pending`) immediately after it has returned
+/// `Poll::Ready(Some(_))`. This may be effective in some settings since the
+/// underlying `AsyncBodyImage` may use blocking reads (directly, without other
+/// coordination) and some use cases (e.g. `Stream::fold`) do not otherwise
+/// yield.
+pub type YieldBodyImage<B> =
+    YieldStream<AsyncBodyImage<B>, Result<B, io::Error>>;
+
+impl<B> StreamWrapper for YieldBodyImage<B>
+    where B: OutputBuf
+{
+    fn new(body: BodyImage, tune: FutioTunables) -> Self {
+        YieldStream::new(AsyncBodyImage::new(body, tune))
     }
 }
 
