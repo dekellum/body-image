@@ -11,11 +11,32 @@ use olio::mem::{MemAdvice, MemHandle};
 pub struct MemMapBuf {
     mm: MemHandle<Mmap>,
     pos: usize,
+    len: usize,
 }
 
 impl MemMapBuf {
     pub(crate) fn new(mmap: MemHandle<Mmap>) -> MemMapBuf {
-        MemMapBuf { mm: mmap, pos: 0 }
+        let len = mmap.len();
+        MemMapBuf { mm: mmap, pos: 0, len }
+    }
+
+    /// Split into two at a given index, returning the leading segment.
+    ///
+    /// The leading [0, rel) bytes segment is returned, and self will
+    /// subsequently contain [rel, len).
+    ///
+    /// # Panics
+    ///
+    /// Panics if rel is out of bounds or if either segment would be zero
+    /// length.
+    pub(crate) fn split_to(&mut self, rel: usize) -> MemMapBuf {
+        assert!(rel > 0);
+        let abs = self.pos + rel;
+        assert!(abs < self.len);
+
+        let ret = MemMapBuf { mm: self.mm.clone(), pos: self.pos, len: abs };
+        self.pos = abs;
+        ret
     }
 
     /// Advise that we will be sequentially accessing the memory map region,
@@ -31,16 +52,16 @@ impl MemMapBuf {
 
 impl Buf for MemMapBuf {
     fn remaining(&self) -> usize {
-        self.mm.len() - self.pos
+        self.len - self.pos
     }
 
     fn bytes(&self) -> &[u8] {
-        &self.mm[self.pos..]
+        &self.mm[self.pos..self.len]
     }
 
-    fn advance(&mut self, count: usize) {
-        assert!(count <= self.remaining(), "MemMapBuf::advance past end");
-        self.pos += count;
+    fn advance(&mut self, rel: usize) {
+        assert!(rel <= self.remaining(), "MemMapBuf::advance past end");
+        self.pos += rel;
     }
 }
 
@@ -48,12 +69,12 @@ impl Deref for MemMapBuf {
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
-        &self.mm[self.pos..]
+        &self.mm[self.pos..self.len]
     }
 }
 
 impl AsRef<[u8]> for MemMapBuf {
     fn as_ref(&self) -> &[u8] {
-        &self.mm[self.pos..]
+        &self.mm[self.pos..self.len]
     }
 }
