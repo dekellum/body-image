@@ -85,6 +85,21 @@ fn client_20_fs_direct(b: &mut Bencher) {
 }
 
 #[bench]
+fn client_21_fs_yield(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Direct)
+        .finish();
+    client_run::<YieldBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
+}
+
+#[bench]
 fn client_22_fs_permit(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
