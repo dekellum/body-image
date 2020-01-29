@@ -14,6 +14,7 @@ pub struct FutioTunables {
     res_timeout:     Option<Duration>,
     body_timeout:    Option<Duration>,
     blocking_policy: BlockingPolicy,
+    stream_item_size: usize,
 }
 
 /// The policy for blocking operations.
@@ -40,6 +41,7 @@ impl FutioTunables {
             res_timeout:  None,
             body_timeout: Some(Duration::from_secs(60)),
             blocking_policy: BlockingPolicy::Direct,
+            stream_item_size: 512 * 1024,
         }
     }
 
@@ -48,6 +50,12 @@ impl FutioTunables {
     /// Default: As per body-image crate defaults.
     pub fn image(&self) -> &Tunables {
         &self.image
+    }
+
+    /// Return the maximum stream item buffer size in bytes, when using
+    /// `SplitBodyImage`. Default: 512 KiB.
+    pub fn stream_item_size(&self) -> usize {
+        self.stream_item_size
     }
 
     /// Return the maximum initial response timeout interval.
@@ -108,6 +116,14 @@ impl FutioTuner {
     /// Set the base body-image `Tunables`.
     pub fn set_image(&mut self, image: Tunables) -> &mut FutioTuner {
         self.template.image = image;
+        self
+    }
+
+    /// Set the maximum stream item buffer size in bytes, when using
+    /// `SplitBodyImage`.
+    pub fn set_stream_item_size(&mut self, size: usize) -> &mut FutioTuner {
+        assert!(size > 0, "stream_item_size must be greater than zero");
+        self.template.stream_item_size = size;
         self
     }
 
