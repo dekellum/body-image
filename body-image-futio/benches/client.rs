@@ -305,8 +305,8 @@ fn client_run<I, T, E>(
 {
     // Use external server if provided URL in env var, else spawn our own, in
     // process.
-    let (url, shutdown_tx, srv_jh) = if let Ok(uv)
-        = env::var("BENCH_SERVER_URL")
+    let (url, shutdown_tx, srv_jh) =
+        if let Ok(uv) = env::var("BENCH_SERVER_URL")
     {
         (uv, None, None)
     } else {
