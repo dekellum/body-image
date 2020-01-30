@@ -86,8 +86,9 @@ impl OutputBuf for UniBodyBuf {
 /// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
 /// state.
 ///
-/// See also [`DispatchBodyImage`] and [`PermitBodyImage`] which provide
-/// additional coordination of blocking operations.
+/// See also [`YieldBodyImage`], [`SplitBodyImage`], [`DispatchBodyImage`] and
+/// [`PermitBodyImage`] which provide additional coordination of blocking
+/// operations.
 #[must_use = "streams do nothing unless polled"]
 #[derive(Debug)]
 pub struct AsyncBodyImage<B, BA=LenientArbiter>
