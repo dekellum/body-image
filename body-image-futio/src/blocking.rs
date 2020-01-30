@@ -43,7 +43,7 @@ impl BlockingArbiter for LenientArbiter {
     }
 }
 
-/// A stateful arbiter that records the need to block and and grants one-time
+/// A stateful arbiter that records the need to block and grants one-time
 /// allowances.
 #[derive(Debug)]
 pub struct StatefulArbiter {
