@@ -83,8 +83,9 @@ pub use sink::{InputBuf, AsyncBodySink, DispatchBodySink, PermitBodySink};
 
 mod stream;
 pub use stream::{
-    AsyncBodyImage, DispatchBodyImage,
-    OutputBuf, PermitBodyImage, YieldBodyImage,
+    AsyncBodyImage, OutputBuf,
+    DispatchBodyImage, PermitBodyImage,
+    SplitBodyImage, YieldBodyImage,
 };
 
 #[cfg(feature = "mmap")] mod mem_map_buf;
