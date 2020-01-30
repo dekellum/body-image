@@ -12,6 +12,8 @@ members = [
 "body-image" = { path = "body-image" }
 "body-image-futio" = { path = "body-image-futio" }
 
+"blocking-permit" = { git = "https://github.com/dekellum/blocking-permit", branch = "yield-stream" }
+
 [profile.release]
 lto = "thin"
 incremental = false

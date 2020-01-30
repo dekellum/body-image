@@ -74,10 +74,10 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
 name = "blocking-permit"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d56822b0f0f74431be777a0d0123edae6f20037fa92ce574f8f0fc78958f2ed"
+version = "1.2.0"
+source = "git+https://github.com/dekellum/blocking-permit?branch=yield-stream#ea2e740046b1b8b538457859edbc67656b3d599d"
 dependencies = [
+ "bytes",
  "futures-core",
  "log",
  "num_cpus",
@@ -961,6 +961,7 @@ dependencies = [
  "memchr",
  "mio",
  "num_cpus",
+ "parking_lot",
  "pin-project-lite",
  "slab",
 ]
