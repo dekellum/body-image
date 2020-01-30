@@ -123,6 +123,7 @@ dependencies = [
  "rand",
  "tao-log",
  "tokio",
+ "unicycle",
 ]
 
 [[package]]
@@ -1022,6 +1023,15 @@ name = "unicode-xid"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "826e7639553986605ec5979c7dd957c7895e93eabed50ab2ffa7f6128a75097c"
+
+[[package]]
+name = "unicycle"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63a728c53248f7e70a3fe8e0d85f4e9701f5c53dce0af481411b2e182442328e"
+dependencies = [
+ "futures-core",
+]
 
 [[package]]
 name = "vcpkg"

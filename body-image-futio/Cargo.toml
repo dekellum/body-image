@@ -53,6 +53,7 @@ fern        = { version=">=0.5.5, <0.6" }
 rand        = { version=">=0.7.0, <0.8" }
 tokio       = { version=">=0.2.6", features=["rt-threaded", "stream"] }
 lazy_static = { version=">= 1.3.0, <1.5" }
+unicycle    = { version=">=0.3.3, <0.4" }
 
 [[example]]
 name = "server"

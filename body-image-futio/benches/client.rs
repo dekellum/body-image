@@ -18,7 +18,8 @@ use futures_core::stream::Stream;
 use futures_util::future;
 use futures_util::future::FutureExt;
 use futures_util::stream::StreamExt;
-use futures_util::stream::FuturesUnordered;
+
+use unicycle::Unordered;
 
 use http::Response;
 use hyper::client::{Client, HttpConnector};
@@ -324,7 +325,8 @@ fn client_run<I, T, E>(
         let connector = HttpConnector::new();
         let client = Client::builder().build(connector);
         let job = async move {
-            let futures: FuturesUnordered<_> = (0..BATCH).map(|_| {
+            let mut futures = Unordered::new();
+            for _ in 0..BATCH {
                 let tune2 = tune.clone();
                 let op = op;
                 // Empty request body, type doesn't matter.
@@ -349,8 +351,8 @@ fn client_run<I, T, E>(
                         }
                         summarize_stream(I::new(body, tune2))
                     });
-                spawn(req)
-            }).collect();
+                futures.push(spawn(req));
+            }
             let c = futures.collect::<Vec<_>>() .await;
             assert_eq!(BATCH, c.iter().filter(|r| r.is_ok()).count());
         };
