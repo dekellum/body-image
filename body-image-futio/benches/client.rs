@@ -59,6 +59,16 @@ fn client_02_ram_gather(b: &mut Bencher) {
     client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::Gather, b);
 }
 
+#[bench]
+fn client_03_ram_gather_yield(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
+        .set_stream_item_size(2 * 1024 * 1024) // huge page size
+        .finish();
+    client_run::<SplitBodyImage<Bytes>, _, _>(rt, tune, ClientOp::Gather, b);
+}
+
 #[cfg(feature = "tangential")]
 #[bench]
 fn client_03_ram_uni(b: &mut Bencher) {
@@ -220,6 +230,23 @@ fn client_35_mmap_direct(b: &mut Bencher) {
         .set_blocking_policy(BlockingPolicy::Direct)
         .finish();
     client_run::<AsyncBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
+}
+
+#[cfg(feature = "mmap")]
+#[bench]
+fn client_36_mmap_yield(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Direct)
+        .set_stream_item_size(2 * 1024 * 1024) // huge page size
+        .finish();
+    client_run::<SplitBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
 }
 
 #[cfg(feature = "mmap")]
