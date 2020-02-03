@@ -1,4 +1,11 @@
 ## 2.1.0 (TBD)
+* Add `blocking-permit::Splittable` implementation for `UniBodyBuf`.
+
+* Add `SplitBodyImage` and `YieldBodyImage` wrapper types.
+
+* Upgrade to blocking-permit 1.2.0 for cleaver and yield-stream features.
+
+* Replace fern logger (dev dependency) with piccolog.
 
 ## 2.0.2 (2020-1-16)
 * Correct and clarify why there is, actually, no practical risk of out-of-order
