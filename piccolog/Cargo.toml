@@ -14,4 +14,4 @@ build         = "build.rs"
 travis-ci = { repository="dekellum/body-image" }
 
 [dependencies]
-log        = { version=">=0.4.4, <0.4.9", features = [ "std" ] }
+log        = { version=">=0.4.4, <0.4.9", features = ["std"] }
