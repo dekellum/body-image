@@ -51,7 +51,7 @@ fn client_01_ram(b: &mut Bencher) {
 }
 
 #[bench]
-fn client_01_ram_gather(b: &mut Bencher) {
+fn client_02_ram_gather(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
@@ -59,9 +59,19 @@ fn client_01_ram_gather(b: &mut Bencher) {
     client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::Gather, b);
 }
 
+#[bench]
+fn client_03_ram_gather_yield(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
+        .set_stream_item_size(2 * 1024 * 1024) // huge page size
+        .finish();
+    client_run::<SplitBodyImage<Bytes>, _, _>(rt, tune, ClientOp::Gather, b);
+}
+
 #[cfg(feature = "tangential")]
 #[bench]
-fn client_02_ram_uni(b: &mut Bencher) {
+fn client_03_ram_uni(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
@@ -70,7 +80,7 @@ fn client_02_ram_uni(b: &mut Bencher) {
 }
 
 #[bench]
-fn client_10_fs_direct(b: &mut Bencher) {
+fn client_20_fs_direct(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
@@ -85,7 +95,22 @@ fn client_10_fs_direct(b: &mut Bencher) {
 }
 
 #[bench]
-fn client_10_fs_permit(b: &mut Bencher) {
+fn client_21_fs_yield(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Direct)
+        .finish();
+    client_run::<YieldBodyImage<Bytes>, _, _>(rt, tune, ClientOp::AsIs, b);
+}
+
+#[bench]
+fn client_22_fs_permit(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
@@ -101,7 +126,7 @@ fn client_10_fs_permit(b: &mut Bencher) {
 
 #[cfg(feature = "tangential")]
 #[bench]
-fn client_11_fs_dispatch1(b: &mut Bencher) {
+fn client_23_fs_dispatch1(b: &mut Bencher) {
     let pool = DispatchPool::builder()
         .pool_size(1)
         .queue_length(EXTRA_THREADS)
@@ -120,7 +145,7 @@ fn client_11_fs_dispatch1(b: &mut Bencher) {
 }
 
 #[bench]
-fn client_12_fs_dispatch(b: &mut Bencher) {
+fn client_24_fs_dispatch(b: &mut Bencher) {
     let pool = DispatchPool::builder()
         .pool_size(EXTRA_THREADS)
         .queue_length(EXTRA_THREADS)
@@ -140,7 +165,7 @@ fn client_12_fs_dispatch(b: &mut Bencher) {
 
 #[cfg(feature = "tangential")]
 #[bench]
-fn client_12_fs_dispatch3(b: &mut Bencher) {
+fn client_25_fs_dispatch3(b: &mut Bencher) {
     let pool = DispatchPool::builder()
         .pool_size(3)
         .queue_length(EXTRA_THREADS)
@@ -160,7 +185,7 @@ fn client_12_fs_dispatch3(b: &mut Bencher) {
 
 #[cfg(feature = "mmap")]
 #[bench]
-fn client_15_mmap_direct_copy(b: &mut Bencher) {
+fn client_30_mmap_direct_copy(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
@@ -174,9 +199,10 @@ fn client_15_mmap_direct_copy(b: &mut Bencher) {
     client_run::<AsyncBodyImage<Bytes>, _, _>(rt, tune, ClientOp::Mmap, b);
 }
 
+#[cfg(feature = "tangential")]
 #[cfg(feature = "mmap")]
 #[bench]
-fn client_15_mmap_permit_copy(b: &mut Bencher) {
+fn client_31_mmap_permit_copy(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
@@ -192,7 +218,7 @@ fn client_15_mmap_permit_copy(b: &mut Bencher) {
 
 #[cfg(feature = "mmap")]
 #[bench]
-fn client_16_mmap_direct(b: &mut Bencher) {
+fn client_35_mmap_direct(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
@@ -208,7 +234,24 @@ fn client_16_mmap_direct(b: &mut Bencher) {
 
 #[cfg(feature = "mmap")]
 #[bench]
-fn client_17_mmap_permit(b: &mut Bencher) {
+fn client_36_mmap_yield(b: &mut Bencher) {
+    let rt = th_direct_runtime();
+    let tune = FutioTuner::new()
+        .set_image(
+            Tuner::new()
+                .set_temp_dir(test_path().unwrap())
+                .set_max_body_ram(0)
+                .finish()
+        )
+        .set_blocking_policy(BlockingPolicy::Direct)
+        .set_stream_item_size(2 * 1024 * 1024) // huge page size
+        .finish();
+    client_run::<SplitBodyImage<UniBodyBuf>, _, _>(rt, tune, ClientOp::Mmap, b);
+}
+
+#[cfg(feature = "mmap")]
+#[bench]
+fn client_37_mmap_permit(b: &mut Bencher) {
     let rt = th_direct_runtime();
     let tune = FutioTuner::new()
         .set_image(
@@ -224,7 +267,7 @@ fn client_17_mmap_permit(b: &mut Bencher) {
 
 #[cfg(feature = "mmap")]
 #[bench]
-fn client_18_mmap_dispatch(b: &mut Bencher) {
+fn client_38_mmap_dispatch(b: &mut Bencher) {
     let pool = DispatchPool::builder()
         .pool_size(EXTRA_THREADS)
         .queue_length(EXTRA_THREADS)
@@ -262,8 +305,8 @@ fn client_run<I, T, E>(
 {
     // Use external server if provided URL in env var, else spawn our own, in
     // process.
-    let (url, shutdown_tx, srv_jh) = if let Ok(uv)
-        = env::var("BENCH_SERVER_URL")
+    let (url, shutdown_tx, srv_jh) =
+        if let Ok(uv) = env::var("BENCH_SERVER_URL")
     {
         (uv, None, None)
     } else {

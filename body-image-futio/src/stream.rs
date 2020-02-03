@@ -12,6 +12,7 @@ use std::vec::IntoIter;
 use blocking_permit::{
     blocking_permit_future, SyncBlockingPermitFuture,
     dispatch_rx, Dispatched,
+    Cleaver, Splittable, YieldStream,
 };
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures_core::stream::Stream;
@@ -85,8 +86,9 @@ impl OutputBuf for UniBodyBuf {
 /// `Tunables::buffer_size_fs` is used for reading the body when in `FsRead`
 /// state.
 ///
-/// See also [`DispatchBodyImage`] and [`PermitBodyImage`] which provide
-/// additional coordination of blocking operations.
+/// See also [`YieldBodyImage`], [`SplitBodyImage`], [`DispatchBodyImage`] and
+/// [`PermitBodyImage`] which provide additional coordination of blocking
+/// operations.
 #[must_use = "streams do nothing unless polled"]
 #[derive(Debug)]
 pub struct AsyncBodyImage<B, BA=LenientArbiter>
@@ -227,6 +229,47 @@ impl<B, BA> StreamWrapper for AsyncBodyImage<B, BA>
 {
     fn new(body: BodyImage, tune: FutioTunables) -> Self {
         AsyncBodyImage::new(body, tune)
+    }
+}
+
+/// Extends [`AsyncBodyImage`] by splitting buffers and yielding.
+///
+/// Extends [`AsyncBodyImage`] by splitting stream item buffers to a maximum
+/// [`FutioTunables::stream_item_size`] *and* yielding after each each
+/// item. This may be effective when the underlying `AsyncBodyImage` contains a
+/// vary large contiguous memory region, e.g. after it was gathered or memory
+/// mapped, which could cause a large delay when subsequently processed.
+pub type SplitBodyImage<B> =
+    YieldStream<Cleaver<B, io::Error, AsyncBodyImage<B>>,
+                Result<B, io::Error>>;
+
+impl<B> StreamWrapper for SplitBodyImage<B>
+    where B: OutputBuf + Splittable
+{
+    fn new(body: BodyImage, tune: FutioTunables) -> Self {
+        let max = tune.stream_item_size();
+        YieldStream::new(
+            Cleaver::new(AsyncBodyImage::new(body, tune), max)
+        )
+    }
+}
+
+/// Extends [`AsyncBodyImage`] by periodically yielding.
+///
+/// Extends [`AsyncBodyImage`] by always yielding from `Stream::poll_next` (by
+/// returning `Poll::Pending`) immediately after it has returned
+/// `Poll::Ready(Some(_))`. This may be effective in some settings since the
+/// underlying `AsyncBodyImage` may use blocking reads (directly, without other
+/// coordination) and some use cases (e.g. `Stream::fold`) do not otherwise
+/// yield.
+pub type YieldBodyImage<B> =
+    YieldStream<AsyncBodyImage<B>, Result<B, io::Error>>;
+
+impl<B> StreamWrapper for YieldBodyImage<B>
+    where B: OutputBuf
+{
+    fn new(body: BodyImage, tune: FutioTunables) -> Self {
+        YieldStream::new(AsyncBodyImage::new(body, tune))
     }
 }
 

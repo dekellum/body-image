@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use bytes::{Buf, Bytes};
+use blocking_permit::Splittable;
 
 #[cfg(feature = "mmap")]
 use {
@@ -67,6 +68,25 @@ impl AsRef<[u8]> for UniBodyBuf {
     fn as_ref(&self) -> &[u8] {
         self.bytes()
     }
+}
+
+impl Splittable for UniBodyBuf {
+    fn split_if(&mut self, max: usize) -> Option<Self> {
+        if self.len() > max {
+            match self.buf {
+                BufState::Bytes(ref mut b) => {
+                    Some(UniBodyBuf { buf: BufState::Bytes(b.split_to(max)) })
+                }
+                #[cfg(feature = "mmap")]
+                BufState::MemMap(ref mut mb) => {
+                    Some(UniBodyBuf { buf: BufState::MemMap(mb.split_to(max)) })
+                }
+            }
+        } else {
+            None
+        }
+    }
+
 }
 
 impl From<Bytes> for UniBodyBuf {
