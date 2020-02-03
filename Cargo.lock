@@ -41,13 +41,13 @@ dependencies = [
  "brotli",
  "brotli-decompressor",
  "bytes",
- "fern",
  "flate2",
  "http",
  "httparse",
  "memmap",
  "mime",
  "olio",
+ "piccolog",
  "tao-log",
  "tempfile",
 ]
@@ -60,10 +60,10 @@ dependencies = [
  "body-image",
  "body-image-futio",
  "clap",
- "fern",
  "http",
  "hyper",
  "log",
+ "piccolog",
 ]
 
 [[package]]
@@ -112,7 +112,6 @@ dependencies = [
  "brotli",
  "brotli-decompressor",
  "bytes",
- "fern",
  "flate2",
  "futures-core",
  "futures-sink",
@@ -126,6 +125,7 @@ dependencies = [
  "lazy_static",
  "memmap",
  "olio",
+ "piccolog",
  "rand",
  "tao-log",
  "tokio",
@@ -223,15 +223,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba125de2af0df55319f41944744ad91c71113bf74a4646efff39afe1f6842db1"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "fern"
-version = "0.5.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29d26fa0f4d433d1956746e66ec10d6bf4d6c8b93cd39965cceea7f7cc78c7dd"
-dependencies = [
- "log",
 ]
 
 [[package]]
@@ -702,6 +693,13 @@ name = "percent-encoding"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
+
+[[package]]
+name = "piccolog"
+version = "1.0.0"
+dependencies = [
+ "log",
+]
 
 [[package]]
 name = "pin-project"

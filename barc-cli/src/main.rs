@@ -26,9 +26,8 @@ use barc::{
 type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
 #[cfg(feature = "futio")] mod record;
-mod logger;
 
-use logger::setup_logger;
+use piccolog::setup_logger;
 
 // Internal errors for the CLI
 #[derive(Debug)]

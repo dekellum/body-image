@@ -1160,9 +1160,6 @@ fn slice_body(rp: &mut ReadPos, len: u64) -> Result<BodyImage, BarcError> {
 }
 
 #[cfg(test)]
-mod logger;
-
-#[cfg(test)]
 mod barc_tests {
     use std::convert::TryInto;
 
@@ -1172,7 +1169,7 @@ mod barc_tests {
     use http::header::{AGE, REFERER, VIA};
     use super::*;
     use body_image::Tuner;
-    use crate::logger::test_logger;
+    use piccolog::test_logger;
     use tao_log::debugv;
 
     fn barc_test_file(name: &str) -> Result<PathBuf, Flaw> {

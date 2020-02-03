@@ -4,6 +4,7 @@ members = [
     "barc",
     "body-image-futio",
     "barc-cli",
+    "piccolog",
 ]
 
 [patch.crates-io]
@@ -11,6 +12,8 @@ members = [
 "barc-cli" = { path = "barc-cli" }
 "body-image" = { path = "body-image" }
 "body-image-futio" = { path = "body-image-futio" }
+"piccolog" = { path = "piccolog" }
+
 
 [profile.release]
 lto = "thin"
