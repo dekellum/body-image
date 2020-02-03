@@ -1,0 +1,17 @@
+[package]
+name          = "piccolog"
+version       = "1.0.0"
+edition       = "2018"
+authors       = ["David Kellum <dek-oss@gravitext.com>"]
+license       = "MIT/Apache-2.0"
+description   = "A custom logger for body-image and related crates"
+documentation = "https://docs.rs/piccolog"
+repository    = "https://github.com/dekellum/piccolog"
+readme        = "README.md"
+build         = "build.rs"
+
+[badges]
+travis-ci = { repository="dekellum/body-image" }
+
+[dependencies]
+log        = { version=">=0.4.4, <0.4.9", features = ["std"] }

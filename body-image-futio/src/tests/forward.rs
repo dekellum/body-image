@@ -17,7 +17,7 @@ use crate::{
     FutioError, FutioTuner,
     SinkWrapper, StreamWrapper,
 };
-use crate::logger::test_logger;
+use piccolog::test_logger;
 
 #[cfg(feature = "mmap")] use crate::UniBodyBuf;
 

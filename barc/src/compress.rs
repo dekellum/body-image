@@ -499,7 +499,7 @@ impl Read for DecodeWrapper {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logger::test_logger;
+    use piccolog::test_logger;
 
     #[test]
     fn test_compressible_types() {

@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn ignores_additional_compressions() {
-        assert!(crate::logger::test_logger());
+        assert!(piccolog::test_logger());
 
         let mut hmap = http::HeaderMap::new();
         hmap.insert(http::header::TRANSFER_ENCODING,
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn decompress_empty_fails() {
-        assert!(crate::logger::test_logger());
+        assert!(piccolog::test_logger());
 
         let tune = Tuner::new().finish();
         let body = BodyImage::empty();
@@ -252,7 +252,7 @@ mod tests {
     #[cfg(feature = "brotli")]
     #[test]
     fn decompress_empty_fails_brotli() {
-        assert!(crate::logger::test_logger());
+        assert!(piccolog::test_logger());
 
         let tune = Tuner::new().finish();
         let body = BodyImage::empty();

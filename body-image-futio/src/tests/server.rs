@@ -34,7 +34,7 @@ use crate::{
     UniBodyBuf
 };
 
-use crate::logger::test_logger;
+use piccolog::test_logger;
 
 lazy_static! {
     static ref BLOCKING_TEST_SET: Semaphore = Semaphore::default_new(2);

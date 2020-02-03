@@ -7,7 +7,7 @@ use crate::{
     fetch, FutioTunables,
     RequestRecord, RequestRecorder, user_agent
 };
-use crate::logger::test_logger;
+use piccolog::test_logger;
 
 fn get_request(url: &str)
     -> Result<RequestRecord<hyper::Body>, http::Error>

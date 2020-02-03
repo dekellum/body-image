@@ -307,9 +307,6 @@ impl InDialog {
 }
 
 #[cfg(test)]
-mod logger;
-
-#[cfg(test)]
 mod tests {
     mod forward;
 
@@ -322,7 +319,7 @@ mod tests {
 
     use tao_log::{debug, debugv};
     use super::{FutioError, Flaw};
-    use crate::logger::test_logger;
+    use piccolog::test_logger;
     use std::mem::size_of;
 
     fn is_flaw(f: Flaw) -> bool {
