@@ -1,7 +1,5 @@
 //! Implementaiton module for finding encodings and decompression
 
-#[cfg(feature = "brotli")] use brotli;
-
 use flate2::read::{DeflateDecoder, GzDecoder};
 use hyperx::header::{
     ContentEncoding, Encoding as HyEncoding,
