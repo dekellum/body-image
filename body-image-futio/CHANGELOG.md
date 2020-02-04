@@ -1,4 +1,4 @@
-## 2.1.0 (TBD)
+## 2.1.0 (2020-2-4)
 * Add `blocking-permit::Splittable` implementation for `UniBodyBuf`.
 
 * Add `SplitBodyImage` and `YieldBodyImage` wrapper types.

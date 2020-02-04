@@ -1,4 +1,4 @@
-## 2.1.0 (TBD)
+## 2.1.0 (2020-2-4)
 * Update to body-image-futio 2.1.0.
 
 * Replace fern logger with piccolog.
