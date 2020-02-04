@@ -14,7 +14,10 @@ struct Piccolog {
 }
 
 impl Piccolog {
+    // Return true if log record (based on metadata) should be output.
     fn filter(&self, meta: &log::Metadata<'_>) -> bool {
+        // If filtering, not from a known "local" target and Debug or Trace
+        // level, then return false (disabled).
         !( self.filter &&
            !meta.target().starts_with("body_image") &&
            !meta.target().starts_with("barc") &&
@@ -55,16 +58,18 @@ impl log::Log for Piccolog {
     fn enabled(&self, meta: &log::Metadata<'_>) -> bool {
         self.filter(meta)
     }
+
     fn log(&self, record: &log::Record<'_>) {
         if self.filter(record.metadata()) {
             let tn = self.thread_name();
-            let _ = writeln!(
+            writeln!(
                 std::io::stderr(),
                 "{:5} {} {}: {}",
                 record.level(), record.target(), tn, record.args()
-            );
+            ).ok();
         }
     }
+
     fn flush(&self) {
         std::io::stderr().flush().ok();
     }
@@ -82,7 +87,7 @@ pub fn test_logger() -> bool {
             0
         };
         if level > 0 {
-            setup_logger(level-1).expect("setup logger");
+            setup_logger(level - 1).expect("setup logger");
         }
     });
     true
@@ -100,12 +105,13 @@ pub fn setup_logger(level: u32) -> Result<(), Flaw> {
         log::set_max_level(log::LevelFilter::Trace)
     }
 
-    let filter = level < 2;
+    let filter = level == 1;
     log::set_boxed_logger(Box::new(Piccolog { filter }))?;
     Ok(())
 }
 
-#[cfg(test)]mod tests {
+#[cfg(test)]
+mod tests {
     use super::test_logger;
     use log::debug;
 
