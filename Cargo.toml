@@ -14,9 +14,6 @@ members = [
 "body-image-futio" = { path = "body-image-futio" }
 "piccolog" = { path = "piccolog" }
 
-
-"blocking-permit" = { git = "https://github.com/dekellum/blocking-permit", branch = "dev" }
-
 [profile.release]
 lto = "thin"
 incremental = false

@@ -75,7 +75,8 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 [[package]]
 name = "blocking-permit"
 version = "1.2.0"
-source = "git+https://github.com/dekellum/blocking-permit?branch=dev#beeaeec9b07125fe5956b05404d271185fcc6048"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a19a5c8c80be2c81642755ba81d0d6da6f0d72c7a024d4b24364fe68ce17bf5"
 dependencies = [
  "bytes",
  "futures-core",
