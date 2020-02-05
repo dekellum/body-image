@@ -1,4 +1,10 @@
-## 2.1.0 (2020-2-4)
+## 2.1.1 (2020-2-5)
+* Remove selection of tokio's _parking_lot_ feature erroneously introduced in
+  2.1.0. This conflicts with our tokio 0.2.6 minimum (where that feature
+  wasn't available). More generally, we should allow applications to opt-in to
+  such features, rather than mandate what isn't strictly required here.
+
+## 2.1.0 (2020-2-4 _yanked, with 2.1.1 as replacement_)
 * Add `blocking-permit::Splittable` implementation for `UniBodyBuf`.
 
 * Add `SplitBodyImage` and `YieldBodyImage` wrapper types.
