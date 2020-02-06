@@ -69,9 +69,10 @@ use {
 /// The crate version string.
 pub static VERSION: &str               = env!("CARGO_PKG_VERSION");
 
-/// Error enumeration for `BodyImage` and `BodySink` types.  This may be
-/// extended in the future so exhaustive matching is gently discouraged with
-/// an unused variant.
+/// Error enumeration for `BodyImage` and `BodySink` types.
+///
+/// This may be extended in the future so exhaustive matching is gently
+/// discouraged with an unused variant.
 #[derive(Debug)]
 pub enum BodyError {
     /// Error for when `Tunables::max_body` length is exceeded.
@@ -158,9 +159,9 @@ enum ImageState {
 }
 
 /// A logical buffer of bytes, which may or may not be RAM resident, in the
-/// process of being written. This is the write-side corollary to
-/// [`BodyImage`](struct.BodyImage.html).
+/// process of being written.
 ///
+/// This is the write-side corollary to [`BodyImage`](struct.BodyImage.html).
 /// A `BodySink` is always in one of the following states, as a buffering
 /// strategy:
 ///
@@ -866,8 +867,9 @@ pub struct Epilog {
     pub res_decoded:  Vec<Encoding>,
 }
 
-/// A set of HTTP Transfer- or Content-Encoding values. The
-/// `Display`/`ToString` representation as per the HTTP header value.
+/// A set of HTTP Transfer- or Content-Encoding values.
+///
+/// The `Display`/`ToString` representation is as per the HTTP header value.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum Encoding {
     /// `Chunked` (transfer encoding) is typically applied or removed by HTTP
