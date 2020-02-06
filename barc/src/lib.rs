@@ -46,8 +46,9 @@ use body_image::{
     Epilog, Prolog, Recorded, RequestRecorded, Tunables
 };
 
-/// Conveniently compact type alias for dyn Trait `std::error::Error`. It is
-/// possible to query and downcast the type via methods of
+/// Conveniently compact type alias for dyn Trait `std::error::Error`.
+///
+/// It is possible to query and downcast the type via methods of
 /// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
@@ -65,11 +66,12 @@ pub use compress::BrotliCompressStrategy;
 use std::convert::TryFrom;
 
 /// Fixed record head size including CRLF terminator:
-/// 54 Bytes
+/// 54 bytes
 pub const V2_HEAD_SIZE: usize = 54;
 
 /// Maximum total record length, excluding the record head:
 /// 2<sup>48</sup> (256 TiB) - 1.
+///
 /// Note: this exceeds the file or partition size limits of many
 /// file-systems.
 pub const V2_MAX_RECORD: u64 = 0xfff_fff_fff_fff;
@@ -142,9 +144,10 @@ pub struct BarcReader {
     file: ReadPos,
 }
 
-/// Error enumeration for all barc module errors.  This may be extended in the
-/// future, so exhaustive matching is gently discouraged with an unused
-/// variant.
+/// Error enumeration for all barc module errors.
+///
+/// This may be extended in the future, so exhaustive matching is gently
+/// discouraged with an unused variant.
 #[derive(Debug)]
 pub enum BarcError {
     /// Error with `BodySink` or `BodyImage`.
