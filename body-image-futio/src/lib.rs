@@ -61,8 +61,9 @@ use body_image::{
 #[cfg(feature = "hyper-http")]
 use body_image::{Epilog, Dialog};
 
-/// Conveniently compact type alias for dyn Trait `std::error::Error`. It is
-/// possible to query and downcast the type via methods of
+/// Conveniently compact type alias for dyn Trait `std::error::Error`.
+///
+/// It is possible to query and downcast the type via methods of
 /// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 

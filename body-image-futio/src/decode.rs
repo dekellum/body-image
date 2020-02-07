@@ -12,8 +12,10 @@ use body_image::{BodyImage, Dialog, Encoding, Recorded, Tunables};
 use crate::FutioError;
 
 /// Return a list of relevant encodings from the headers Transfer-Encoding and
-/// Content-Encoding.  The `Chunked` encoding will be the first value if
-/// found. At most one compression encoding will be the last value if found.
+/// Content-Encoding.
+///
+/// The `Chunked` encoding will be the first value if found. At most one
+/// compression encoding will be the last value if found.
 pub fn find_encodings(headers: &http::HeaderMap) -> Vec<Encoding> {
     let mut res = Vec::with_capacity(2);
 
@@ -81,9 +83,10 @@ pub fn find_chunked(headers: &http::HeaderMap) -> bool {
 }
 
 /// Decode the response body of the provided `Dialog` compressed with any
-/// supported `Encoding`, updated the dialog accordingly.  The provided
-/// `Tunables` controls decompression buffer sizes and if the final
-/// `BodyImage` will be in `Ram` or `FsRead`. Returns `Ok(true)` if the
+/// supported `Encoding`, updated the dialog accordingly.
+///
+/// The provided `Tunables` controls decompression buffer sizes and if the
+/// final `BodyImage` will be in `Ram` or `FsRead`. Returns `Ok(true)` if the
 /// response body was decoded, or `Ok(false)` if no encoding was found, or an
 /// error on failure, including from an unsupported `Encoding`.
 pub fn decode_res_body(dialog: &mut Dialog, tune: &Tunables)

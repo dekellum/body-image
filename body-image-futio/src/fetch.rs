@@ -16,8 +16,9 @@ use crate::{
     SinkWrapper,
 };
 
-/// Run an HTTP request to completion, returning the full `Dialog`. This
-/// function constructs a tokio `Runtime` (ThreadPool),
+/// Run an HTTP request to completion, returning the full `Dialog`.
+///
+/// This function constructs a tokio `Runtime` (ThreadPool),
 /// `hyper_tls::HttpsConnector`, and `hyper::Client` in a simplistic form
 /// internally, waiting with timeout, and dropping these on completion.
 pub fn fetch<B>(rr: RequestRecord<B>, tune: FutioTunables)
@@ -44,9 +45,11 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: FutioTunables)
 }
 
 /// Given a suitable `hyper::Client` and `RequestRecord`, return a
-/// `Future` with `Dialog` output.  The provided `FutioTunables`
-/// governs timeout intervals (initial response and complete body), if the
-/// response `BodyImage` will be in `Ram` or `FsRead`, and `BlockingPolicy`.
+/// `Future` with `Dialog` output.
+///
+/// The provided `FutioTunables` governs timeout intervals (initial response
+/// and complete body), if the response `BodyImage` will be in `Ram` or
+/// `FsRead`, and `BlockingPolicy`.
 pub fn request_dialog<CN, B>(
     client: &hyper::Client<CN, B>,
     rr: RequestRecord<B>,
