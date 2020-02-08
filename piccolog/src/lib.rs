@@ -14,17 +14,6 @@ struct Piccolog {
 }
 
 impl Piccolog {
-    // Return true if log record (based on metadata) should be output.
-    fn filter(&self, meta: &log::Metadata<'_>) -> bool {
-        // If filtering, not from a known "local" target and Debug or Trace
-        // level, then return false (disabled).
-        !( self.filter &&
-           !meta.target().starts_with("body_image") &&
-           !meta.target().starts_with("barc") &&
-           !meta.target().starts_with("blocking_permit") &&
-           meta.level() > log::Level::Info )
-    }
-
     fn thread_name(&self) -> Rc<String> {
         thread_local! {
             pub static TNAME: RefCell<Option<Rc<String>>> = RefCell::new(None);
@@ -56,11 +45,17 @@ impl Piccolog {
 
 impl log::Log for Piccolog {
     fn enabled(&self, meta: &log::Metadata<'_>) -> bool {
-        self.filter(meta)
+        // If filtering, not from a known "local" target and Debug or Trace
+        // level, then return false (disabled).
+        !( self.filter &&
+           !meta.target().starts_with("body_image") &&
+           !meta.target().starts_with("barc") &&
+           !meta.target().starts_with("blocking_permit") &&
+           meta.level() > log::Level::Info )
     }
 
     fn log(&self, record: &log::Record<'_>) {
-        if self.filter(record.metadata()) {
+        if self.enabled(record.metadata()) {
             let tn = self.thread_name();
             writeln!(
                 std::io::stderr(),
