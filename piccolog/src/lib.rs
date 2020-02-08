@@ -7,7 +7,8 @@ use std::rc::Rc;
 use std::sync::Once;
 use std::thread_local;
 
-type Flaw = Box<dyn StdError + Send + Sync + 'static>;
+/// Conveniently compact type alias for dyn Trait `std::error::Error`.
+pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
 struct Piccolog {
     filter: bool
@@ -72,6 +73,8 @@ impl log::Log for Piccolog {
 
 /// Setup logger for a test run, if not already setup, based on TEST_LOG
 /// environment variable.
+///
+/// Always returns true.
 pub fn test_logger() -> bool {
     static TEST_LOG_INIT: Once = Once::new();
 
