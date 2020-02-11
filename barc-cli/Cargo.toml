@@ -5,7 +5,6 @@ edition       = "2018"
 authors       = ["David Kellum <dek-oss@gravitext.com>"]
 license       = "MIT/Apache-2.0"
 description   = "Basic Archive for HTTP dialog serialization, command line."
-documentation = "https://docs.rs/body-image"
 repository    = "https://github.com/dekellum/body-image"
 readme        = "README.md"
 keywords      = ["http", "compression", "serialization"]
