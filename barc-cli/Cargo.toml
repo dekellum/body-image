@@ -13,9 +13,6 @@ categories    = ["web-programming", "command-line-utilities"]
 exclude       = ["barc.stash/*"]
 build         = "build.rs"
 
-[badges]
-travis-ci = { repository="dekellum/body-image" }
-
 [dependencies]
 barc       = { version=">=2.0.0, <2.2", default-features=false }
 body-image = { version=">=2.0.0, <2.2", default-features=false }

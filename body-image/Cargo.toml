@@ -12,9 +12,6 @@ keywords      = ["buffer", "http"]
 categories    = ["web-programming"]
 build         = "build.rs"
 
-[badges]
-travis-ci = { repository="dekellum/body-image" }
-
 [dependencies]
 bytes      = { version=">=0.5.2, <0.6" }
 http       = { version=">=0.2.0, <0.3" }
