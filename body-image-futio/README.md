@@ -6,8 +6,8 @@
 [![Travis CI Build](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
 [![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
 
-The _body-image-futio_ crate integrates the _body-image_ crate with _futures_,
-_http_, _hyper_, and _tokio_ crates for both client and server use.
+The _body-image-futio_ crate integrates _body-image_ with _futures_,
+_http_, _hyper_, and _tokio_ for both client and server use.
 
 ## Minimum supported rust version
 

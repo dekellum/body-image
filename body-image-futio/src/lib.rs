@@ -1,7 +1,7 @@
 //! Asynchronous HTTP integration for _body-image_.
 //!
-//! The _body-image-futio_ crate integrates the _body-image_ crate with
-//! _futures_, _http_, _hyper_, and _tokio_ crates for both client and server
+//! The _body-image-futio_ crate integrates _body-image_ with
+//! _futures_, _http_, _hyper_, and _tokio_ for both client and server
 //! use.
 //!
 //! * Trait [`RequestRecorder`](trait.RequestRecorder.html) extends
