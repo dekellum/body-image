@@ -10,8 +10,5 @@ repository    = "https://github.com/dekellum/body-image"
 readme        = "README.md"
 build         = "build.rs"
 
-[badges]
-travis-ci = { repository="dekellum/body-image" }
-
 [dependencies]
 log        = { version=">=0.4.4, <0.4.9", features = ["std"] }
