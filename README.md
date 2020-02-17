@@ -29,7 +29,7 @@ individual crate directories for more details.
 
 [body-image]: https://docs.rs/crate/body-image
 [barc]: https://docs.rs/crate/barc
-[barc-cli]: https://docs.rs/crate/barc-cli
+[barc-cli]: https://crates.io/crates/barc-cli
 [body-image-futio]: https://docs.rs/crate/body-image-futio
 
 ## Rationale
