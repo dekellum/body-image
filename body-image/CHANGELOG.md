@@ -3,7 +3,7 @@
   method, a better name and with copy-avoiding additional generic bounds.
 
 * Move some `Tunables` (and associated `Tuner` setters) that were unused here,
-  to `FutioTunables` of the body-image-futio crate, including: `res_timeout and
+  to `FutioTunables` of the body-image-futio crate, including: `res_timeout` and
   `body_timeout`.
 
 * Improve `Tunables::clone` efficiency by using `Arc<Path>` as representation of
