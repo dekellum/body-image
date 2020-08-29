@@ -101,7 +101,7 @@ dependencies = [
 
 [[package]]
 name = "body-image-futio"
-version = "2.1.1"
+version = "2.1.2"
 dependencies = [
  "blocking-permit",
  "body-image",

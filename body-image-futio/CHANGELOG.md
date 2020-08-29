@@ -1,3 +1,6 @@
+## 2.1.2 (TBD)
+* Extend hyperx dependency to include 1.1.0.
+
 ## 2.1.1 (2020-2-5)
 * Remove selection of tokio's _parking_lot_ feature erroneously introduced in
   2.1.0. This conflicts with our tokio 0.2.6 minimum (where that feature
