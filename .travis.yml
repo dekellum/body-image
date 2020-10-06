@@ -32,8 +32,9 @@ env: # important!
 matrix:
   include:
     - rust: 1.32.0
-    - rust: 1.32.0
       env: WITH_LOCK=true
+    - rust: 1.32.0
+      env: MAY_FAIL=true
     - rust: stable
       env: WITH_LOCK=true
     - rust: nightly
