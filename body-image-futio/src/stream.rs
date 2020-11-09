@@ -191,9 +191,7 @@ impl<B, BA> AsyncBodyImage<B, BA>
                             unsafe { buf.advance_mut(len); }
                             debug!("read chunk (len: {})", len);
                             self.consumed += len as u64;
-                            break Poll::Ready(Some(Ok(
-                                buf.freeze().into()
-                            )));
+                            break Poll::Ready(Some(Ok(buf.freeze().into())));
                         }
                         Err(e) => {
                             if e.kind() == io::ErrorKind::Interrupted {
