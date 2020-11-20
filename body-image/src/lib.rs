@@ -1,17 +1,16 @@
 //! Provides a uniform access strategy to HTTP bodies in RAM, or buffered to a
 //! temporary file, and optionally memory mapped.
 //!
-//! [`BodyImage`](struct.BodyImage.html), [`BodySink`](struct.BodySink.html)
-//! and supporting types provide a strategy for safely handling potentially
-//! large HTTP request or response bodies without risk of allocation failure,
-//! or the need to impose awkwardly low size limits in the face of high
-//! concurrency. [`Tunables`](struct.Tunables.html) size thresholds can be
-//! used to decide when to accumulate the body in RAM vs. the filesystem,
-//! including when the length is unknown in advance.
+//! [`BodyImage`], [`BodySink`] and supporting types provide a strategy for
+//! safely handling potentially large HTTP request or response bodies without
+//! risk of allocation failure, or the need to impose awkwardly low size limits
+//! in the face of high concurrency. [`Tunables`] size thresholds can be used
+//! to decide when to accumulate the body in RAM vs. the filesystem, including
+//! when the length is unknown in advance.
 //!
-//! A [`Dialog`](struct.Dialog.html) defines a complete HTTP request and
-//! response recording, using `BodyImage` for the request and response bodies
-//! and _http_ crate types for the headers and other components.
+//! A [`Dialog`] defines a complete HTTP request and response recording, using
+//! `BodyImage` for the request and response bodies and _http_ crate types for
+//! the headers and other components.
 //!
 //! See the top-level (project workspace) [README][ws-readme] for additional
 //! rationale.
@@ -121,7 +120,7 @@ impl From<io::Error> for BodyError {
 /// A logical buffer of bytes, which may or may not be RAM resident.
 ///
 /// Besides a few immediate/convenience constructors found here, use
-/// [`BodySink`](struct.BodySink.html) for the incremental or stream-oriented
+/// [`BodySink`] for the incremental or stream-oriented
 /// collection of bytes to produce a `BodyImage`.
 ///
 /// A `BodyImage` is always in one of the following states, as a buffering
@@ -161,7 +160,7 @@ enum ImageState {
 /// A logical buffer of bytes, which may or may not be RAM resident, in the
 /// process of being written.
 ///
-/// This is the write-side corollary to [`BodyImage`](struct.BodyImage.html).
+/// This is the write-side corollary to [`BodyImage`].
 /// A `BodySink` is always in one of the following states, as a buffering
 /// strategy:
 ///
@@ -517,7 +516,7 @@ impl BodyImage {
     /// Under normal construction via `BodySink` in `FsWrite` state, this
     /// method is safe, because no other thread or process has access to the
     /// underlying file. Note the potential safety requirements via
-    /// [`from_file`](#method-from_file) however.
+    /// [`from_file`](BodyImage::from_file) however.
     #[cfg(feature = "mmap")]
     pub fn mem_map(&mut self) -> Result<&mut Self, BodyError> {
         let map = match self.state {
@@ -589,8 +588,7 @@ impl BodyImage {
         }
     }
 
-    /// Consume self, *exploding* into an
-    /// [`ExplodedImage`](enum.ExplodedImage.html) variant.
+    /// Consume self, *exploding* into an [`ExplodedImage`] variant.
     pub fn explode(self) -> ExplodedImage {
         match self.state {
             ImageState::Ram(v) => ExplodedImage::Ram(v),
@@ -614,7 +612,7 @@ impl BodyImage {
     /// original non-generic form as `&mut dyn Read`. [C-RW-VALUE] prefers
     /// pass by value, but this would now be a breaking change.
     ///
-    /// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+    /// [C-RW-VALUE]: https://rust-lang.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
     pub fn read_from<R>(rin: &mut R, len_estimate: u64, tune: &Tunables)
         -> Result<BodyImage, BodyError>
         where R: Read + ?Sized
@@ -683,7 +681,7 @@ impl BodyImage {
     /// pass by value, but this would now be a breaking change.
     /// [`std::io::copy`] is presumably in the same position.
     ///
-    /// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+    /// [C-RW-VALUE]: https://rust-lang.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
     /// [`std::io::copy`]: https://doc.rust-lang.org/std/io/fn.copy.html
     pub fn write_to<W>(&self, out: &mut W) -> Result<u64, BodyError>
         where W: Write + ?Sized
@@ -809,7 +807,7 @@ impl fmt::Debug for ImageState {
 }
 
 /// *Exploded* representation of the possible `BodyImage` states, obtained via
-/// [`BodyImage::explode`](struct.BodyImage.html#method.explode).
+/// [`BodyImage::explode()`].
 pub enum ExplodedImage {
     Ram(Vec<Bytes>),
     FsRead(ReadSlice),
@@ -907,7 +905,7 @@ impl fmt::Display for Encoding {
 /// [`Recorded`](#impl-Recorded).
 ///
 /// It may be constructed via the `Prolog` and `Epilog` public structs and the
-/// [`explode`](#method.explode) method can be used to extract the same.
+/// [`explode`](Dialog::explode()) method can be used to extract the same.
 #[derive(Clone, Debug)]
 pub struct Dialog {
     pro: Prolog,
@@ -995,7 +993,7 @@ impl Recorded for Dialog {
 }
 
 /// A collection of size limits and performance tuning constants. Setters are
-/// available via [`Tuner`](struct.Tuner.html)
+/// available via [`Tuner`].
 #[derive(Debug, Clone)]
 pub struct Tunables {
     max_body_ram:            u64,

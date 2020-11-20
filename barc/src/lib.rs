@@ -49,7 +49,7 @@ use body_image::{
 /// Conveniently compact type alias for dyn Trait `std::error::Error`.
 ///
 /// It is possible to query and downcast the type via methods of
-/// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
+/// [`std::any::Any`].
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
 mod compress;
@@ -769,7 +769,7 @@ fn write_record_head<W>(out: &mut W, head: &RecordHead)
 /// pass by value, but this would now be a breaking change.
 /// [`std::io::copy`] is presumably in the same position.
 ///
-/// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+/// [C-RW-VALUE]: https://rust-lang.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
 /// [`std::io::copy`]: https://doc.rust-lang.org/std/io/fn.copy.html
 pub fn write_headers<W>(
     out: &mut W,
@@ -800,7 +800,7 @@ pub fn write_headers<W>(
 /// original non-generic form as `&mut dyn Write`. [C-RW-VALUE] prefers
 /// pass by value, but this would now be a breaking change.
 ///
-/// [C-RW-VALUE]: https://rust-lang-nursery.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
+/// [C-RW-VALUE]: https://rust-lang.github.io/api-guidelines/interoperability.html#generic-readerwriter-functions-take-r-read-and-w-write-by-value-c-rw-value
 pub fn write_body<W>(out: &mut W, with_crlf: bool, body: &BodyImage)
     -> Result<u64, BarcError>
     where W: Write + ?Sized
