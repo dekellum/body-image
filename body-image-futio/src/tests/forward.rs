@@ -35,19 +35,17 @@ fn deregister_dispatch() {
 }
 
 fn th_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new()
-        .core_threads(2)
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
         .max_threads(2+3)
-        .threaded_scheduler()
         .build()
         .expect("threaded runtime build")
 }
 
 fn local_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new()
-        .core_threads(1)
+    tokio::runtime::Builder::new_current_thread()
+        .worker_threads(1)
         .max_threads(1+3)
-        .basic_scheduler()
         .build()
         .expect("local runtime build")
 }
@@ -85,7 +83,7 @@ fn empty_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 fn transfer_empty_ct_dispatch() {
     assert!(test_logger());
     register_dispatch();
-    let mut rt = local_runtime();
+    let rt = local_runtime();
     let task = empty_task::<
             DispatchBodyImage<Bytes>,
             DispatchBodySink<Bytes>, _>();
@@ -97,7 +95,7 @@ fn transfer_empty_ct_dispatch() {
 #[test]
 fn transfer_empty_th() {
     assert!(test_logger());
-    let mut rt = th_runtime();
+    let rt = th_runtime();
     let task = empty_task::<AsyncBodyImage<Bytes>, AsyncBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
@@ -135,7 +133,7 @@ fn small_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 fn transfer_small_ct() {
     assert!(test_logger());
     register_dispatch();
-    let mut rt = local_runtime();
+    let rt = local_runtime();
     let task = small_task::<
             DispatchBodyImage<Bytes>,
             DispatchBodySink<Bytes>, _>();
@@ -147,7 +145,7 @@ fn transfer_small_ct() {
 #[test]
 fn transfer_small_th() {
     assert!(test_logger());
-    let mut rt = th_runtime();
+    let rt = th_runtime();
     let task = small_task::<AsyncBodyImage<Bytes>, AsyncBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
@@ -189,7 +187,7 @@ fn fs_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 fn transfer_fs_ct_dispatch() {
     assert!(test_logger());
     register_dispatch();
-    let mut rt = local_runtime();
+    let rt = local_runtime();
     let task = fs_task::<
             DispatchBodyImage<Bytes>,
             DispatchBodySink<Bytes>, _>();
@@ -201,7 +199,7 @@ fn transfer_fs_ct_dispatch() {
 #[test]
 fn transfer_fs_th() {
     assert!(test_logger());
-    let mut rt = th_runtime();
+    let rt = th_runtime();
     let task = fs_task::<AsyncBodyImage<Bytes>, AsyncBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
@@ -209,7 +207,7 @@ fn transfer_fs_th() {
 #[test]
 fn transfer_fs_th_permit() {
     assert!(test_logger());
-    let mut rt = th_runtime();
+    let rt = th_runtime();
     let task = fs_task::<PermitBodyImage<Bytes>, PermitBodySink<Bytes>, _>();
     rt.block_on(rt.spawn(task)).unwrap().unwrap();
 }
@@ -256,7 +254,7 @@ fn fs_back_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 fn transfer_fs_back_ct_dispatch() {
     assert!(test_logger());
     register_dispatch();
-    let mut rt = local_runtime();
+    let rt = local_runtime();
     let task = fs_back_task::<
             DispatchBodyImage<Bytes>,
             DispatchBodySink<Bytes>, _>();
@@ -268,7 +266,7 @@ fn transfer_fs_back_ct_dispatch() {
 #[test]
 fn transfer_fs_back_th() {
     assert!(test_logger());
-    let mut rt = th_runtime();
+    let rt = th_runtime();
     let task = fs_back_task::<
             AsyncBodyImage<Bytes>,
             AsyncBodySink<Bytes>, _>();
@@ -278,7 +276,7 @@ fn transfer_fs_back_th() {
 #[test]
 fn transfer_fs_back_th_permit() {
     assert!(test_logger());
-    let mut rt = th_runtime();
+    let rt = th_runtime();
     let task = fs_back_task::<
             PermitBodyImage<Bytes>,
             PermitBodySink<Bytes>, _>();
@@ -288,7 +286,7 @@ fn transfer_fs_back_th_permit() {
 #[test]
 fn transfer_fs_back_th_multi() {
     assert!(test_logger());
-    let mut rt = th_runtime();
+    let rt = th_runtime();
     let futures: FuturesUnordered<_> = (0..20).map(|_| {
         rt.spawn(fs_back_task::<
                 PermitBodyImage<Bytes>,
@@ -346,7 +344,7 @@ fn mmap_task<St, Sk, B>() -> impl Future<Output=Result<(), FutioError>>
 fn transfer_mmap_ct_dispatch() {
     assert!(test_logger());
     register_dispatch();
-    let mut rt = local_runtime();
+    let rt = local_runtime();
     let task = mmap_task::<
             DispatchBodyImage<UniBodyBuf>,
             DispatchBodySink<UniBodyBuf>, _>();
@@ -359,7 +357,7 @@ fn transfer_mmap_ct_dispatch() {
 #[cfg(feature = "mmap")]
 fn transfer_mmap_th() {
     assert!(test_logger());
-    let mut rt = th_runtime();
+    let rt = th_runtime();
     let task = mmap_task::<
             AsyncBodyImage<UniBodyBuf>,
             AsyncBodySink<UniBodyBuf>, _>();
@@ -370,7 +368,7 @@ fn transfer_mmap_th() {
 #[cfg(feature = "mmap")]
 fn transfer_mmap_th_permit() {
     assert!(test_logger());
-    let mut rt = th_runtime();
+    let rt = th_runtime();
     let task = mmap_task::<
             PermitBodyImage<UniBodyBuf>,
             PermitBodySink<UniBodyBuf>, _>();

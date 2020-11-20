@@ -180,10 +180,11 @@ impl<B, BA> AsyncBodyImage<B, BA>
                     avail
                 ) as usize;
                 let mut buf = BytesMut::with_capacity(rlen);
-                let b = unsafe {
-                    &mut *(buf.bytes_mut()
-                           as *mut [mem::MaybeUninit<u8>] as *mut [u8])
-                };
+                let b = unsafe { &mut *(
+                    buf.bytes_mut() as *mut _
+                        as *mut [mem::MaybeUninit<u8>]
+                        as *mut [u8]
+                )};
                 loop {
                     match rs.read(&mut b[..rlen]) {
                         Ok(0) => break Poll::Ready(None),
