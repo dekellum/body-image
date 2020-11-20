@@ -13,7 +13,7 @@ categories    = ["web-programming"]
 build         = "build.rs"
 
 [dependencies]
-bytes      = { version=">=0.5.2, <0.6" }
+bytes      = { version=">=0.6.0, <0.7" }
 http       = { version=">=0.2.0, <0.3" }
 log        = { version=">=0.4.4, <0.5" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }

@@ -628,10 +628,11 @@ impl BodyImage {
         'eof: loop {
             let mut buf = BytesMut::with_capacity(tune.buffer_size_ram());
             'fill: loop {
-                let b = unsafe {
-                    &mut *(buf.bytes_mut()
-                           as *mut [mem::MaybeUninit<u8>] as *mut [u8])
-                };
+                let b = unsafe { &mut *(
+                    buf.bytes_mut() as *mut _
+                        as *mut [mem::MaybeUninit<u8>]
+                        as *mut [u8]
+                )};
                 let len = match rin.read(b) {
                     Ok(len) => len,
                     Err(e) => {
@@ -742,9 +743,11 @@ fn read_to_body_fs<R>(r: &mut R, mut body: BodySink, tune: &Tunables)
     let mut size: u64 = 0;
     let mut buf = BytesMut::with_capacity(tune.buffer_size_fs());
     loop {
-        let b = unsafe {
-            &mut *(buf.bytes_mut() as *mut [mem::MaybeUninit<u8>] as *mut [u8])
-        };
+        let b = unsafe { &mut *(
+            buf.bytes_mut() as *mut _
+                as *mut [mem::MaybeUninit<u8>]
+                as *mut [u8]
+        )};
         let len = match r.read(b) {
             Ok(l) => l,
             Err(e) => {
