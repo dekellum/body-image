@@ -17,7 +17,7 @@ build         = "build.rs"
 body-image = { version=">=2.0.0, <2.1", default-features=false }
 brotli     = { version=">=3.1.0, <3.4", optional=true }
 brotli-decompressor = { version=">=2.1.2", optional=true, default-features=false } # min transitive
-bytes      = { version=">=0.5.2, <0.6" }
+bytes      = { version=">=0.6.0, <0.7" }
 flate2     = { version=">=1.0.4, <1.1" }
 http       = { version=">=0.2.0, <0.3" }
 httparse   = { version=">=1.2.4, <1.4" }
