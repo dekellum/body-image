@@ -44,14 +44,12 @@ lazy_static! {
 // requests via function, and the url to access it via a local tcp port.
 macro_rules! service {
     ($c:literal, $s:ident) => {{
-        let (mut listener, addr) = local_bind().unwrap();
+        let (listener, addr) = local_bind().unwrap();
         let fut = async move {
             for i in 0..$c {
-                let mut incoming = listener.incoming();
-                let socket = incoming.next()
+                let socket = listener.accept()
                     .await
-                    .expect("some")
-                    .expect("socket");
+                    .expect("accept").0;
                 socket.set_nodelay(true).expect("nodelay");
                 let res = Http::new()
                     .serve_connection(socket, service_fn($s))
@@ -424,8 +422,8 @@ async fn delayed(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     let bi = ram_body_image(0x8000, 32);
     let tune = FutioTunables::default();
     let now = tokio::time::Instant::now();
-    let delay1 = tokio::time::delay_until(now + Duration::from_millis(100));
-    let delay2 = tokio::time::delay_until(now + Duration::from_millis(900));
+    let delay1 = tokio::time::sleep_until(now + Duration::from_millis(100));
+    let delay2 = tokio::time::sleep_until(now + Duration::from_millis(900));
     delay1 .await;
     let rbody = AsyncBodyImage::<Bytes>::new(bi, tune)
         .chain(
@@ -530,10 +528,9 @@ fn post_body_req<T>(url: &str, body: BodyImage, tune: FutioTunables)
 }
 
 fn new_limited_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new()
-        .core_threads(2)
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
         .max_threads(2+2)
-        .threaded_scheduler()
         .enable_io()
         .enable_time()
         .build()

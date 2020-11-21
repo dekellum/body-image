@@ -294,7 +294,7 @@ enum ClientOp {
 }
 
 fn client_run<I, T, E>(
-    mut rt: Runtime,
+    rt: Runtime,
     tune: FutioTunables,
     op: ClientOp,
     b: &mut Bencher)
@@ -303,6 +303,7 @@ fn client_run<I, T, E>(
           T: AsRef<[u8]> + 'static,
           E: std::fmt::Debug + 'static
 {
+    let _guard = rt.enter();
     // Use external server if provided URL in env var, else spawn our own, in
     // process.
     let (url, shutdown_tx, srv_jh) =
@@ -310,11 +311,11 @@ fn client_run<I, T, E>(
     {
         (uv, None, None)
     } else {
-        let (url, tx, jh) = rt.enter(|| {
+        let (url, tx, jh) = {
             let sink = BodySink::with_ram_buffers(1024);
             let body = sink_data(sink).unwrap();
             body_server(body, FutioTunables::default())
-        });
+        };
         (url, Some(tx), Some(jh))
     };
 
@@ -441,10 +442,9 @@ fn test_path() -> Result<PathBuf, Flaw> {
 }
 
 fn th_direct_runtime() -> Runtime {
-    tokio::runtime::Builder::new()
-        .core_threads(CORE_THREADS+EXTRA_THREADS)
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(CORE_THREADS+EXTRA_THREADS)
         .max_threads(CORE_THREADS+EXTRA_THREADS)
-        .threaded_scheduler()
         .enable_io()
         .enable_time()
         .build()
@@ -452,10 +452,9 @@ fn th_direct_runtime() -> Runtime {
 }
 
 fn th_dispatch_runtime(pool: DispatchPool) -> Runtime {
-    tokio::runtime::Builder::new()
-        .core_threads(CORE_THREADS)
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(CORE_THREADS)
         .max_threads(CORE_THREADS)
-        .threaded_scheduler()
         .enable_io()
         .enable_time()
         .on_thread_start(move || {
