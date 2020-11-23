@@ -18,7 +18,7 @@ body-image = { version=">=2.0.0, <2.2", default-features=false }
 body-image-futio = { version=">=2.1.0, <2.2", optional=true, default-features=false }
 clap       = { version=">=2.31.2, <2.34", default-features=false, features=["wrap_help"] }
 http       = { version=">=0.2.0, <0.3" }
-hyper      = { version=">=0.13.0, <0.14", default-features=false, features=["stream", "tcp"], optional=true }
+hyper      = { version=">=0.14.0-dev, <0.15", default-features=false, features=["http1", "client", "stream", "tcp"], optional=true }
 log        = { version=">=0.4.4, <0.5" }
 piccolog   = { version=">=1.0.0, <1.1" }
 
