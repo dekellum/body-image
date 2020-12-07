@@ -1,7 +1,6 @@
 # The Body Image Project
 
-[![Travis CI Build](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
-[![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
+[![CI Status](https://github.com/dekellum/body-image/workflows/CI/badge.svg?branch=master)](https://github.com/dekellum/body-image/actions?query=workflow%3ACI)
 
 A rust language project providing separately usable but closely related crates:
 

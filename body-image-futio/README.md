@@ -3,8 +3,7 @@
 [![Rustdoc](https://docs.rs/body-image-futio/badge.svg)](https://docs.rs/body-image-futio)
 [![Change Log](https://img.shields.io/crates/v/body-image-futio.svg?maxAge=3600&label=change%20log&color=9cf)](https://github.com/dekellum/body-image/blob/master/body-image-futio/CHANGELOG.md)
 [![Crates.io](https://img.shields.io/crates/v/body-image-futio.svg?maxAge=3600)](https://crates.io/crates/body-image-futio)
-[![Travis CI Build](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
-[![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
+[![CI Status](https://github.com/dekellum/body-image/workflows/CI/badge.svg?branch=master)](https://github.com/dekellum/body-image/actions?query=workflow%3ACI)
 
 The _body-image-futio_ crate integrates _body-image_ with _futures_,
 _http_, _hyper_, and _tokio_ for both client and server use.
