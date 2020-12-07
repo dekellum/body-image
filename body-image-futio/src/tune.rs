@@ -4,10 +4,9 @@ use blocking_permit::Semaphore;
 use body_image::Tunables;
 
 /// An additional set of tuning constants for asynchronous I/O, extending the
-/// body-image `Tunables` set.
+/// [`body_image::Tunables`] set.
 ///
-/// Setters are available via [`FutioTuner`](struct.FutioTuner.html) (a builder
-/// type).
+/// Setters are available via [`FutioTuner`] (a builder type).
 #[derive(Debug, Clone)]
 pub struct FutioTunables {
     image: Tunables,

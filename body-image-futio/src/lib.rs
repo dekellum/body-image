@@ -4,29 +4,28 @@
 //! _futures_, _http_, _hyper_, and _tokio_ for both client and server
 //! use.
 //!
-//! * Trait [`RequestRecorder`](trait.RequestRecorder.html) extends
-//!   `http::request::Builder` for recording a
-//!   [`RequestRecord`](struct.RequestRecord.html) of various body types, which
-//!   can then be passed to `request_dialog` or `fetch`.
+//! * Trait [`RequestRecorder`] extends `http::request::Builder` for recording
+//!   a [`RequestRecord`] of various body types, which can then be passed to
+//!   `request_dialog` or `fetch`.
 //!
-//! * The [`fetch`](fn.fetch.html) function runs a `RequestRecord` and returns
-//!   a completed [`Dialog`](../struct.Dialog.html) using a single-use client
-//!   and runtime for `request_dialog`.
+//! * The [`fetch()`] function runs a `RequestRecord` and returns a completed
+//!   [`Dialog`](body_image::Dialog) using a single-use client and runtime for
+//!   `request_dialog`.
 //!
-//! * The [`request_dialog`](fn.request_dialog.html) function returns a
-//!   `Future` with `Dialog` output, given a suitable `hyper::Client` reference
-//!   and `RequestRecord`. This function is thus more composable for complete
+//! * The [`request_dialog()`] function returns a `Future` with `Dialog`
+//!   output, given a suitable `hyper::Client` reference and
+//!   `RequestRecord`. This function is thus more composable for complete
 //!   _tokio_ applications.
 //!
-//! * [`AsyncBodyImage`](struct.AsyncBodyImage.html) adapts a `BodyImage` for
-//!   asynchronous output as a `Stream` and `http_body::Body`.
+//! * [`AsyncBodyImage`] adapts a `BodyImage` for asynchronous output as a
+//!   `Stream` and `http_body::Body`.
 //!
-//! * [`AsyncBodySink`](struct.AsyncBodySink.html) adapts a `BodySink` for
-//!   asynchronous input from a (e.g. `hyper::Body`) `Stream`.
+//! * [`AsyncBodySink`] adapts a `BodySink` for asynchronous input from a
+//!   (e.g. `hyper::Body`) `Stream`.
 //!
-//! * The [`decode_res_body`](fn.decode_res_body.html) and associated
-//!   functions will decompress any supported Transfer/Content-Encoding of the
-//!   response body and update the `Dialog` accordingly.
+//! * The [`decode_res_body()`] and associated functions will decompress any
+//!   supported Transfer/Content-Encoding of the response body and update the
+//!   `Dialog` accordingly.
 //!
 //! ## Optional Features
 //!
@@ -39,9 +38,8 @@
 //! _brotli:_ Adds the brotli compression algorithm to [`ACCEPT_ENCODINGS`] and
 //! decompression support in [`decode_res_body`].
 //!
-//! _hyper-http_: Adds Hyper based [`fetch`](fn.fetch.html) and
-//! [`request_dialog`](fn.request_dialog.html) methods, as well as a
-//! [`RequestRecorder`](trait.RequestRecorder.html) implementation for
+//! _hyper-http_: Adds Hyper based [`fetch()`] and [`request_dialog()`]
+//! functions, as well as a [`RequestRecorder`] implementation for
 //! `hyper::Body` (its "default" `http_body::Body` type).
 
 #![warn(rust_2018_idioms)]
@@ -64,7 +62,7 @@ use body_image::{Epilog, Dialog};
 /// Conveniently compact type alias for dyn Trait `std::error::Error`.
 ///
 /// It is possible to query and downcast the type via methods of
-/// [`std::any::Any`](https://doc.rust-lang.org/std/any/trait.Any.html).
+/// [`std::any::Any`].
 pub type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 
 mod blocking;
@@ -238,9 +236,10 @@ pub fn user_agent() -> String {
             VERSION)
 }
 
-/// An `http::Request` and recording. Note that other important getter
-/// methods for `RequestRecord` are found in trait implementation
-/// [`RequestRecorded`](#impl-RequestRecorded).
+/// An `http::Request` and recording.
+///
+/// Note that other important getter methods for `RequestRecord` are found in
+/// trait implementation [`RequestRecorded`](#impl-RequestRecorded).
 ///
 /// _Limitations:_ This can't be `Clone`, because `http::Request` currently
 /// isn't `Clone`.  Also note that as used as type `B`, `hyper::Body` also
