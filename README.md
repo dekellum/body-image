@@ -2,7 +2,6 @@
 
 [![Travis CI Build](https://travis-ci.org/dekellum/body-image.svg?branch=master)](https://travis-ci.org/dekellum/body-image)
 [![Appveyor CI Build](https://ci.appveyor.com/api/projects/status/0c2e9x4inktasxgf/branch/master?svg=true)](https://ci.appveyor.com/project/dekellum/body-image)
-[![deps status](https://deps.rs/repo/github/dekellum/body-image/status.svg)](https://deps.rs/repo/github/dekellum/body-image)
 
 A rust language project providing separately usable but closely related crates:
 
