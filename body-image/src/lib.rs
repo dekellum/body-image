@@ -629,7 +629,7 @@ impl BodyImage {
             let mut buf = BytesMut::with_capacity(tune.buffer_size_ram());
             'fill: loop {
                 let b = unsafe { &mut *(
-                    buf.bytes_mut() as *mut _
+                    buf.chunk_mut() as *mut _
                         as *mut [mem::MaybeUninit<u8>]
                         as *mut [u8]
                 )};
@@ -744,7 +744,7 @@ fn read_to_body_fs<R>(r: &mut R, mut body: BodySink, tune: &Tunables)
     let mut buf = BytesMut::with_capacity(tune.buffer_size_fs());
     loop {
         let b = unsafe { &mut *(
-            buf.bytes_mut() as *mut _
+            buf.chunk_mut() as *mut _
                 as *mut [mem::MaybeUninit<u8>]
                 as *mut [u8]
         )};
