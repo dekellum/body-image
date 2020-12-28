@@ -39,11 +39,11 @@ impl Buf for UniBodyBuf {
         }
     }
 
-    fn bytes(&self) -> &[u8] {
+    fn chunk(&self) -> &[u8] {
         match self.buf {
-            BufState::Bytes(ref b)  => b.bytes(),
+            BufState::Bytes(ref b)  => b.chunk(),
             #[cfg(feature = "mmap")]
-            BufState::MemMap(ref b) => b.bytes(),
+            BufState::MemMap(ref b) => b.chunk(),
         }
     }
 
@@ -60,13 +60,13 @@ impl Deref for UniBodyBuf {
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
-        self.bytes()
+        self.chunk()
     }
 }
 
 impl AsRef<[u8]> for UniBodyBuf {
     fn as_ref(&self) -> &[u8] {
-        self.bytes()
+        self.chunk()
     }
 }
 

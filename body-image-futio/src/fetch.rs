@@ -29,7 +29,7 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: FutioTunables)
 {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
-        .max_threads(4)
+        .max_blocking_threads(2)
         .enable_io()
         .enable_time()
         .build()

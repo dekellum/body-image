@@ -463,7 +463,7 @@ fn ram_body_image(csize: usize, count: usize) -> BodyImage {
 fn body_server(body: BodyImage, tune: FutioTunables)
     -> (String,
         tokio::sync::oneshot::Sender<()>,
-        tokio::task::JoinHandle<Result<(), hyper::error::Error>>)
+        tokio::task::JoinHandle<Result<(), hyper::Error>>)
 {
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let server = hyper::Server::bind(&([127, 0, 0, 1], 0).into())
@@ -530,7 +530,7 @@ fn post_body_req<T>(url: &str, body: BodyImage, tune: FutioTunables)
 fn new_limited_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
-        .max_threads(2+2)
+        .max_blocking_threads(2)
         .enable_io()
         .enable_time()
         .build()

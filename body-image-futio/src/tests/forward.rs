@@ -37,7 +37,7 @@ fn deregister_dispatch() {
 fn th_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
-        .max_threads(2+3)
+        .max_blocking_threads(3)
         .build()
         .expect("threaded runtime build")
 }
@@ -45,7 +45,7 @@ fn th_runtime() -> tokio::runtime::Runtime {
 fn local_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .worker_threads(1)
-        .max_threads(1+3)
+        .max_blocking_threads(3)
         .build()
         .expect("local runtime build")
 }

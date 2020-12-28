@@ -437,7 +437,7 @@ fn test_path() -> Result<PathBuf, Flaw> {
 fn th_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
-        .max_threads(2+2)
+        .max_blocking_threads(2)
         .build()
         .expect("threaded runtime build")
 }
@@ -445,7 +445,7 @@ fn th_runtime() -> tokio::runtime::Runtime {
 fn th_dispatch_runtime(pool: DispatchPool) -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
-        .max_threads(2)
+        .max_blocking_threads(1)
         .on_thread_start(move || {
             register_dispatch_pool(pool.clone());
         })
@@ -456,7 +456,7 @@ fn th_dispatch_runtime(pool: DispatchPool) -> tokio::runtime::Runtime {
 fn local_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .worker_threads(1)
-        .max_threads(4)
+        .max_blocking_threads(3)
         .build()
         .expect("local runtime build")
 }

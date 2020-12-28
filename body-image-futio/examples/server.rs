@@ -38,7 +38,7 @@ fn main() {
 
 fn body_server(body: BodyImage, tune: FutioTunables)
     -> (String,
-        tokio::task::JoinHandle<Result<(), hyper::error::Error>>)
+        tokio::task::JoinHandle<Result<(), hyper::Error>>)
 {
     let server = hyper::Server::bind(&([127, 0, 0, 1], 9087).into())
         .serve(make_service_fn(move |_| {
@@ -78,7 +78,7 @@ fn sink_data(mut body: BodySink) -> Result<BodyImage, BodyError> {
 fn th_runtime() -> Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
-        .max_threads(2)
+        .max_blocking_threads(1)
         .enable_io()
         .enable_time()
         .build()

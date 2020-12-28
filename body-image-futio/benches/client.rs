@@ -371,7 +371,7 @@ fn client_run<I, T, E>(
 fn body_server(body: BodyImage, tune: FutioTunables)
     -> (String,
         tokio::sync::oneshot::Sender<()>,
-        tokio::task::JoinHandle<Result<(), hyper::error::Error>>)
+        tokio::task::JoinHandle<Result<(), hyper::Error>>)
 {
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let server = hyper::Server::bind(&([127, 0, 0, 1], 0).into())
@@ -444,7 +444,7 @@ fn test_path() -> Result<PathBuf, Flaw> {
 fn th_direct_runtime() -> Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(CORE_THREADS+EXTRA_THREADS)
-        .max_threads(CORE_THREADS+EXTRA_THREADS)
+        .max_blocking_threads(1)
         .enable_io()
         .enable_time()
         .build()
@@ -454,7 +454,7 @@ fn th_direct_runtime() -> Runtime {
 fn th_dispatch_runtime(pool: DispatchPool) -> Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(CORE_THREADS)
-        .max_threads(CORE_THREADS)
+        .max_blocking_threads(1)
         .enable_io()
         .enable_time()
         .on_thread_start(move || {
