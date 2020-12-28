@@ -1022,7 +1022,7 @@ fn read_headers<R>(rin: &mut R, with_crlf: bool, len: usize)
     let mut buf = BytesMut::with_capacity(tlen);
     unsafe {
         let b = &mut *(
-            buf.bytes_mut() as *mut _
+            buf.chunk_mut() as *mut _
                 as *mut [mem::MaybeUninit<u8>]
                 as *mut [u8]
         );
@@ -1083,7 +1083,7 @@ fn read_body_ram<R>(rin: &mut R, with_crlf: bool, len: usize)
     let mut buf = BytesMut::with_capacity(len);
     unsafe {
         let b = &mut *(
-            buf.bytes_mut() as *mut _
+            buf.chunk_mut() as *mut _
                 as *mut [mem::MaybeUninit<u8>]
                 as *mut [u8]
         );
@@ -1110,7 +1110,7 @@ fn read_body_fs<R>(rin: &mut R, len: u64, tune: &Tunables)
     loop {
         let rlen = {
             let b = unsafe { &mut *(
-                buf.bytes_mut() as *mut _
+                buf.chunk_mut() as *mut _
                     as *mut [mem::MaybeUninit<u8>]
                     as *mut [u8]
             )};
