@@ -35,7 +35,7 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: FutioTunables)
         .build()
         .unwrap();
 
-    let connector = hyper::client::HttpConnector::new(); //FIXME: Temp avoid hyper_tls
+    let connector = hyper_tls::HttpsConnector::new();
     let client = hyper::Client::builder().build(connector);
 
     let join = rt.spawn(request_dialog(&client, rr, tune));
