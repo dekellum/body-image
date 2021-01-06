@@ -6,6 +6,7 @@ extern crate test; // Still required, see rust-lang/rust#55133
 use std::cmp;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use blocking_permit::{
     DispatchPool, Semaphore, Semaphorish,
@@ -38,7 +39,7 @@ fn stream_01_ram_pregather(b: &mut Bencher) {
     let sink = BodySink::with_ram_buffers(1024);
     let mut body = sink_data(sink).unwrap();
     body.gather();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = AsyncBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -51,7 +52,7 @@ fn stream_02_ram(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_ram_buffers(1024);
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = AsyncBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -64,7 +65,7 @@ fn stream_03_ram_uni(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_ram_buffers(1024);
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = AsyncBodyImage::<UniBodyBuf>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -78,7 +79,7 @@ fn stream_04_ram_gather(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_ram_buffers(1024);
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let mut body = body.clone();
         body.gather();
@@ -93,7 +94,7 @@ fn stream_20_fsread_direct(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = AsyncBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -108,7 +109,7 @@ fn stream_20_fsread_permit(b: &mut Bencher) {
         .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = PermitBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -126,7 +127,7 @@ fn stream_21_fsread_dispatch1(b: &mut Bencher) {
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let pool = DispatchPool::builder().pool_size(1).create();
-    let mut rt = th_dispatch_runtime(pool);
+    let mut rt = mt_runtime(2, None, Some(pool));
     b.iter(|| {
         let stream = DispatchBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -144,7 +145,7 @@ fn stream_21_fsread_dispatch2(b: &mut Bencher) {
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let pool = DispatchPool::builder().pool_size(2).create();
-    let mut rt = th_dispatch_runtime(pool);
+    let mut rt = mt_runtime(2, None, Some(pool));
     b.iter(|| {
         let stream = DispatchBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -162,7 +163,7 @@ fn stream_22_fsread_dispatch1_ql0(b: &mut Bencher) {
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
     let pool = DispatchPool::builder().pool_size(1).queue_length(0).create();
-    let mut rt = th_dispatch_runtime(pool);
+    let mut rt = mt_runtime(2, None, Some(pool));
     b.iter(|| {
         let stream = DispatchBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -176,7 +177,7 @@ fn stream_22_fsread_uni_direct(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = AsyncBodyImage::<UniBodyBuf>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -247,7 +248,7 @@ fn stream_30_fsread_permit_8k(b: &mut Bencher) {
         .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = PermitBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -264,7 +265,7 @@ fn stream_31_fsread_permit_128k(b: &mut Bencher) {
         .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = PermitBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -281,7 +282,7 @@ fn stream_32_fsread_permit_1m(b: &mut Bencher) {
         .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = PermitBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -298,7 +299,7 @@ fn stream_33_fsread_permit_4m(b: &mut Bencher) {
         .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let stream = PermitBodyImage::<Bytes>::new(body.clone(), tune.clone());
         summarize_stream(stream, &mut rt);
@@ -312,7 +313,7 @@ fn stream_40_mmap_pre(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let mut body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     body.mem_map().unwrap();
     b.iter(|| {
         let stream = AsyncBodyImage::<UniBodyBuf>::new(body.clone(), tune.clone());
@@ -327,7 +328,7 @@ fn stream_41_mmap_direct(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let mut body = body.clone();
         body.mem_map().unwrap();
@@ -345,7 +346,7 @@ fn stream_41_mmap_permit(b: &mut Bencher) {
         .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let mut body = body.clone();
         body.mem_map().unwrap();
@@ -362,7 +363,7 @@ fn stream_42_mmap_copy_direct(b: &mut Bencher) {
     let tune = FutioTunables::default();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let mut body = body.clone();
         body.mem_map().unwrap();
@@ -381,7 +382,7 @@ fn stream_42_mmap_copy_permit(b: &mut Bencher) {
         .finish();
     let sink = BodySink::with_fs(test_path().unwrap()).unwrap();
     let body = sink_data(sink).unwrap();
-    let mut rt = th_runtime();
+    let mut rt = mt_runtime(2, Some(2), None);
     b.iter(|| {
         let mut body = body.clone();
         body.mem_map().unwrap();
@@ -434,29 +435,58 @@ fn test_path() -> Result<PathBuf, Flaw> {
     Ok(tpath.to_path_buf())
 }
 
-fn th_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .max_blocking_threads(2)
-        .build()
-        .expect("threaded runtime build")
-}
-
-fn th_dispatch_runtime(pool: DispatchPool) -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .max_blocking_threads(1)
-        .on_thread_start(move || {
-            register_dispatch_pool(pool.clone());
-        })
-        .build()
-        .expect("threaded dispatch runtime build")
-}
-
 fn local_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .worker_threads(1)
         .max_blocking_threads(3)
         .build()
         .expect("local runtime build")
+}
+
+fn mt_runtime(
+    core: usize,
+    blocking: Option<usize>,
+    dispatch: Option<DispatchPool>)
+    -> tokio::runtime::Runtime
+{
+    struct AbortOnPanic;
+
+    impl Drop for AbortOnPanic {
+        fn drop(&mut self) {
+            std::process::abort();
+        }
+    }
+
+    let mut bldr = tokio::runtime::Builder::new_multi_thread();
+    bldr.worker_threads(core);
+
+    let extra_threads = match blocking {
+        Some(c) => c,
+        None => 1
+    };
+    bldr.max_blocking_threads(extra_threads);
+
+    if let Some(pool) = dispatch {
+        bldr.on_thread_start(move || {
+            register_dispatch_pool(pool.clone());
+        });
+        bldr.on_thread_stop(|| {
+            deregister_dispatch_pool();
+        });
+    }
+    let cntr = AtomicUsize::new(0);
+    let mut max = core;
+    if let Some(b) = blocking {
+        max += b;
+    }
+    bldr.thread_name_fn(move || {
+        let c = cntr.fetch_add(1, Ordering::SeqCst);
+        if c >= max {
+            let _aborter = AbortOnPanic;
+            panic!("spawn_blocking/block_in_place must have been used!");
+        } else {
+            format!("worker-{}", c)
+        }
+    });
+    bldr.build().unwrap()
 }
