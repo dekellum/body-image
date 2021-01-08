@@ -21,15 +21,15 @@ flate2     = { version=">=1.0.4, <1.1" }
 futures-core = { version=">=0.3.1, <0.4" }
 futures-sink = { version=">=0.3.1, <0.4" }
 futures-util = { version=">=0.3.1, <0.4", features=["sink"] }
-http       = { version=">=0.2.0, <0.3" }
+http       = { version=">=0.2.2, <0.3" }
 http-body  = { version=">=0.4.0, <0.5" }
 httparse   = { version=">=1.2.4, <1.4" }
-hyper      = { version=">=0.14.0, <0.15", default-features=false, features=["http1", "client", "server", "stream", "tcp"], optional=true }
+hyper      = { version=">=0.14.2, <0.15", default-features=false, features=["http1", "client", "server", "stream", "tcp"], optional=true }
 hyper-tls  = { version=">=0.5.0, <0.6", optional=true }
 hyperx     = { version=">=1.3.0, <1.4" }
 tao-log    = { version=">=1.0.0, <1.1" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }
-olio       = { version=">=1.3.0, <1.4", default-features=false }
+olio       = { version=">=1.3.0, <1.5", default-features=false }
 tokio      = { version=">=1.0.1, <1.1", features=[] }
 blocking-permit = { version=">=1.3.0, <1.4", default-features=false, features=["tokio-omnibus", "cleaver", "yield-stream"] }
 
