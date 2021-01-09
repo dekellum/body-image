@@ -108,9 +108,11 @@ jobs:
         working-directory: barc-cli
         run: cargo build --no-default-features
       - name: Build barc-cli (mmap)
+        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: barc-cli
         run: cargo build --no-default-features --features mmap
       - name: Build barc-cli (brotli)
+        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: barc-cli
         run: cargo build --no-default-features --features brotli
       - name: Build barc-cli (futio)
