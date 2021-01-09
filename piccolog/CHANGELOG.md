@@ -1,3 +1,6 @@
+## 1.0.2 (unreleased)
+* Minor documentation improvements.
+
 ## 1.0.1 (2020-2-11)
 * Simplify target based filtering.
 * Improve documentation.
