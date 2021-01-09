@@ -95,6 +95,7 @@ dependencies = [
  "log",
  "memmap",
  "olio",
+ "remove_dir_all",
  "tempfile",
 ]
 
