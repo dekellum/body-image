@@ -100,7 +100,7 @@ jobs:
         working-directory: body-image-futio
         run: cargo test
       - name: Build futio (all targets)
-        if: ${{ matrix.rust != '1.39.0' }}
+        if: ${{ matrix.rust == 'nightly' }}
         working-directory: body-image-futio
         run: cargo build --all-targets
 
