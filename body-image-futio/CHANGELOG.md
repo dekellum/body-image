@@ -1,5 +1,9 @@
-## 2.1.2 (TBD)
-* Extend hyperx dependency to include 1.2.0.
+## 2.1.2 (unreleased)
+* Upgrade to hyperx 1.2.1.
+
+* Constrain http to <0.2.3 to avoid bytes duplicates.
+
+* Misc documentation improvements.
 
 ## 2.1.1 (2020-2-5)
 * Remove selection of tokio's _parking_lot_ feature erroneously introduced in

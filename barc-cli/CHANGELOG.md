@@ -1,4 +1,7 @@
 ## 2.1.1 (unreleased)
+* Constrain http to <0.2.3 to avoid bytes duplicates.
+
+* Misc documentation improvements.
 
 ## 2.1.0 (2020-2-4)
 * Update to body-image-futio 2.1.0.

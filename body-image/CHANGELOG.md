@@ -1,5 +1,9 @@
-## 2.0.1 (TBD)
-* Restrict remove_dir_all transitive dep of tempfile to 0.5.2 to preserve MSRV.
+## 2.0.1 (unreleased)
+* Constrain remove_dir_all transitive dep of tempfile to 0.5.2 to preserve MSRV.
+
+* Constrain http to <0.2.3 to avoid bytes duplicates.
+
+* Misc documentation improvements.
 
 ## 2.0.0 (2020-1-13)
 * `BodySink::save` is deprecated in preference to a new `BodySink::push`
