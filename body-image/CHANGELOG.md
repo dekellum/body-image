@@ -1,3 +1,5 @@
+## 2.2.0 (unreleased)
+
 ## 2.0.1 (TBD)
 * Restrict remove_dir_all transitive dep of tempfile to 0.5.2 to preserve MSRV.
 
