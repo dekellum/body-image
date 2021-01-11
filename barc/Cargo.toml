@@ -19,7 +19,7 @@ brotli     = { version=">=3.1.0, <3.4", optional=true }
 brotli-decompressor = { version=">=2.1.2", optional=true, default-features=false } # min transitive
 bytes      = { version=">=0.5.2, <0.6" }
 flate2     = { version=">=1.0.4, <1.1" }
-http       = { version=">=0.2.0, <0.3" }
+http       = { version=">=0.2.0, <0.2.3" }
 httparse   = { version=">=1.2.4, <1.4" }
 tao-log    = { version=">=1.0.0, <1.1" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }

@@ -21,7 +21,7 @@ flate2     = { version=">=1.0.4, <1.1" }
 futures-core = { version=">=0.3.1, <0.4" }
 futures-sink = { version=">=0.3.1, <0.4" }
 futures-util = { version=">=0.3.1, <0.4", features=["sink"] }
-http       = { version=">=0.2.0, <0.3" }
+http       = { version=">=0.2.0, <0.2.3" }
 http-body  = { version=">=0.3.0, <0.4" }
 httparse   = { version=">=1.2.4, <1.4" }
 hyper      = { version=">=0.13.1, <0.14", default-features=false, features=["stream", "tcp"], optional=true }
