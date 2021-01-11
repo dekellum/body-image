@@ -9,10 +9,7 @@ records (format defined by the *barc* library crate).
 
 ## Minimum supported rust version
 
-MSRV := 1.39.0
-
-The crate will fail fast on any lower rustc (via a build.rs version
-check) and is also CI tested on this version.
+MSRV := 1.45.2
 
 ## License
 
