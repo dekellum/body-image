@@ -103,7 +103,7 @@ jobs:
         run: cargo test -- --test-threads=1 --nocapture
         env:
           RUST_BACKTRACE: 1
-          TEST_LOG: 4
+          TEST_LOG: 3
 
       - name: Build futio (all targets)
         if: ${{ matrix.rust == 'nightly' }}
