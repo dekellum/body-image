@@ -16,16 +16,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - rust: 1.39.0
-            os: ubuntu-20.04
-          - rust: 1.39.0
-            os: ubuntu-20.04
-            extras: [update]
-          - rust: 1.45.2
-            os: ubuntu-20.04
-          - rust: 1.45.2
-            os: ubuntu-20.04
-            extras: [update]
           - rust: 1.45.2
             target: x86_64-pc-windows-gnu
             os: windows-latest
@@ -33,15 +23,6 @@ jobs:
             target: x86_64-pc-windows-gnu
             os: windows-latest
             extras: [update]
-          - rust: stable
-            os: ubuntu-20.04
-            extras: [update]
-          - rust: nightly
-            os: ubuntu-20.04
-          - rust: nightly
-            os: ubuntu-20.04
-            extras: [update]
-
     steps:
       - name: Checkout
         uses: actions/checkout@v2
