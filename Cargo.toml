@@ -24,3 +24,6 @@ incremental = false
 
 [profile.dev]
 panic = "abort"
+
+[profile.test]
+panic = "abort"
