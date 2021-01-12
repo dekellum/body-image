@@ -82,7 +82,7 @@ jobs:
       - name: Test futio (default)
         if: ${{ matrix.rust != '1.39.0' }}
         working-directory: body-image-futio
-        run: cargo test -- --test-threads=1 --nocapture
+        run: cargo test --target ${{ matrix.target }} -- --test-threads=1 --nocapture
         env:
           RUST_BACKTRACE: 1
           TEST_LOG: 3
