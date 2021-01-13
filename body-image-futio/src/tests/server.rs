@@ -72,7 +72,6 @@ fn post_echo_body() {
         let jh = spawn(srv);
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
-            .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
         let body = fs_body_image(445);
         let res = spawn(post_body_req::<Body>(&url, body, tune))
@@ -100,7 +99,6 @@ fn post_echo_async_body() {
         let jh = spawn(srv);
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
-            .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
         let body = fs_body_image(445);
         let res = spawn(
@@ -130,7 +128,6 @@ fn post_echo_async_body_multi() {
         let jh = spawn(srv);
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
-            .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
         let futures: FuturesUnordered<_> = (0..20).map(|i| {
             let body = fs_body_image(445 + i);
@@ -154,7 +151,6 @@ fn post_echo_async_body_mmap_copy() {
         let jh = spawn(srv);
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
-            .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
         let mut body = fs_body_image(445);
         body.mem_map().unwrap();
@@ -186,7 +182,6 @@ fn post_echo_uni_body_mmap() {
         let jh = spawn(srv);
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(2048).finish())
-            .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
         let body = fs_body_image(194_767);
         let res = spawn(post_body_req::<AsyncBodyImage<UniBodyBuf>>(
@@ -217,7 +212,6 @@ fn timeout_before_response() {
         let tune = FutioTuner::new()
             .set_res_timeout(Duration::from_millis(10))
             .set_body_timeout(Duration::from_millis(600))
-            .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
         let res = spawn(get_req::<AsyncBodyImage<Bytes>>(&url, tune))
             .await
@@ -245,7 +239,6 @@ fn timeout_during_streaming() {
         let tune = FutioTuner::new()
             .unset_res_timeout() // workaround, see *_race version of test below
             .set_body_timeout(Duration::from_millis(600))
-            .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
         let res = spawn(get_req::<AsyncBodyImage<Bytes>>(&url, tune))
             .await
@@ -276,7 +269,6 @@ fn timeout_during_streaming_race() {
             // issues
             .set_res_timeout(Duration::from_millis(590))
             .set_body_timeout(Duration::from_millis(600))
-            .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
         let res = spawn(get_req::<AsyncBodyImage<Bytes>>(&url, tune))
             .await
