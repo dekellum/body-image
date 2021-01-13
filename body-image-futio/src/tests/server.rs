@@ -13,7 +13,7 @@ use futures_util::{
 };
 use http::{Request, Response};
 use lazy_static::lazy_static;
-use tao_log::{debug, debugv, warn};
+use tao_log::{debug, debugv, info, warn};
 
 use tokio::net::TcpListener;
 use tokio::spawn;
@@ -47,10 +47,12 @@ macro_rules! service {
         let (listener, addr) = local_bind().unwrap();
         let fut = async move {
             for i in 0..$c {
+                info!("service! accepting...");
                 let socket = listener.accept()
                     .await
                     .expect("accept").0;
                 socket.set_nodelay(true).expect("nodelay");
+                info!("service! accepted, serve...");
                 let res = Http::new()
                     .serve_connection(socket, service_fn($s))
                     .await;
@@ -59,6 +61,7 @@ macro_rules! service {
                     break;
                 }
             }
+            info!("service! completing");
         };
         (format!("http://{}", &addr), fut)
     }}
@@ -71,6 +74,7 @@ fn post_echo_body() {
         let (url, srv) = service!(1, echo);
         let jh = spawn(srv);
         let tune = FutioTuner::new()
+            .set_res_timeout(Duration::from_millis(1000))
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
             .finish();
         let body = fs_body_image(445);
