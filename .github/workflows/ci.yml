@@ -16,29 +16,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - rust: 1.39.0
-            os: ubuntu-20.04
-          - rust: 1.39.0
-            os: ubuntu-20.04
-            extras: [update]
           - rust: 1.45.2
             os: ubuntu-20.04
-          - rust: 1.45.2
-            os: ubuntu-20.04
-            extras: [update]
           - rust: 1.45.2
             os: macos-latest
           - rust: 1.45.2
-            os: macos-latest
-            extras: [update]
-          - rust: stable
-            os: ubuntu-20.04
-            extras: [update]
-          - rust: nightly
-            os: ubuntu-20.04
-          - rust: nightly
-            os: ubuntu-20.04
-            extras: [update]
+            os: windows-latest
 
     steps:
       - name: Checkout
@@ -51,75 +34,24 @@ jobs:
           toolchain: ${{ matrix.rust }}
           override: true
 
-      - name: Update deps
-        if: ${{ contains(matrix.extras, 'update') }}
-        run: cargo update
+      - name: Test futio (post_echo_body)
+        working-directory: body-image-futio
+        run: cargo test post_echo_body -- --test-threads=1 --nocapture
+        env:
+          RUST_BACKTRACE: 1
+          TEST_LOG: 2
 
-      - name: Test body-image (no features)
-        working-directory: body-image
-        run: cargo test --no-default-features
-      - name: Test body-image (all features)
-        working-directory: body-image
-        run: cargo test --all-features
-      - name: Build body-image (all targets)
-        if: ${{ matrix.rust == 'nightly' }}
-        working-directory: body-image
-        run: cargo build --all-features --all-targets
+      - name: Test futio (post_echo_async_body)
+        working-directory: body-image-futio
+        run: cargo test post_echo_async_body -- --test-threads=1 --nocapture
+        env:
+          RUST_BACKTRACE: 1
+          TEST_LOG: 2
 
-      - name: Test barc (no features)
-        working-directory: barc
-        run: cargo test --no-default-features
-      - name: Test barc (mmap)
-        working-directory: barc
-        run: cargo test --no-default-features --features mmap
-      - name: Test barc (brotli)
-        working-directory: barc
-        run: cargo test --no-default-features --features brotli
-      - name: Test barc (all features)
-        working-directory: barc
-        run: cargo test --all-features
-      - name: Build barc (all targets)
-        if: ${{ matrix.rust == 'nightly' }}
-        working-directory: barc
-        run: cargo build --all-features --all-targets
+      - name: Test futio (tests::server)
+        working-directory: body-image-futio
+        run: cargo test tests::server -- --test-threads=1 --nocapture
+        env:
+          RUST_BACKTRACE: 1
+          TEST_LOG: 2
 
-      - name: Test futio (no features)
-        if: ${{ matrix.rust != '1.39.0' }}
-        working-directory: body-image-futio
-        run: cargo test --no-default-features
-      - name: Test futio (mmap)
-        if: ${{ matrix.rust != '1.39.0' }}
-        working-directory: body-image-futio
-        run: cargo test --no-default-features --features mmap
-      - name: Test futio (brotli)
-        if: ${{ matrix.rust != '1.39.0' }}
-        working-directory: body-image-futio
-        run: cargo test --no-default-features --features brotli
-      - name: Test futio (default)
-        if: ${{ matrix.rust != '1.39.0' }}
-        working-directory: body-image-futio
-        run: cargo test
-      - name: Build futio (all targets)
-        if: ${{ matrix.rust == 'nightly' }}
-        working-directory: body-image-futio
-        run: cargo build --all-targets
-
-      - name: Build barc-cli (no features)
-        working-directory: barc-cli
-        run: cargo build --no-default-features
-      - name: Build barc-cli (mmap)
-        if: ${{ matrix.rust != '1.39.0' }}
-        working-directory: barc-cli
-        run: cargo build --no-default-features --features mmap
-      - name: Build barc-cli (brotli)
-        if: ${{ matrix.rust != '1.39.0' }}
-        working-directory: barc-cli
-        run: cargo build --no-default-features --features brotli
-      - name: Build barc-cli (futio)
-        if: ${{ matrix.rust != '1.39.0' }}
-        working-directory: barc-cli
-        run: cargo build --no-default-features --features futio
-      - name: Build barc-cli (all-features)
-        if: ${{ matrix.rust != '1.39.0' }}
-        working-directory: barc-cli
-        run: cargo build --all-features
