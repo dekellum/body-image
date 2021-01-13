@@ -81,6 +81,7 @@ fn post_echo_body() {
         let res = spawn(post_body_req::<Body>(&url, body, tune))
             .await
             .unwrap();
+        info!("dialog futr ready, awaiting service join...");
         let _ = jh .await;
         res
     });
