@@ -1,7 +1,4 @@
 use std::future::Future;
-use std::io;
-use std::net::SocketAddr;
-use std::net::TcpListener as StdTcpListener;
 use std::time::Duration;
 
 use blocking_permit::{Semaphore, Semaphorish};
@@ -13,23 +10,32 @@ use futures_util::{
 };
 use http::{Request, Response};
 use lazy_static::lazy_static;
-use tao_log::{debug, debugv, info, warn};
+use tao_log::{debug, debugv, warn};
 
-use tokio::net::TcpListener;
 use tokio::spawn;
 
 use hyper::Body;
 use hyper::client::{Client, HttpConnector};
-use hyper::server::conn::Http;
 use hyper::service::{make_service_fn, service_fn};
 
 use body_image::{BodyImage, BodySink, Dialog, Recorded, Tunables, Tuner};
+
+#[cfg(feature = "serve-connection-tests")]
+use {
+    std::io,
+    std::net::SocketAddr,
+    std::net::TcpListener as StdTcpListener,
+    tao_log::info,
+    tokio::net::TcpListener,
+    hyper::server::conn::Http,
+};
 
 use crate::{
     AsyncBodyImage, AsyncBodySink,
     BlockingPolicy,
     Flaw, FutioError, FutioTunables, FutioTuner,
     RequestRecord, RequestRecorder,
+    StreamWrapper,
     request_dialog, user_agent,
     UniBodyBuf
 };
@@ -42,6 +48,7 @@ lazy_static! {
 
 // Return a tuple of (serv: impl Future, url: String) that will service C
 // requests via function, and the url to access it via a local tcp port.
+#[cfg(feature = "serve-connection-tests")]
 macro_rules! service {
     ($c:literal, $s:ident) => {{
         let (listener, addr) = local_bind().unwrap();
@@ -68,10 +75,11 @@ macro_rules! service {
 }
 
 #[test]
-fn post_echo_body_server() {
+#[cfg(not(feature = "serve-connection-tests"))]
+fn post_echo_body() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, shutdown_tx, srv_jh) = echo_server();
+        let (url, shutdown_tx, srv_jh) = server(echo);
         let client = Client::builder().build(HttpConnector::new());
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
@@ -80,16 +88,13 @@ fn post_echo_body_server() {
             .set_body_timeout(Duration::from_millis(10000))
             .finish();
         let body = fs_body_image(445);
-        let req: RequestRecord<AsyncBodyImage<Bytes>> = http::Request::builder()
-            .method(http::Method::POST)
-            .uri(url)
-            .record_body_image(body, tune.clone())
-            .unwrap();
-        let res = spawn(request_dialog(&client, req, tune))
+
+        let res = spawn(
+            post_dialog::<AsyncBodyImage<Bytes>>(&client, &url, body, tune)
+        )
             .await
             .unwrap();
 
-        // Graceful shutdown sequence (otherwise this will occasional hang)
         drop(client);
         shutdown_tx.send(()).unwrap();
         let _ = srv_jh .await;
@@ -107,7 +112,9 @@ fn post_echo_body_server() {
 }
 
 #[test]
+#[cfg(feature = "serve-connection-tests")]
 fn post_echo_body() {
+    // FAILED
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
         let (url, srv) = service!(1, echo);
@@ -140,8 +147,8 @@ fn post_echo_body() {
 fn post_echo_async_body() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = service!(1, echo_async);
-        let jh = spawn(srv);
+        let (url, shutdown_tx, srv_jh) = server(echo_async);
+        let client = Client::builder().build(HttpConnector::new());
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
             .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
@@ -149,12 +156,16 @@ fn post_echo_async_body() {
             .set_body_timeout(Duration::from_millis(10000))
             .finish();
         let body = fs_body_image(445);
+
         let res = spawn(
-            post_body_req::<AsyncBodyImage<Bytes>>(&url, body, tune)
+            post_dialog::<AsyncBodyImage<Bytes>>(&client, &url, body, tune)
         )
             .await
             .unwrap();
-        let _ = jh .await;
+
+        drop(client);
+        shutdown_tx.send(()).unwrap();
+        let _ = srv_jh .await;
         res
     });
     match res {
@@ -172,8 +183,8 @@ fn post_echo_async_body() {
 fn post_echo_async_body_multi() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = service!(20, echo_async);
-        let jh = spawn(srv);
+        let (url, shutdown_tx, srv_jh) = server(echo_async);
+        let client = Client::builder().build(HttpConnector::new());
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
             .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
@@ -182,12 +193,15 @@ fn post_echo_async_body_multi() {
             .finish();
         let futures: FuturesUnordered<_> = (0..20).map(|i| {
             let body = fs_body_image(445 + i);
-            spawn(post_body_req::<AsyncBodyImage<Bytes>>(
-                &url, body, tune.clone()
+            spawn(post_dialog::<AsyncBodyImage<Bytes>>(
+                &client, &url, body, tune.clone()
             ))
         }).collect();
         let res = futures.collect::<Vec<_>>() .await;
-        let _ = jh. await;
+
+        drop(client);
+        shutdown_tx.send(()).unwrap();
+        let _ = srv_jh .await;
         res
     });
     assert_eq!(20, res.iter().filter(|r| r.is_ok()).count());
@@ -198,8 +212,9 @@ fn post_echo_async_body_multi() {
 fn post_echo_async_body_mmap_copy() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = service!(1, echo_async);
-        let jh = spawn(srv);
+        let (url, shutdown_tx, srv_jh) = server(echo_async);
+        let client = Client::builder().build(HttpConnector::new());
+
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(17).finish())
             .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
@@ -209,11 +224,14 @@ fn post_echo_async_body_mmap_copy() {
         let mut body = fs_body_image(445);
         body.mem_map().unwrap();
         let res = spawn(
-            post_body_req::<AsyncBodyImage<Bytes>>(&url, body, tune)
+            post_dialog::<AsyncBodyImage<Bytes>>(&client, &url, body, tune)
         )
             .await
             .unwrap();
-        let _ = jh .await;
+
+        drop(client);
+        shutdown_tx.send(()).unwrap();
+        let _ = srv_jh .await;
         res
     });
     match res {
@@ -232,8 +250,10 @@ fn post_echo_async_body_mmap_copy() {
 fn post_echo_uni_body_mmap() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = service!(1, echo_uni_mmap);
-        let jh = spawn(srv);
+        let (url, shutdown_tx, srv_jh) = server(echo_uni_mmap);
+
+        let client = Client::builder().build(HttpConnector::new());
+
         let tune = FutioTuner::new()
             .set_image(Tuner::new().set_buffer_size_fs(2048).finish())
             .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
@@ -241,12 +261,16 @@ fn post_echo_uni_body_mmap() {
             .set_body_timeout(Duration::from_millis(10000))
             .finish();
         let body = fs_body_image(194_767);
-        let res = spawn(post_body_req::<AsyncBodyImage<UniBodyBuf>>(
-            &url, body, tune
-        ))
+
+        let res = spawn(
+            post_dialog::<AsyncBodyImage<UniBodyBuf>>(&client, &url, body, tune)
+        )
             .await
             .unwrap();
-        let _ = jh .await;
+
+        drop(client);
+        shutdown_tx.send(()).unwrap();
+        let _ = srv_jh .await;
         res
     });
     match res {
@@ -264,17 +288,25 @@ fn post_echo_uni_body_mmap() {
 fn timeout_before_response() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = service!(1, delayed);
-        let jh = spawn(srv);
+        let (url, shutdown_tx, srv_jh) = server(delayed);
+
+        let client = Client::builder().build(HttpConnector::new());
+
         let tune = FutioTuner::new()
             .set_res_timeout(Duration::from_millis(10))
             .set_body_timeout(Duration::from_millis(600))
             .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
-        let res = spawn(get_req::<AsyncBodyImage<Bytes>>(&url, tune))
+
+        let res = spawn(
+            get_dialog::<AsyncBodyImage<Bytes>>(&client, &url, tune)
+        )
             .await
             .unwrap();
-        let _ = jh .await;
+
+        drop(client);
+        shutdown_tx.send(()).unwrap();
+        let _ = srv_jh .await;
         res
     });
     match res {
@@ -292,17 +324,25 @@ fn timeout_before_response() {
 fn timeout_during_streaming() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = service!(1, delayed);
-        let jh = spawn(srv);
+        let (url, shutdown_tx, srv_jh) = server(delayed);
+
+        let client = Client::builder().build(HttpConnector::new());
+
         let tune = FutioTuner::new()
             .unset_res_timeout() // workaround, see *_race version of test below
             .set_body_timeout(Duration::from_millis(600))
             .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
-        let res = spawn(get_req::<AsyncBodyImage<Bytes>>(&url, tune))
+
+        let res = spawn(
+            get_dialog::<AsyncBodyImage<Bytes>>(&client, &url, tune)
+        )
             .await
             .unwrap();
-        let _ = jh .await;
+
+        drop(client);
+        shutdown_tx.send(()).unwrap();
+        let _ = srv_jh .await;
         res
     });
     match res {
@@ -316,24 +356,31 @@ fn timeout_during_streaming() {
     }
 }
 
-#[cfg(feature = "may-fail")]
 #[test]
+#[cfg(feature = "may-fail")]
 fn timeout_during_streaming_race() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
-        let (url, srv) = service!(1, delayed);
-        let jh = spawn(srv);
+        let (url, shutdown_tx, srv_jh) = server(delayed);
+
+        let client = Client::builder().build(HttpConnector::new());
+
         let tune = FutioTuner::new()
-            // Correct test assertion, but this may fail due to timing
-            // issues
+            // Correct test assertion, but this may fail due to timing issues
             .set_res_timeout(Duration::from_millis(590))
             .set_body_timeout(Duration::from_millis(600))
             .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
             .finish();
-        let res = spawn(get_req::<AsyncBodyImage<Bytes>>(&url, tune))
+
+        let res = spawn(
+            get_dialog::<AsyncBodyImage<Bytes>>(&client, &url, tune)
+        )
             .await
             .unwrap();
-        let _ = jh .await;
+
+        drop(client);
+        shutdown_tx.send(()).unwrap();
+        let _ = srv_jh .await;
         res
     });
     match res {
@@ -361,19 +408,13 @@ fn get_async_body_multi_server() {
             .set_res_timeout(Duration::from_millis(8000))
             .set_body_timeout(Duration::from_millis(10000))
             .finish();
-        let connector = HttpConnector::new();
-        let client = Client::builder().build(connector);
+        let client = Client::builder().build(HttpConnector::new());
         let futures: FuturesUnordered<_> = (0..20).map(|_| {
-            let req: RequestRecord<AsyncBodyImage<Bytes>> = http::Request::builder()
-                .method(http::Method::GET)
-                .uri(&url)
-                .record()
-                .unwrap();
-            spawn(request_dialog(&client, req, tune.clone()))
+            spawn(get_dialog::<AsyncBodyImage<Bytes>>(&client, &url, tune.clone()))
         }).collect();
         let res = futures.collect::<Vec<_>>() .await;
 
-        // Graceful shutdown sequence (otherwise this will occasional hang)
+        // Graceful shutdown sequence (otherwise this would occasionally hang)
         drop(client);
         shutdown_tx.send(()).unwrap();
         let _ = srv_jh .await;
@@ -499,6 +540,7 @@ async fn delayed(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
        .expect("response"))
 }
 
+#[cfg(feature = "serve-connection-tests")]
 fn local_bind() -> Result<(TcpListener, SocketAddr), io::Error> {
     let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
     let std_listener = StdTcpListener::bind(addr).unwrap();
@@ -554,15 +596,21 @@ fn body_server(body: BodyImage, tune: FutioTunables)
     (local_addr, tx, jh)
 }
 
-fn echo_server()
+fn server<F, S, RB, RE>(f: F)
     -> (String,
         tokio::sync::oneshot::Sender<()>,
         tokio::task::JoinHandle<Result<(), hyper::Error>>)
+    where F: Fn(Request<hyper::Body>) -> S + Send + Sync + 'static + Copy,
+          S: Future<Output = Result<Response<RB>, RE>> + Send + 'static,
+          RB: http_body::Body + Send + Sync + 'static,
+          RB::Data: Send,
+          RB::Error: Into<Flaw>,
+          RE: Into<Flaw>
 {
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let server = hyper::Server::bind(&([127, 0, 0, 1], 0).into())
         .serve(make_service_fn(move |_| {
-            future::ok::<_, FutioError>(service_fn(echo))
+            future::ok::<_, FutioError>(service_fn(f))
         }));
     let local_addr = format!("http://{}", server.local_addr()).to_owned();
     let server = server
@@ -575,24 +623,43 @@ fn echo_server()
     (local_addr, tx, jh)
 }
 
-fn get_req<T>(url: &str, tune: FutioTunables)
-    -> impl Future<Output=Result<Dialog, FutioError>> + Send
-    where T: http_body::Body + Send + 'static,
-          T::Data: Send,
-          T::Error: Into<Flaw>,
-          http::request::Builder: RequestRecorder<T>
+fn get_dialog<B>(
+    client: &hyper::Client<HttpConnector, B>,
+    url: &str,
+    tune: FutioTunables)
+    -> impl Future<Output=Result<Dialog, FutioError>> + Send + 'static
+    where B: StreamWrapper + http_body::Body + Send + 'static,
+          B::Data: Send,
+          B::Error: Into<Flaw>
 {
-    let req: RequestRecord<T> = http::Request::builder()
+    let req: RequestRecord<B> = http::Request::builder()
         .method(http::Method::GET)
         .uri(url)
         .header(http::header::USER_AGENT, &user_agent()[..])
         .record()
         .unwrap();
-    let connector = HttpConnector::new();
-    let client: Client<_, T> = Client::builder().build(connector);
     request_dialog(&client, req, tune)
 }
 
+fn post_dialog<B>(
+    client: &hyper::Client<HttpConnector, B>,
+    url: &str,
+    body: BodyImage,
+    tune: FutioTunables)
+    -> impl Future<Output=Result<Dialog, FutioError>> + Send + 'static
+    where B: StreamWrapper + http_body::Body + Send + 'static,
+          B::Data: Send,
+          B::Error: Into<Flaw>
+{
+    let req: RequestRecord<B> = http::Request::builder()
+        .method(http::Method::POST)
+        .uri(url)
+        .record_body_image(body, tune.clone())
+        .unwrap();
+    request_dialog(&client, req, tune)
+}
+
+#[cfg(feature = "serve-connection-tests")]
 fn post_body_req<T>(url: &str, body: BodyImage, tune: FutioTunables)
     -> impl Future<Output=Result<Dialog, FutioError>> + Send
     where T: http_body::Body + Send + 'static,

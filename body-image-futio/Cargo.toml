@@ -40,6 +40,7 @@ mmap = ["memmap", "olio/mmap", "body-image/mmap"]
 
 may-fail = [] # Tests which may fail
 tangential = [] # less interesting benchmarks
+serve-connection-tests = [] # Older style server tests with portability problem
 
 [lib]
 doctest = false
