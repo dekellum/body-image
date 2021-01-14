@@ -74,7 +74,8 @@ fn post_echo_body() {
         let (url, srv) = service!(1, echo);
         let jh = spawn(srv);
         let tune = FutioTuner::new()
-            .set_res_timeout(Duration::from_millis(10000))
+            .set_res_timeout(Duration::from_millis(8000))
+            .set_body_timeout(Duration::from_millis(10000))
             .set_image(Tuner::new().set_buffer_size_fs(2120).finish())
             .finish();
         let body = fs_body_image(44500);
