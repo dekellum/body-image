@@ -39,4 +39,4 @@ jobs:
         run: cargo test tests::server -- --test-threads=1 --nocapture
         env:
           RUST_BACKTRACE: 1
-          TEST_LOG: 2
+          TEST_LOG: 3
