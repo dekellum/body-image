@@ -16,11 +16,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - rust: 1.45.2
+          - rust: stable
             os: ubuntu-20.04
-          - rust: 1.45.2
+          - rust: stable
             os: macos-latest
-          - rust: 1.45.2
+          - rust: stable
             os: windows-latest
 
     steps:
