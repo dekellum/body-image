@@ -75,9 +75,9 @@ fn post_echo_body() {
         let jh = spawn(srv);
         let tune = FutioTuner::new()
             .set_res_timeout(Duration::from_millis(10000))
-            .set_image(Tuner::new().set_buffer_size_fs(17).finish())
+            .set_image(Tuner::new().set_buffer_size_fs(2120).finish())
             .finish();
-        let body = fs_body_image(445);
+        let body = fs_body_image(44500);
         let res = spawn(post_body_req::<Body>(&url, body, tune))
             .await
             .unwrap();
@@ -88,7 +88,7 @@ fn post_echo_body() {
     match res {
         Ok(dialog) => {
             debugv!(&dialog);
-            assert_eq!(dialog.res_body().len(), 445);
+            assert_eq!(dialog.res_body().len(), 44500);
         }
         Err(e) => {
             panic!("failed with: {}", e);
