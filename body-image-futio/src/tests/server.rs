@@ -520,7 +520,10 @@ fn post_body_req<T>(url: &str, body: BodyImage, tune: FutioTunables)
         .record_body_image(body, tune.clone())
         .unwrap();
     let connector = HttpConnector::new();
-    let client: Client<_, T> = Client::builder().build(connector);
+    let client: Client<_, T> = Client::builder()
+        .pool_max_idle_per_host(0)
+        .retry_canceled_requests(false)
+        .build(connector);
     request_dialog(&client, req, tune)
 }
 
