@@ -530,8 +530,8 @@ fn post_body_req<T>(url: &str, body: BodyImage, tune: FutioTunables)
 
 fn new_limited_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .max_blocking_threads(2)
+        .worker_threads(10)
+        .max_blocking_threads(10)
         .enable_io()
         .enable_time()
         .build()
