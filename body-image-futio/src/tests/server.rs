@@ -68,6 +68,45 @@ macro_rules! service {
 }
 
 #[test]
+fn post_echo_body_server() {
+    assert!(test_logger());
+    let res = new_limited_runtime().block_on(async {
+        let (url, shutdown_tx, srv_jh) = echo_server();
+        let client = Client::builder().build(HttpConnector::new());
+        let tune = FutioTuner::new()
+            .set_image(Tuner::new().set_buffer_size_fs(17).finish())
+            .set_blocking_policy(BlockingPolicy::Permit(&BLOCKING_TEST_SET))
+            .set_res_timeout(Duration::from_millis(8000))
+            .set_body_timeout(Duration::from_millis(10000))
+            .finish();
+        let body = fs_body_image(445);
+        let req: RequestRecord<AsyncBodyImage<Bytes>> = http::Request::builder()
+            .method(http::Method::POST)
+            .uri(url)
+            .record_body_image(body, tune.clone())
+            .unwrap();
+        let res = spawn(request_dialog(&client, req, tune))
+            .await
+            .unwrap();
+
+        // Graceful shutdown sequence (otherwise this will occasional hang)
+        drop(client);
+        shutdown_tx.send(()).unwrap();
+        let _ = srv_jh .await;
+        res
+    });
+    match res {
+        Ok(dialog) => {
+            debugv!(&dialog);
+            assert_eq!(dialog.res_body().len(), 445);
+        }
+        Err(e) => {
+            panic!("failed with: {}", e);
+        }
+    }
+}
+
+#[test]
 fn post_echo_body() {
     assert!(test_logger());
     let res = new_limited_runtime().block_on(async {
@@ -503,6 +542,27 @@ fn body_server(body: BodyImage, tune: FutioTunables)
                         .expect("response")
                 )
             }))
+        }));
+    let local_addr = format!("http://{}", server.local_addr()).to_owned();
+    let server = server
+        .with_graceful_shutdown(async {
+            rx .await
+                .map_err(|e| warn!("On shutdown: {}", e))
+                .ok();
+        });
+    let jh = spawn(server);
+    (local_addr, tx, jh)
+}
+
+fn echo_server()
+    -> (String,
+        tokio::sync::oneshot::Sender<()>,
+        tokio::task::JoinHandle<Result<(), hyper::Error>>)
+{
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let server = hyper::Server::bind(&([127, 0, 0, 1], 0).into())
+        .serve(make_service_fn(move |_| {
+            future::ok::<_, FutioError>(service_fn(echo))
         }));
     let local_addr = format!("http://{}", server.local_addr()).to_owned();
     let server = server
