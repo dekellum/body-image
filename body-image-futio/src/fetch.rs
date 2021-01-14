@@ -7,6 +7,7 @@ use futures_util::{
 };
 
 use hyperx::header::{ContentLength, TypedHeaders};
+use tao_log::info;
 
 use body_image::{BodySink, Dialog};
 
@@ -79,7 +80,9 @@ pub fn request_dialog<CN, B>(
     };
 
     async move {
+        info!("request futr awaiting...");
         let monolog = futr .await?;
+        info!("request futr ready");
 
         let body_timeout = tune.body_timeout();
 
@@ -97,6 +100,7 @@ pub fn request_dialog<CN, B>(
             Either::Right(futr)
         };
 
+        info!("response futr awaiting...");
         futr .await? .prepare()
     }
 }
