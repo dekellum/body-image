@@ -39,4 +39,11 @@ jobs:
         run: cargo test tests::server -- --test-threads=1 --nocapture
         env:
           RUST_BACKTRACE: 1
-          TEST_LOG: 3
+          TEST_LOG: 1
+
+      - name: Test futio (live fetch)
+        working-directory: body-image-futio
+        run: cargo test --features=may-fail live -- --test-threads=1 --nocapture
+        env:
+          RUST_BACKTRACE: 1
+          TEST_LOG: 2
