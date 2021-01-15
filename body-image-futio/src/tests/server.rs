@@ -51,7 +51,6 @@ macro_rules! service {
                 let socket = listener.accept()
                     .await
                     .expect("accept").0;
-                socket.set_nodelay(true).expect("nodelay");
                 info!("service! accepted, serve...");
                 let res = Http::new()
                     .serve_connection(socket, service_fn($s))
