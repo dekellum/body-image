@@ -1,4 +1,4 @@
-## 2.0.1 (unreleased)
+## 2.0.1 (2021-1-17)
 * Constrain remove_dir_all transitive dep of tempfile to 0.5.2 to preserve MSRV.
 
 * Constrain http to <0.2.3 to avoid bytes duplicates.
