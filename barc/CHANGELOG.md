@@ -1,5 +1,10 @@
 ## 2.2.0 (unreleased)
 
+## 2.0.1 (2021-1-17)
+* Constrain http to <0.2.3 to avoid bytes duplicates.
+
+* Misc documentation improvements.
+
 ## 2.0.0 (2020-1-13)
 * Change `Compress` implementations default `check_identity` to true (was
   previously introduced, in 1.1.0, with default false for interoperability).
