@@ -10,7 +10,7 @@ _http_, _hyper_, and _tokio_ for both client and server use.
 
 ## Minimum supported rust version
 
-MSRV := 1.39.0
+MSRV := 1.45.2
 
 The crate will fail fast on any lower rustc (via a build.rs version
 check) and is also CI tested on this version.

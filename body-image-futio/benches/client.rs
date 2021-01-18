@@ -7,10 +7,11 @@ use std::cmp;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use blocking_permit::{
     DispatchPool, Semaphore, Semaphorish,
-    register_dispatch_pool,
+    deregister_dispatch_pool, register_dispatch_pool,
 };
 use bytes::Bytes;
 
@@ -43,7 +44,7 @@ lazy_static! {
 
 #[bench]
 fn client_01_ram(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS+EXTRA_THREADS, None, None);
     let tune = FutioTuner::new()
         .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
         .finish();
@@ -52,7 +53,7 @@ fn client_01_ram(b: &mut Bencher) {
 
 #[bench]
 fn client_02_ram_gather(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS+EXTRA_THREADS, None, None);
     let tune = FutioTuner::new()
         .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
         .finish();
@@ -61,7 +62,7 @@ fn client_02_ram_gather(b: &mut Bencher) {
 
 #[bench]
 fn client_03_ram_gather_yield(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS+EXTRA_THREADS, None, None);
     let tune = FutioTuner::new()
         .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
         .set_stream_item_size(2 * 1024 * 1024) // huge page size
@@ -72,7 +73,7 @@ fn client_03_ram_gather_yield(b: &mut Bencher) {
 #[cfg(feature = "tangential")]
 #[bench]
 fn client_03_ram_uni(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS+EXTRA_THREADS, None, None);
     let tune = FutioTuner::new()
         .set_image(Tuner::new().set_max_body_ram(0x2000 * 1025).finish())
         .finish();
@@ -81,7 +82,7 @@ fn client_03_ram_uni(b: &mut Bencher) {
 
 #[bench]
 fn client_20_fs_direct(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS+EXTRA_THREADS, None, None);
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -96,7 +97,7 @@ fn client_20_fs_direct(b: &mut Bencher) {
 
 #[bench]
 fn client_21_fs_yield(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS+EXTRA_THREADS, None, None);
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -111,7 +112,7 @@ fn client_21_fs_yield(b: &mut Bencher) {
 
 #[bench]
 fn client_22_fs_permit(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS, Some(EXTRA_THREADS), None);
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -131,7 +132,7 @@ fn client_23_fs_dispatch1(b: &mut Bencher) {
         .pool_size(1)
         .queue_length(EXTRA_THREADS)
         .create();
-    let rt = th_dispatch_runtime(pool);
+    let rt = mt_runtime(CORE_THREADS, None, Some(pool));
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -150,7 +151,7 @@ fn client_24_fs_dispatch(b: &mut Bencher) {
         .pool_size(EXTRA_THREADS)
         .queue_length(EXTRA_THREADS)
         .create();
-    let rt = th_dispatch_runtime(pool);
+    let rt = mt_runtime(CORE_THREADS, None, Some(pool));
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -170,7 +171,7 @@ fn client_25_fs_dispatch3(b: &mut Bencher) {
         .pool_size(3)
         .queue_length(EXTRA_THREADS)
         .create();
-    let rt = th_dispatch_runtime(pool);
+    let rt = mt_runtime(CORE_THREADS, None, Some(pool));
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -186,7 +187,7 @@ fn client_25_fs_dispatch3(b: &mut Bencher) {
 #[cfg(feature = "mmap")]
 #[bench]
 fn client_30_mmap_direct_copy(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS+EXTRA_THREADS, None, None);
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -203,7 +204,7 @@ fn client_30_mmap_direct_copy(b: &mut Bencher) {
 #[cfg(feature = "mmap")]
 #[bench]
 fn client_31_mmap_permit_copy(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS, Some(EXTRA_THREADS), None);
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -219,7 +220,7 @@ fn client_31_mmap_permit_copy(b: &mut Bencher) {
 #[cfg(feature = "mmap")]
 #[bench]
 fn client_35_mmap_direct(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS+EXTRA_THREADS, None, None);
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -235,7 +236,7 @@ fn client_35_mmap_direct(b: &mut Bencher) {
 #[cfg(feature = "mmap")]
 #[bench]
 fn client_36_mmap_yield(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS+EXTRA_THREADS, None, None);
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -252,7 +253,7 @@ fn client_36_mmap_yield(b: &mut Bencher) {
 #[cfg(feature = "mmap")]
 #[bench]
 fn client_37_mmap_permit(b: &mut Bencher) {
-    let rt = th_direct_runtime();
+    let rt = mt_runtime(CORE_THREADS, Some(EXTRA_THREADS), None);
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -272,7 +273,7 @@ fn client_38_mmap_dispatch(b: &mut Bencher) {
         .pool_size(EXTRA_THREADS)
         .queue_length(EXTRA_THREADS)
         .create();
-    let rt = th_dispatch_runtime(pool);
+    let rt = mt_runtime(CORE_THREADS, None, Some(pool));
     let tune = FutioTuner::new()
         .set_image(
             Tuner::new()
@@ -294,7 +295,7 @@ enum ClientOp {
 }
 
 fn client_run<I, T, E>(
-    mut rt: Runtime,
+    rt: Runtime,
     tune: FutioTunables,
     op: ClientOp,
     b: &mut Bencher)
@@ -303,6 +304,7 @@ fn client_run<I, T, E>(
           T: AsRef<[u8]> + 'static,
           E: std::fmt::Debug + 'static
 {
+    let _guard = rt.enter();
     // Use external server if provided URL in env var, else spawn our own, in
     // process.
     let (url, shutdown_tx, srv_jh) =
@@ -310,11 +312,11 @@ fn client_run<I, T, E>(
     {
         (uv, None, None)
     } else {
-        let (url, tx, jh) = rt.enter(|| {
+        let (url, tx, jh) = {
             let sink = BodySink::with_ram_buffers(1024);
             let body = sink_data(sink).unwrap();
             body_server(body, FutioTunables::default())
-        });
+        };
         (url, Some(tx), Some(jh))
     };
 
@@ -370,7 +372,7 @@ fn client_run<I, T, E>(
 fn body_server(body: BodyImage, tune: FutioTunables)
     -> (String,
         tokio::sync::oneshot::Sender<()>,
-        tokio::task::JoinHandle<Result<(), hyper::error::Error>>)
+        tokio::task::JoinHandle<Result<(), hyper::Error>>)
 {
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let server = hyper::Server::bind(&([127, 0, 0, 1], 0).into())
@@ -440,27 +442,54 @@ fn test_path() -> Result<PathBuf, Flaw> {
     Ok(tpath.to_path_buf())
 }
 
-fn th_direct_runtime() -> Runtime {
-    tokio::runtime::Builder::new()
-        .core_threads(CORE_THREADS+EXTRA_THREADS)
-        .max_threads(CORE_THREADS+EXTRA_THREADS)
-        .threaded_scheduler()
-        .enable_io()
-        .enable_time()
-        .build()
-        .expect("threaded runtime build")
-}
+fn mt_runtime(
+    core: usize,
+    blocking: Option<usize>,
+    dispatch: Option<DispatchPool>)
+    -> Runtime
+{
+    struct AbortOnPanic;
 
-fn th_dispatch_runtime(pool: DispatchPool) -> Runtime {
-    tokio::runtime::Builder::new()
-        .core_threads(CORE_THREADS)
-        .max_threads(CORE_THREADS)
-        .threaded_scheduler()
-        .enable_io()
-        .enable_time()
-        .on_thread_start(move || {
+    impl Drop for AbortOnPanic {
+        fn drop(&mut self) {
+            std::process::abort();
+        }
+    }
+
+    let mut bldr = tokio::runtime::Builder::new_multi_thread();
+    bldr.worker_threads(core);
+
+    let extra_threads = match blocking {
+        Some(c) => c,
+        None => 1
+    };
+    bldr.max_blocking_threads(extra_threads);
+
+    if let Some(pool) = dispatch {
+        bldr.on_thread_start(move || {
             register_dispatch_pool(pool.clone());
-        })
+        });
+        bldr.on_thread_stop(|| {
+            deregister_dispatch_pool();
+        });
+    }
+    let cntr = AtomicUsize::new(0);
+    let mut max = core;
+    if let Some(b) = blocking {
+        max += b;
+    }
+    bldr.thread_name_fn(move || {
+        let c = cntr.fetch_add(1, Ordering::SeqCst);
+        if c >= max {
+            let _aborter = AbortOnPanic;
+            panic!("spawn_blocking/block_in_place must have been used!");
+        } else {
+            format!("worker-{}", c)
+        }
+    });
+
+    bldr.enable_io()
+        .enable_time()
         .build()
-        .expect("threaded dispatch runtime build")
+        .unwrap()
 }

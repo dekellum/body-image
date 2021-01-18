@@ -3,7 +3,16 @@ use std::process::Command;
 
 fn main() {
     static PACKAGE: &'static str = "barc-cli";
-    let msrv = vec![1, 39];
+
+    let msrv;
+    #[cfg(not(any(feature="futio", feature="mmap", feature="brotli")))]
+    {
+        msrv = vec![1, 39];
+    }
+    #[cfg(any(feature="futio", feature="mmap", feature="brotli"))]
+    {
+        msrv = vec![1, 45, 2];
+    }
 
     static VERSION: &'static str = env!("CARGO_PKG_VERSION");
     static M_V: &'static str = "minimum supported rust version (MSRV)";

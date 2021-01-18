@@ -65,7 +65,7 @@ impl OutputBuf for UniBodyBuf {
     fn from_mmap(mmap: MemHandle<Mmap>) -> Result<Self, io::Error> {
         let buf = MemMapBuf::new(mmap);
         buf.advise_sequential()?;
-        let _b = buf.bytes()[0];
+        let _b = buf.chunk()[0];
         debug!("MemMap prepared for sequential read (len: {})", buf.remaining());
         Ok(UniBodyBuf::from_mmap(buf))
     }
@@ -180,10 +180,11 @@ impl<B, BA> AsyncBodyImage<B, BA>
                     avail
                 ) as usize;
                 let mut buf = BytesMut::with_capacity(rlen);
-                let b = unsafe {
-                    &mut *(buf.bytes_mut()
-                           as *mut [mem::MaybeUninit<u8>] as *mut [u8])
-                };
+                let b = unsafe { &mut *(
+                    buf.chunk_mut() as *mut _
+                        as *mut [mem::MaybeUninit<u8>]
+                        as *mut [u8]
+                )};
                 loop {
                     match rs.read(&mut b[..rlen]) {
                         Ok(0) => break Poll::Ready(None),

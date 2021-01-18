@@ -1,3 +1,8 @@
+## 2.2.0 (unreleased)
+* Upgrade to bytes 1.0 and lift constraint on http dependency (MSRV 1.39.0).
+
+* Upgrade to olio 1.4.0 (MSRV 1.39.0).
+
 ## 2.0.1 (2021-1-17)
 * Constrain remove_dir_all transitive dep of tempfile to 0.5.2 to preserve MSRV.
 

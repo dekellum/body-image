@@ -19,13 +19,14 @@ use body_image::{BodyError, BodySink, BodyImage};
 use body_image_futio::*;
 
 fn main() {
-    let mut rt = th_runtime();
+    let rt = th_runtime();
+    let _guard = rt.enter();
 
-    let (url, srv_jh) = rt.enter(|| {
+    let (url, srv_jh) = {
         let sink = BodySink::with_ram_buffers(1024);
         let body = sink_data(sink).unwrap();
         body_server(body, FutioTunables::default())
-    });
+    };
 
     eprintln!("Spawned 2-threaded, in-ram static content server!");
     eprintln!("export BENCH_SERVER_URL={}", url);
@@ -37,13 +38,13 @@ fn main() {
 
 fn body_server(body: BodyImage, tune: FutioTunables)
     -> (String,
-        tokio::task::JoinHandle<Result<(), hyper::error::Error>>)
+        tokio::task::JoinHandle<Result<(), hyper::Error>>)
 {
     let server = hyper::Server::bind(&([127, 0, 0, 1], 9087).into())
         .serve(make_service_fn(move |_| {
             let body = body.clone();
             let tune = tune.clone();
-            future::ok::<_, FutioError>(service_fn( move |_req| {
+            future::ok::<_, FutioError>(service_fn(move |_req| {
                 future::ok::<_, FutioError>(
                     Response::builder()
                         .status(200)
@@ -75,10 +76,9 @@ fn sink_data(mut body: BodySink) -> Result<BodyImage, BodyError> {
 }
 
 fn th_runtime() -> Runtime {
-    tokio::runtime::Builder::new()
-        .core_threads(2)
-        .max_threads(2)
-        .threaded_scheduler()
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .max_blocking_threads(1)
         .enable_io()
         .enable_time()
         .build()

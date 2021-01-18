@@ -1,6 +1,6 @@
 [package]
 name          = "barc"
-version       = "2.0.1"
+version       = "2.2.0"
 edition       = "2018"
 authors       = ["David Kellum <dek-oss@gravitext.com>"]
 license       = "MIT/Apache-2.0"
@@ -14,17 +14,17 @@ exclude       = ["barc.stash/*"]
 build         = "build.rs"
 
 [dependencies]
-body-image = { version=">=2.0.1, <2.1", default-features=false }
+body-image = { version=">=2.2.0, <2.3", default-features=false }
 brotli     = { version=">=3.1.0, <3.4", optional=true }
 brotli-decompressor = { version=">=2.1.2", optional=true, default-features=false } # min transitive
-bytes      = { version=">=0.5.2, <0.6" }
+bytes      = { version=">=1.0.0, <1.1" }
 flate2     = { version=">=1.0.4, <1.1" }
-http       = { version=">=0.2.0, <0.2.3" }
+http       = { version=">=0.2.2, <0.3" }
 httparse   = { version=">=1.2.4, <1.4" }
 tao-log    = { version=">=1.0.0, <1.1" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }
 mime       = { version=">=0.3.13, <0.4" }
-olio       = { version=">=1.3.0, <1.4", default-features=false }
+olio       = { version=">=1.4.0, <1.5", default-features=false }
 tempfile   = { version=">=3.1.0, <3.2" }
 
 [dev-dependencies]

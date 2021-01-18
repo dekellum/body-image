@@ -27,10 +27,9 @@ pub fn fetch<B>(rr: RequestRecord<B>, tune: FutioTunables)
           B::Data: Send + Unpin,
           B::Error: Into<Flaw>
 {
-    let mut rt = tokio::runtime::Builder::new()
-        .core_threads(2)
-        .max_threads(4)
-        .threaded_scheduler()
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .max_blocking_threads(2)
         .enable_io()
         .enable_time()
         .build()

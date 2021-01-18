@@ -55,7 +55,7 @@ impl Buf for MemMapBuf {
         self.len - self.pos
     }
 
-    fn bytes(&self) -> &[u8] {
+    fn chunk(&self) -> &[u8] {
         &self.mm[self.pos..self.len]
     }
 
