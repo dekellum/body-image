@@ -1,4 +1,20 @@
 ## 2.2.0 (unreleased)
+* Upgrade to body-image 2.2 (MSRV 1.39.0)
+
+* Upgrade to bytes 1.0, http-body 0.4.0, and lift constraint on http dependency
+  (MSRV 1.39.0).
+
+* Upgrade to hyperx 1.3 (MSRV 1.39.0)
+
+* Upgrade to olio 1.4 (MSRV 1.39.0).
+
+* Upgrade to hyper 0.14, hyper-tls 0.4 (MSRV 1.45.2)
+
+* Upgrade to tokio 1.0 (MSRV 1.45.2)
+
+* Upgrade to blocking-permit 1.3.0 (MSRV 1.45.2)
+
+* Minimum supported rust version is now 1.45.2 (per above upgrades).
 
 ## 2.1.2 (2021-1-17)
 * Upgrade to hyperx 1.2.1.

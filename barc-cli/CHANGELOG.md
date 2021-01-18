@@ -1,4 +1,15 @@
 ## 2.2.0 (unreleased)
+* Upgrade to body-image and barc 2.2.0 (MSRV 1.39.0).
+
+* Lift prior constraint on http dependency (MSRV 1.39.0).
+
+* Upgrade to body-image-futio 2.2.0 (MSRV 1.45.2).
+
+* Upgrade to hyper 0.14 (MSRV 1.45.2)
+
+* Minimum supported rust version is now 1.45.2, per above upgrades, if any of
+  the default features _futio_, _mmap_ or _brotli_ are enabled. Otherwise the
+  MSRV remains 1.39.0.
 
 ## 2.1.1 (2021-1-17)
 * Constrain http to <0.2.3 to avoid bytes duplicates.
@@ -6,7 +17,7 @@
 * Misc documentation improvements.
 
 ## 2.1.0 (2020-2-4)
-* Update to body-image-futio 2.1.0.
+* Upgrade to body-image-futio 2.1.0.
 
 * Replace fern logger with piccolog.
 

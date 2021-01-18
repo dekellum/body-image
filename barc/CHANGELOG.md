@@ -1,4 +1,9 @@
 ## 2.2.0 (unreleased)
+* Upgrade to body-image 2.2 (MSRV 1.39.0)
+
+* Upgrade to bytes 1.0 and lift constraint on http dependency (MSRV 1.39.0).
+
+* Upgrade to olio 1.4 (MSRV 1.39.0).
 
 ## 2.0.1 (2021-1-17)
 * Constrain http to <0.2.3 to avoid bytes duplicates.
