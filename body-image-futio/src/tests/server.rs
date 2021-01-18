@@ -520,7 +520,7 @@ fn server<F, S, RB, RE>(f: F)
     -> (String,
         tokio::sync::oneshot::Sender<()>,
         tokio::task::JoinHandle<Result<(), hyper::Error>>)
-    where F: Fn(Request<hyper::Body>) -> S + Send + Sync + 'static + Copy,
+    where F: Fn(Request<hyper::Body>) -> S + Copy + Send + Sync + 'static,
           S: Future<Output = Result<Response<RB>, RE>> + Send + 'static,
           RB: http_body::Body + Send + Sync + 'static,
           RB::Data: Send,
