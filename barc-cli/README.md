@@ -11,6 +11,9 @@ records (format defined by the *barc* library crate).
 
 MSRV := 1.45.2
 
+If none of the default features _futio_, _brotli_, or _mmap_ are enabled, then
+the MSRV remains 1.39.0.
+
 ## License
 
 This project is dual licensed under either of following:
