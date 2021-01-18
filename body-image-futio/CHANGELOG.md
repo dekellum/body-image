@@ -1,4 +1,4 @@
-## 2.2.0 (unreleased)
+## 2.2.0 (2021-1-18)
 * Upgrade to body-image 2.2 (MSRV 1.39.0)
 
 * Upgrade to bytes 1.0, http-body 0.4.0, and lift constraint on http dependency

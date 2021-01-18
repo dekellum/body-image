@@ -1,4 +1,4 @@
-## 2.2.0 (unreleased)
+## 2.2.0 (2021-1-18)
 * Upgrade to body-image and barc 2.2.0 (MSRV 1.39.0).
 
 * Lift prior constraint on http dependency (MSRV 1.39.0).
