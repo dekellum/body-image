@@ -74,16 +74,16 @@ pub const V2_HEAD_SIZE: usize = 54;
 ///
 /// Note: this exceeds the file or partition size limits of many
 /// file-systems.
-pub const V2_MAX_RECORD: u64 = 0xfff_fff_fff_fff;
+pub const V2_MAX_RECORD: u64 = 0xffff_ffff_ffff;
 
 /// Maximum header (meta, request, response) block size, including
 /// any CRLF terminator:
 /// 2<sup>20</sup> (1 MiB) - 1.
-pub const V2_MAX_HBLOCK: usize =        0xff_fff;
+pub const V2_MAX_HBLOCK: usize =        0xf_ffff;
 
 /// Maximum request body size, including any CRLF terminator:
 /// 2<sup>40</sup> (1 TiB) - 1.
-pub const V2_MAX_REQ_BODY: u64 = 0xf_fff_fff_fff;
+pub const V2_MAX_REQ_BODY: u64 = 0xff_ffff_ffff;
 
 /// Meta `HeaderName` for the complete URL used in the request.
 #[inline]
