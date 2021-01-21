@@ -448,7 +448,8 @@ impl<B> http_body::Body for PermitBodyImage<B>
 }
 
 /// Extends [`AsyncBodyImage`] by further dispatching any blocking file read
-/// operations to a `DispatchPool` registered with the current thread.
+/// operations to a [`blocking_permit::DispatchPool`] registered with the
+/// current thread.
 ///
 /// The implementation will panic if a `DispatchPool` is not registered. Note
 /// that each instance will have, at most, 1 pending dispatched read operation

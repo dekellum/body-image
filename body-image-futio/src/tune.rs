@@ -27,8 +27,8 @@ pub enum BlockingPolicy {
     /// to run the blocking operation on the _current_ thread.
     Permit(&'static Semaphore),
 
-    /// Dispatch blocking operations to the `DispatchPool` registered on the
-    /// current thread.
+    /// Dispatch blocking operations to the [`blocking_permit::DispatchPool`]
+    /// registered on the current thread.
     Dispatch,
 }
 

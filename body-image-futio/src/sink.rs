@@ -285,7 +285,8 @@ impl<B> Sink<B> for PermitBodySink<B>
 }
 
 /// Extends [`AsyncBodySink`] by further dispatching any blocking file write
-/// operations to a `DispatchPool` registered with the current thread.
+/// operations to a [`blocking_permit::DispatchPool`] registered with the
+/// current thread.
 ///
 /// The implementation will panic if a `DispatchPool` is not registered. Note
 /// that any risk of out-of-order writes (for example, via 2+ dispatch threads)
