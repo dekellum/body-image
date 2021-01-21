@@ -38,9 +38,6 @@ pub trait SinkWrapper<T>: Sink<T> {
 /// Extension trait for `http::request::Builder`, to enable recording key
 /// portions of the request for the final `Dialog`.
 ///
-/// Other request fields (`method`, `uri`, `headers`) are recorded by `clone`,
-/// after finishing the request.
-
 /// The request body is cloned in advance of finishing the request, though
 /// this is inexpensive via `Bytes::clone` or `BodyImage::clone`. Other
 /// request fields (`method`, `uri`, `headers`) are recorded by `clone`, after
