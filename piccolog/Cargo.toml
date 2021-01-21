@@ -5,7 +5,6 @@ edition       = "2018"
 authors       = ["David Kellum <dek-oss@gravitext.com>"]
 license       = "MIT/Apache-2.0"
 description   = "A custom logger for body-image and related crates"
-documentation = "https://docs.rs/piccolog"
 repository    = "https://github.com/dekellum/body-image"
 readme        = "README.md"
 build         = "build.rs"
