@@ -1,3 +1,5 @@
+## 2.2.1 (unreleased)
+
 ## 2.2.0 (2021-1-18)
 * Upgrade to bytes 1.0 and lift constraint on http dependency (MSRV 1.39.0).
 
