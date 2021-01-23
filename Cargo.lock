@@ -29,7 +29,7 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
 name = "barc"
-version = "2.2.0"
+version = "2.2.1"
 dependencies = [
  "body-image",
  "brotli",
@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "body-image-futio"
-version = "2.2.0"
+version = "2.2.1"
 dependencies = [
  "blocking-permit",
  "body-image",

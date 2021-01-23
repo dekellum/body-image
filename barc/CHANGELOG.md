@@ -1,3 +1,5 @@
+## 2.2.1 (unreleased)
+
 ## 2.2.0 (2021-1-18)
 * Upgrade to body-image 2.2 (MSRV 1.39.0)
 
