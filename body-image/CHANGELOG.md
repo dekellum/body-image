@@ -1,4 +1,7 @@
 ## 2.2.1 (unreleased)
+* Broaden tempfile dependency to include 3.2.
+
+* Add clippy config for primordial MSRV build.rs and for current MSRV.
 
 ## 2.2.0 (2021-1-18)
 * Upgrade to bytes 1.0 and lift constraint on http dependency (MSRV 1.39.0).
