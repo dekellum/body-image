@@ -1,4 +1,4 @@
-## 2.2.1 (unreleased)
+## 2.2.1 (2021-1-23)
 * Drop the currently unnecessary (but transitively included, anyway) direct
   tempfile dependency.
 

@@ -1,4 +1,4 @@
-## 2.2.1 (unreleased)
+## 2.2.1 (2021-1-23)
 * Broaden tempfile dependency to include 3.2.
 
 * Add clippy config for primordial MSRV build.rs and for current MSRV.
