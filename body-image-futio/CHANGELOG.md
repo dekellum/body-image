@@ -1,4 +1,9 @@
 ## 2.2.1 (unreleased)
+* Update dev. dependency rand to 0.8.0.
+
+* Minor documentation improvements.
+
+* Add clippy config for primordial MSRV build.rs and for current MSRV.
 
 ## 2.2.0 (2021-1-18)
 * Upgrade to body-image 2.2 (MSRV 1.39.0)

@@ -1,4 +1,9 @@
 ## 2.2.1 (unreleased)
+* Drop the currently unnecessary (but transitively included, anyway) direct
+  tempfile dependency.
+
+* Add clippy config for primordial MSRV build.rs and for current MSRV. Fix some
+  cosmetic clippy lints.
 
 ## 2.2.0 (2021-1-18)
 * Upgrade to body-image 2.2 (MSRV 1.39.0)
