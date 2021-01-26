@@ -19,7 +19,7 @@ body-image-futio = { version=">=2.2.0, <2.3", optional=true, default-features=fa
 clap       = { version=">=2.31.2, <2.34", default-features=false, features=["wrap_help"] }
 http       = { version=">=0.2.2, <0.3" }
 hyper      = { version=">=0.14.2, <0.15", default-features=false, features=["http1", "client", "stream", "tcp"], optional=true }
-log        = { version=">=0.4.4, <0.5" }
+tao-log    = { version=">=1.0.0, <1.1" }
 piccolog   = { version=">=1.0.0, <1.1" }
 
 [features]

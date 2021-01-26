@@ -55,8 +55,8 @@ dependencies = [
  "clap",
  "http",
  "hyper",
- "log",
  "piccolog",
+ "tao-log",
 ]
 
 [[package]]

@@ -12,8 +12,6 @@ use clap::{
     crate_version, SubCommand
 };
 
-use log::error;
-
 use body_image::{Tunables, RequestRecorded, Recorded};
 use barc::{
     BarcFile,
@@ -28,6 +26,7 @@ type Flaw = Box<dyn StdError + Send + Sync + 'static>;
 #[cfg(feature = "futio")] mod record;
 
 use piccolog::setup_logger;
+use tao_log::error;
 
 // Internal errors for the CLI
 #[derive(Debug)]
