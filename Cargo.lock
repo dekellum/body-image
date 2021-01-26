@@ -91,10 +91,10 @@ version = "2.2.1"
 dependencies = [
  "bytes",
  "http",
- "log",
  "memmap",
  "olio",
  "remove_dir_all",
+ "tao-log",
  "tempfile",
 ]
 
