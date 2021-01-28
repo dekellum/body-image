@@ -1,3 +1,6 @@
+## 1.0.3 (2021-1-27)
+* Broaden log dependency to include 0.4.14.
+
 ## 1.0.2 (2021-1-17)
 * Minor documentation improvements.
 

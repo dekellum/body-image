@@ -51,7 +51,7 @@ use std::sync::Arc;
 
 use bytes::{Bytes, BytesMut, BufMut};
 
-use log::{debug, warn};
+use tao_log::{debug, warn};
 use olio::io::GatheringReader;
 use olio::fs::rc::{ReadPos, ReadSlice};
 use tempfile::tempfile_in;
