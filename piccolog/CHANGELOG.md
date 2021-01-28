@@ -1,6 +1,8 @@
 ## 1.0.3 (2021-1-27)
 * Broaden log dependency to include 0.4.14.
 
+* Add clippy config for primordial MSRV build.rs and for current MSRV.
+
 ## 1.0.2 (2021-1-17)
 * Minor documentation improvements.
 
