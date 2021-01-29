@@ -1,3 +1,6 @@
+## 2.2.1 (unreleased)
+* Use tao-log dependency exclusively, no direct log dep.
+
 ## 2.2.0 (2021-1-18)
 * Upgrade to body-image and barc 2.2.0 (MSRV 1.39.0).
 

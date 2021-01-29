@@ -1,3 +1,8 @@
+## 2.2.2 (unreleased)
+* Use tao-log dependency exclusively, no direct log dep.
+
+* Fix previous remove_dir_all constraint; is no longer optional.
+
 ## 2.2.1 (2021-1-23)
 * Broaden tempfile dependency to include 3.2.
 
