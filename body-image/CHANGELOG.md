@@ -1,4 +1,4 @@
-## 2.2.2 (unreleased)
+## 2.2.2 (2021-1-29)
 * Use tao-log dependency exclusively, no direct log dep.
 
 * Fix previous remove_dir_all constraint; is no longer optional.
