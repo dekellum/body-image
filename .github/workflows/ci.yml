@@ -5,9 +5,6 @@ on:
   schedule:
     - cron: '57 15 * * 1,4'
 
-env:
-  RUSTFLAGS: -Dwarnings
-
 jobs:
 
   test:
@@ -18,27 +15,37 @@ jobs:
         include:
           - rust: 1.39.0
             os: ubuntu-20.04
+            rustflags: -Dwarnings
           - rust: 1.39.0
             os: ubuntu-20.04
+            rustflags: -Dwarnings
             extras: [update]
           - rust: 1.45.2
             os: ubuntu-20.04
+            rustflags: -Dwarnings
           - rust: 1.45.2
             os: ubuntu-20.04
+            rustflags: -Dwarnings
             extras: [update]
           - rust: 1.45.2
             os: windows-latest
+            rustflags: -Dwarnings
           - rust: 1.45.2
             os: windows-latest
+            rustflags: -Dwarnings
             extras: [update]
           - rust: stable
             os: ubuntu-20.04
+            rustflags: -Dwarnings
             extras: [update]
           - rust: nightly
             os: ubuntu-20.04
           - rust: nightly
             os: ubuntu-20.04
             extras: [update]
+
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
 
     steps:
       - name: Checkout
