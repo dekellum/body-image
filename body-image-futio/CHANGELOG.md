@@ -1,3 +1,5 @@
+## 2.2.2 (unreleased)
+
 ## 2.2.1 (2021-1-23)
 * Broaden tokio dependency to include new 1.1.z releases.
 
