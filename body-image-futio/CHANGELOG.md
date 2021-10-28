@@ -1,4 +1,4 @@
-## 2.2.2 (unreleased)
+## 2.2.2 (2021-10-28)
 * Broaden _bytes_ dependency to include 1.1.
 
 * Broaden _httparse_ dependency to include 1.4.
