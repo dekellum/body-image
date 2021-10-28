@@ -12,8 +12,17 @@ _http_, _hyper_, and _tokio_ for both client and server use.
 
 MSRV := 1.45.2
 
-The crate will fail fast on any lower rustc (via a build.rs version
-check) and is also CI tested on this version.
+The crate will fail fast on any lower rustc (via a build.rs version check) and
+is also CI tested on this version. MSRV will only be increased in a new MINOR
+(or MAJOR) release of this crate. However, some direct or transitive
+dependencies unfortunately have or may increase MSRV in PATCH releases. Known
+examples are listed below:
+
+* http 0.2.5 increased MSRV to 1.46.0
+* hyper 0.14.5 adds a socket2 0.4 dependency, MSRV 1.46.0
+
+Users may need to selectively control updates by preserving/distributing a
+Cargo.lock file in order to control MSRV.
 
 ## License
 
