@@ -1,6 +1,6 @@
 [package]
 name          = "barc"
-version       = "2.2.1"
+version       = "2.2.2"
 edition       = "2018"
 authors       = ["David Kellum <dek-oss@gravitext.com>"]
 license       = "MIT/Apache-2.0"

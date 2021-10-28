@@ -1,3 +1,8 @@
+## 2.2.2 (unreleased)
+* Broaden _bytes_ dependency to include 1.1.
+
+* Broaden _httparse_ dependency to include 1.4.
+
 ## 2.2.1 (2021-1-23)
 * Drop the currently unnecessary (but transitively included, anyway) direct
   tempfile dependency.
