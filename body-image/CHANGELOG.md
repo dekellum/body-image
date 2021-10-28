@@ -1,3 +1,5 @@
+## 2.2.3 (unreleased)
+* Broaden _bytes_ dependency to include 1.1.
 
 ## 2.2.2 (2021-1-29)
 * Use tao-log dependency exclusively, no direct log dep.

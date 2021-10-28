@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "body-image"
-version = "2.2.2"
+version = "2.2.3"
 dependencies = [
  "bytes",
  "http",
