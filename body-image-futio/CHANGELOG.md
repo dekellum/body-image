@@ -3,7 +3,7 @@
 
 * Broaden _httparse_ dependency to include 1.4.
 
-* Broaden _tokio_ dependency to include 1.2.
+* Broaden _tokio_ dependency to include 1.2-1.12 releases.
 
 * Fix `cfg` gates for `InDialog` struct.
 
