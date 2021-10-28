@@ -12,7 +12,7 @@ categories    = ["web-programming"]
 build         = "build.rs"
 
 [dependencies]
-bytes      = { version=">=1.0.0, <1.1" }
+bytes      = { version=">=1.0.0, <1.2" }
 http       = { version=">=0.2.2, <0.3" }
 tao-log    = { version=">=1.0.0, <1.1" }
 memmap     = { version=">=0.7.0, <0.8", optional=true }
