@@ -52,12 +52,12 @@ use std::time::Duration;
 use tao_log::warn;
 
 use body_image::{
-    BodyImage, BodySink, BodyError, Encoding,
+    BodyImage, BodyError, Encoding,
     Prolog, RequestRecorded,
 };
 
 #[cfg(feature = "hyper-http")]
-use body_image::{Epilog, Dialog};
+use body_image::{Epilog, Dialog, BodySink};
 
 /// Conveniently compact type alias for dyn Trait `std::error::Error`.
 ///
@@ -277,6 +277,7 @@ struct Monolog {
 
 /// An HTTP request with response in progress of being received.
 #[derive(Debug)]
+#[cfg(feature = "hyper-http")]
 struct InDialog {
     prolog:       Prolog,
     version:      http::Version,
