@@ -1,10 +1,18 @@
 ## 2.2.2 (unreleased)
-* Broaden tokio dependency to include new 1.2.z releases.
+* Broaden _bytes_ dependency to include 1.1.
+
+* Broaden _httparse_ dependency to include 1.4.
+
+* Broaden _tokio_ dependency to include 1.2.
+
+* Fix `cfg` gates for `InDialog` struct.
+
+* Clarify MSRV policy and list problem updates.
 
 ## 2.2.1 (2021-1-23)
-* Broaden tokio dependency to include new 1.1.z releases.
+* Broaden _tokio_ dependency to include new 1.1.z releases.
 
-* Update dev. dependency rand to 0.8.0.
+* Update dev. dependency _rand_ to 0.8.0.
 
 * Minor documentation improvements.
 
