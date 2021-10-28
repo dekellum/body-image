@@ -1,6 +1,6 @@
 # The Body Image Project
 
-[![CI Status](https://github.com/dekellum/body-image/workflows/CI/badge.svg?branch=master)](https://github.com/dekellum/body-image/actions?query=workflow%3ACI)
+[![CI Status](https://github.com/dekellum/body-image/workflows/CI/badge.svg?branch=main)](https://github.com/dekellum/body-image/actions?query=workflow%3ACI)
 
 A rust language project providing separately usable but closely related crates:
 

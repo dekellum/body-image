@@ -1,9 +1,9 @@
 # body-image
 
 [![Rustdoc](https://docs.rs/body-image/badge.svg)](https://docs.rs/body-image)
-[![Change Log](https://img.shields.io/crates/v/body-image.svg?maxAge=3600&label=change%20log&color=9cf)](https://github.com/dekellum/body-image/blob/master/body-image/CHANGELOG.md)
+[![Change Log](https://img.shields.io/crates/v/body-image.svg?maxAge=3600&label=change%20log&color=9cf)](https://github.com/dekellum/body-image/blob/main/body-image/CHANGELOG.md)
 [![Crates.io](https://img.shields.io/crates/v/body-image.svg?maxAge=3600)](https://crates.io/crates/body-image)
-[![CI Status](https://github.com/dekellum/body-image/workflows/CI/badge.svg?branch=master)](https://github.com/dekellum/body-image/actions?query=workflow%3ACI)
+[![CI Status](https://github.com/dekellum/body-image/workflows/CI/badge.svg?branch=main)](https://github.com/dekellum/body-image/actions?query=workflow%3ACI)
 
 The _body-image_ crate provides a uniform access strategy for HTTP body
 payloads which may be scattered across multiple allocations in RAM, or buffered

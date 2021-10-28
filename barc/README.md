@@ -1,9 +1,9 @@
 # barc
 
 [![Rustdoc](https://docs.rs/barc/badge.svg)](https://docs.rs/barc)
-[![Change Log](https://img.shields.io/crates/v/barc.svg?maxAge=3600&label=change%20log&color=9cf)](https://github.com/dekellum/body-image/blob/master/barc/CHANGELOG.md)
+[![Change Log](https://img.shields.io/crates/v/barc.svg?maxAge=3600&label=change%20log&color=9cf)](https://github.com/dekellum/body-image/blob/main/barc/CHANGELOG.md)
 [![Crates.io](https://img.shields.io/crates/v/barc.svg?maxAge=3600)](https://crates.io/crates/barc)
-[![CI Status](https://github.com/dekellum/body-image/workflows/CI/badge.svg?branch=master)](https://github.com/dekellum/body-image/actions?query=workflow%3ACI)
+[![CI Status](https://github.com/dekellum/body-image/workflows/CI/badge.svg?branch=main)](https://github.com/dekellum/body-image/actions?query=workflow%3ACI)
 
 The **B**ody **Arc**hive (BARC) container file format, reader and
 writer. Supports high fidelity serialization of complete HTTP
