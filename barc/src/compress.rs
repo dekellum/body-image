@@ -134,12 +134,8 @@ pub trait CompressStrategy {
 }
 
 /// Strategy of no (aka `Plain`) compression.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct NoCompressStrategy {}
-
-impl Default for NoCompressStrategy {
-    fn default() -> Self { Self {} }
-}
 
 impl CompressStrategy for NoCompressStrategy {
     /// Return an `EncodeWrapper` for `File`. This implementation

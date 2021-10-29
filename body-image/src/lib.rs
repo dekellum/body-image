@@ -233,10 +233,7 @@ impl BodySink {
 
     /// Return true if in state `Ram`.
     pub fn is_ram(&self) -> bool {
-        match self.state {
-            SinkState::Ram(_) => true,
-            _ => false
-        }
+        matches!(self.state, SinkState::Ram(_))
     }
 
     /// Return true if body is empty.
@@ -486,19 +483,13 @@ impl BodyImage {
 
     /// Return true if in state `Ram`.
     pub fn is_ram(&self) -> bool {
-        match self.state {
-            ImageState::Ram(_) => true,
-            _ => false
-        }
+        matches!(self.state, ImageState::Ram(_))
     }
 
     /// Return true if in state `MemMap`.
     #[cfg(feature = "mmap")]
     pub fn is_mem_map(&self) -> bool {
-        match self.state {
-            ImageState::MemMap(_) => true,
-            _ => false
-        }
+        matches!(self.state, ImageState::MemMap(_))
     }
 
     /// Return the current length of body in bytes.
@@ -522,7 +513,7 @@ impl BodyImage {
         let map = match self.state {
             ImageState::FsRead(ref file) => {
                 assert!(self.len > 0);
-                unsafe { Mmap::map(&file) }?
+                unsafe { Mmap::map(file) }?
             }
             ImageState::FsReadSlice(ref rslice) => {
                 rslice.mem_map()?

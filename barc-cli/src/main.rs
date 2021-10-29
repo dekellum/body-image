@@ -166,8 +166,8 @@ fn filter_flags(matches: &ArgMatches<'_>) -> Result<(StartPos, usize), Flaw>
             quit!("--offset flag can't be applied to more than one \
                    input file");
         }
-        let v = if v.starts_with("0x") {
-            u64::from_str_radix(&v[2..], 16)?
+        let v = if let Some(hx) = v.strip_prefix("0x") {
+            u64::from_str_radix(hx, 16)?
         } else {
             v.parse()?
         };

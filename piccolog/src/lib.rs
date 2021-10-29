@@ -20,15 +20,7 @@ impl Piccolog {
             pub static TNAME: RefCell<Option<Rc<String>>> = RefCell::new(None);
         }
 
-        let tn = TNAME.with(|c| {
-            if let Some(n) = c.borrow().as_ref() {
-                Some(n.clone())
-            } else {
-                None
-            }
-        });
-
-        if let Some(n) = tn {
+        if let Some(n) = TNAME.with(|c| c.borrow().as_ref().cloned()) {
             return n;
         }
 
