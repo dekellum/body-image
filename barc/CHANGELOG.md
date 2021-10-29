@@ -1,6 +1,12 @@
 ## 2.3.0 (unreleased)
 * Minimum supported rust version (MSRV) is now 1.46.0.
 
+* Upgrade to body-image 2.3.
+
+* Derive `Default` for `NoCompressStrategy`, replacing manual impl.
+
+* Broaden _httparse_ dependency to include 1.5.
+
 ## 2.2.2 (2021-10-28)
 * Broaden _bytes_ dependency to include 1.1.
 

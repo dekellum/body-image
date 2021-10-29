@@ -1,6 +1,10 @@
 ## 2.3.0 (unreleased)
 * Minimum supported rust version (MSRV) is now 1.46.0.
 
+* Upgrade barc, body-image and body-image-futio to 2.3.
+
+* Use `strip_prefix` for `--offset` flag, "0x" prefix format.
+
 ## 2.2.1 (2021-1-29)
 * Use tao-log dependency exclusively, no direct log dep.
 

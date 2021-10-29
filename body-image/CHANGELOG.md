@@ -1,7 +1,9 @@
 ## 2.3.0 (unreleased)
 * Minimum supported rust version (MSRV) is now 1.46.0.
 
-* Remove no longer need `remove_dir_all` constraint (MSRV 1.40.0).
+* Remove no longer needed `remove_dir_all` constraint (MSRV 1.40.0).
+
+* Simplify with `std::matches!` (1.42.0) and another minor lint fix.
 
 ## 2.2.3 (2021-10-28)
 * Broaden _bytes_ dependency to include 1.1.
