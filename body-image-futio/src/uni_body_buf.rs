@@ -95,7 +95,7 @@ impl From<Bytes> for UniBodyBuf {
     }
 }
 
-impl Into<Bytes> for UniBodyBuf {
+impl From<UniBodyBuf> for Bytes {
     /// Convert from `UniBodyBuf` to Bytes. This is a costly memory copy only
     /// in the case of `MemMap` (*mmap* feature) to `Bytes`. This case is
     /// logged and should be rare using normal configuration and high-level
@@ -104,8 +104,8 @@ impl Into<Bytes> for UniBodyBuf {
     /// larger `Tunables::max_body_ram`.  With the same maximums used to
     /// produce the original image and output sink, this should not occur, as
     /// no conversion is required when writing to `FsWrite` state.
-    fn into(self) -> Bytes {
-        match self.buf {
+    fn from(ubb: UniBodyBuf) -> Bytes {
+        match ubb.buf {
             BufState::Bytes(b) => b,
             #[cfg(feature = "mmap")]
             BufState::MemMap(mb) => {
