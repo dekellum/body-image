@@ -1,6 +1,6 @@
 [package]
 name          = "body-image"
-version       = "2.2.3"
+version       = "2.3.0"
 edition       = "2018"
 authors       = ["David Kellum <dek-oss@gravitext.com>"]
 license       = "MIT/Apache-2.0"

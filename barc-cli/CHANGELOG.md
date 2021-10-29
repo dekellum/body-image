@@ -1,3 +1,5 @@
+## 2.3.0 (unreleased)
+
 ## 2.2.1 (2021-1-29)
 * Use tao-log dependency exclusively, no direct log dep.
 

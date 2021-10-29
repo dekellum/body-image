@@ -29,7 +29,7 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
 name = "barc"
-version = "2.2.2"
+version = "2.3.0"
 dependencies = [
  "body-image",
  "brotli",
@@ -47,7 +47,7 @@ dependencies = [
 
 [[package]]
 name = "barc-cli"
-version = "2.2.1"
+version = "2.3.0"
 dependencies = [
  "barc",
  "body-image",
@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "body-image"
-version = "2.2.3"
+version = "2.3.0"
 dependencies = [
  "bytes",
  "http",
@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "body-image-futio"
-version = "2.2.2"
+version = "2.3.0"
 dependencies = [
  "blocking-permit",
  "body-image",
@@ -619,7 +619,7 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
 name = "piccolog"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "log",
 ]
