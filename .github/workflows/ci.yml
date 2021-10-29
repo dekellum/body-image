@@ -17,14 +17,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - rust: 1.39.0
-            os: ubuntu-20.04
-          - rust: 1.45.2
+          - rust: 1.46.0
             os: ubuntu-20.04
           - rust: 1.46
             os: ubuntu-20.04
             extras: [update]
-          - rust: 1.45.2
+          - rust: 1.46
             os: windows-latest
           - rust: 1.46
             os: windows-latest
@@ -82,19 +80,15 @@ jobs:
         run: cargo build --all-features --all-targets
 
       - name: Test futio (no features)
-        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: body-image-futio
         run: cargo test --no-default-features
       - name: Test futio (mmap)
-        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: body-image-futio
         run: cargo test --no-default-features --features mmap
       - name: Test futio (brotli)
-        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: body-image-futio
         run: cargo test --no-default-features --features brotli
       - name: Test futio (default)
-        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: body-image-futio
         run: cargo test
       - name: Build futio (all targets)
@@ -106,18 +100,14 @@ jobs:
         working-directory: barc-cli
         run: cargo build --no-default-features
       - name: Build barc-cli (mmap)
-        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: barc-cli
         run: cargo build --no-default-features --features mmap
       - name: Build barc-cli (brotli)
-        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: barc-cli
         run: cargo build --no-default-features --features brotli
       - name: Build barc-cli (futio)
-        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: barc-cli
         run: cargo build --no-default-features --features futio
       - name: Build barc-cli (all-features)
-        if: ${{ matrix.rust != '1.39.0' }}
         working-directory: barc-cli
         run: cargo build --all-features

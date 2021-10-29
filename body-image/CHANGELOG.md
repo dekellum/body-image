@@ -1,4 +1,7 @@
 ## 2.3.0 (unreleased)
+* Minimum supported rust version (MSRV) is now 1.46.0.
+
+* Remove no longer need `remove_dir_all` constraint (MSRV 1.40.0).
 
 ## 2.2.3 (2021-10-28)
 * Broaden _bytes_ dependency to include 1.1.

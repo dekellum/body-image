@@ -93,7 +93,6 @@ dependencies = [
  "http",
  "memmap",
  "olio",
- "remove_dir_all",
  "tao-log",
  "tempfile",
 ]

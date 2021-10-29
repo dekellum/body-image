@@ -9,10 +9,14 @@ records (format defined by the *barc* library crate).
 
 ## Minimum supported rust version
 
-MSRV := 1.45.2
+MSRV := 1.46.0
 
-If none of the default features _futio_, _brotli_, or _mmap_ are enabled, then
-the MSRV remains 1.39.0.
+The crate will fail fast on any lower rustc (via a build.rs version check) and
+is also CI tested on this version. MSRV will only be increased in a new MINOR
+(or MAJOR) release of this crate. However, some direct or transitive
+dependencies unfortunately have or may increase MSRV in PATCH releases. Users
+may need to install this crate via `cargo install --locked barc-cli` for the
+MSRV to compile.
 
 ## License
 

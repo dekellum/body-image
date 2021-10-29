@@ -5,7 +5,7 @@ use std::process::Command;
 
 fn main() {
     static PACKAGE: &'static str = "body-image-futio";
-    let msrv = vec![1, 45, 2];
+    let msrv = vec![1, 46, 0];
 
     static VERSION: &'static str = env!("CARGO_PKG_VERSION");
     static M_V: &'static str = "minimum supported rust version (MSRV)";
